@@ -1,5 +1,4 @@
 const express = require('express');
-const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const path = require('path');
@@ -8,152 +7,135 @@ const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = process.env.DB_PATH || './crm.db';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'RA2026!';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'ra-crm-secret-key-2026';
+const DATA_DIR = process.env.DATA_DIR || './data';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'US2026!';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'upsearch-secret-2026';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 const genId = () => crypto.randomBytes(8).toString('hex');
 
-// ── Ensure DB directory exists ────────────────────────
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+// ── Helpers JSON ──────────────────────────────────────
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+function readJSON(file, def) {
+  try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), 'utf8')); }
+  catch(e) { return def; }
+}
+function writeJSON(file, data) {
+  fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
+}
 
-// ── Database ──────────────────────────────────────────
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    display_name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'user',
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE IF NOT EXISTS app_data (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at TEXT DEFAULT (datetime('now'))
-  );
-`);
-
-// ── Seed default admin ────────────────────────────────
-const adminExists = db.prepare('SELECT id FROM users WHERE username = ?').get('jeremy');
+// ── Init users ────────────────────────────────────────
+let users = readJSON('users.json', []);
+const adminExists = users.find(u => u.username === 'jeremy');
 if (!adminExists) {
-  db.prepare('INSERT INTO users (id, username, password_hash, display_name, role) VALUES (?, ?, ?, ?, ?)')
-    .run(genId(), 'jeremy', bcrypt.hashSync(ADMIN_PASSWORD, 10), 'Jérémy', 'admin');
+  users.push({ id: genId(), username: 'jeremy', password_hash: bcrypt.hashSync(ADMIN_PASSWORD, 10), display_name: 'Jérémy', role: 'admin', created_at: new Date().toISOString() });
+  writeJSON('users.json', users);
   console.log('✅ Admin créé : jeremy / ' + ADMIN_PASSWORD);
+} else {
+  // Toujours resynchroniser le mot de passe avec la variable d'environnement
+  users = users.map(u => u.username === 'jeremy' ? { ...u, password_hash: bcrypt.hashSync(ADMIN_PASSWORD, 10) } : u);
+  writeJSON('users.json', users);
+  console.log('🔄 Mot de passe admin synchronisé');
 }
 
-// ── Seed empty data collections ───────────────────────
-const DATA_KEYS = ['candidats', 'clients', 'contacts', 'commandes', 'relances', 'refs'];
-for (const key of DATA_KEYS) {
-  const exists = db.prepare('SELECT key FROM app_data WHERE key = ?').get(key);
-  if (!exists) {
-    db.prepare('INSERT INTO app_data (key, value) VALUES (?, ?)').run(key, '[]');
-  }
-}
+// ── Init collections ──────────────────────────────────
+['candidats','clients','contacts','commandes','relances','refs'].forEach(k => {
+  const p = path.join(DATA_DIR, k + '.json');
+  if (!fs.existsSync(p)) writeJSON(k + '.json', k === 'refs' ? {} : []);
+});
 
 // ── Middleware ────────────────────────────────────────
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, secure: false }
-}));
+app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } }));
 
-const requireAuth = (req, res, next) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Non authentifié' });
-  next();
-};
-const requireAdmin = (req, res, next) => {
-  if (!req.session.userId || req.session.role !== 'admin')
-    return res.status(403).json({ error: 'Accès refusé — Admin requis' });
-  next();
-};
+const auth  = (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Non authentifié' }); next(); };
+const admin = (req, res, next) => { if (!req.session.userId || req.session.role !== 'admin') return res.status(403).json({ error: 'Accès refusé' }); next(); };
 
 // ── Auth ──────────────────────────────────────────────
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Champs manquants' });
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username.toLowerCase().trim());
-  if (!user || !bcrypt.compareSync(password, user.password_hash))
-    return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
-  req.session.userId = user.id;
-  req.session.role = user.role;
-  req.session.displayName = user.display_name;
+  users = readJSON('users.json', []);
+  const user = users.find(u => u.username === username.toLowerCase().trim());
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
+  req.session.userId = user.id; req.session.role = user.role;
+  res.json({ id: user.id, username: user.username, display_name: user.display_name, role: user.role });
+});
+app.post('/api/auth/logout', (req, res) => { req.session.destroy(() => res.json({ ok: true })); });
+app.get('/api/auth/me', auth, (req, res) => {
+  users = readJSON('users.json', []);
+  const user = users.find(u => u.id === req.session.userId);
+  if (!user) return res.status(401).json({ error: 'Session invalide' });
   res.json({ id: user.id, username: user.username, display_name: user.display_name, role: user.role });
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
-});
-
-app.get('/api/auth/me', requireAuth, (req, res) => {
-  const user = db.prepare('SELECT id, username, display_name, role FROM users WHERE id = ?').get(req.session.userId);
-  if (!user) return res.status(401).json({ error: 'Session invalide' });
-  res.json(user);
-});
-
 // ── Data ──────────────────────────────────────────────
-app.get('/api/data/:key', requireAuth, (req, res) => {
-  const row = db.prepare('SELECT value FROM app_data WHERE key = ?').get(req.params.key);
-  try {
-    res.json(row ? JSON.parse(row.value) : []);
-  } catch(e) {
-    res.json([]);
-  }
-});
+app.get('/api/data/:key', auth, (req, res) => res.json(readJSON(req.params.key + '.json', [])));
+app.put('/api/data/:key', auth, (req, res) => { writeJSON(req.params.key + '.json', req.body); res.json({ ok: true }); });
 
-app.put('/api/data/:key', requireAuth, (req, res) => {
-  const value = JSON.stringify(req.body);
-  db.prepare('INSERT OR REPLACE INTO app_data (key, value, updated_at) VALUES (?, ?, datetime("now"))')
-    .run(req.params.key, value);
-  res.json({ ok: true });
+// ── CV Parsing (Claude API) ───────────────────────────
+app.post('/api/parse-cv', auth, async (req, res) => {
+  if (!ANTHROPIC_API_KEY) return res.json({ error: 'Clé API non configurée. Ajoutez ANTHROPIC_API_KEY dans Railway.', parsed: null });
+  const { data, type, name } = req.body;
+  if (!data) return res.status(400).json({ error: 'Fichier manquant', parsed: null });
+  const isPDF = type === 'application/pdf' || (name || '').toLowerCase().endsWith('.pdf');
+  if (!isPDF) return res.json({ error: 'Parsing automatique disponible pour les PDF uniquement', parsed: null });
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5', max_tokens: 300,
+        messages: [{ role: 'user', content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
+          { type: 'text', text: 'Extrais ces informations du CV. Réponds UNIQUEMENT en JSON sans texte avant/après : {"nom":"...","prenom":"...","tel":"...","email":"..."}. Mets null si introuvable.' }
+        ]}]
+      })
+    });
+    if (!response.ok) return res.json({ error: 'Extraction impossible — erreur API', parsed: null });
+    const result = await response.json();
+    const text = result.content?.[0]?.text || '';
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return res.json({ error: 'Réponse inattendue de l\'API', parsed: null });
+    const raw = JSON.parse(m[0]);
+    const clean = {
+      nom: raw.nom && raw.nom !== 'null' ? String(raw.nom).trim() : null,
+      prenom: raw.prenom && raw.prenom !== 'null' ? String(raw.prenom).trim() : null,
+      tel: raw.tel && raw.tel !== 'null' ? String(raw.tel).trim() : null,
+      email: raw.email && raw.email !== 'null' ? String(raw.email).trim() : null,
+    };
+    res.json({ parsed: clean });
+  } catch(e) {
+    console.error('Parse CV error:', e);
+    res.json({ error: 'Erreur lors de l\'extraction', parsed: null });
+  }
 });
 
 // ── Users (admin) ─────────────────────────────────────
-app.get('/api/users', requireAdmin, (req, res) => {
-  const users = db.prepare('SELECT id, username, display_name, role, created_at FROM users ORDER BY created_at').all();
-  res.json(users);
-});
-
-app.post('/api/users', requireAdmin, (req, res) => {
+app.get('/api/users', admin, (req, res) => res.json(readJSON('users.json', []).map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, created_at: u.created_at }))));
+app.post('/api/users', admin, (req, res) => {
   const { username, password, display_name, role } = req.body;
-  if (!username || !password || !display_name)
-    return res.status(400).json({ error: 'Tous les champs sont requis' });
-  try {
-    db.prepare('INSERT INTO users (id, username, password_hash, display_name, role) VALUES (?, ?, ?, ?, ?)')
-      .run(genId(), username.toLowerCase().trim(), bcrypt.hashSync(password, 10), display_name, role || 'user');
-    res.json({ ok: true });
-  } catch(e) {
-    res.status(400).json({ error: 'Cet identifiant est déjà utilisé' });
-  }
+  if (!username || !password || !display_name) return res.status(400).json({ error: 'Champs manquants' });
+  users = readJSON('users.json', []);
+  if (users.find(u => u.username === username.toLowerCase().trim())) return res.status(400).json({ error: 'Identifiant déjà utilisé' });
+  users.push({ id: genId(), username: username.toLowerCase().trim(), password_hash: bcrypt.hashSync(password, 10), display_name, role: role || 'user', created_at: new Date().toISOString() });
+  writeJSON('users.json', users); res.json({ ok: true });
 });
-
-app.put('/api/users/:id', requireAdmin, (req, res) => {
+app.put('/api/users/:id', admin, (req, res) => {
   const { display_name, role, password } = req.body;
-  if (password && password.length >= 4) {
-    db.prepare('UPDATE users SET display_name = ?, role = ?, password_hash = ? WHERE id = ?')
-      .run(display_name, role, bcrypt.hashSync(password, 10), req.params.id);
-  } else {
-    db.prepare('UPDATE users SET display_name = ?, role = ? WHERE id = ?')
-      .run(display_name, role, req.params.id);
-  }
+  users = readJSON('users.json', []).map(u => {
+    if (u.id !== req.params.id) return u;
+    const up = { ...u, display_name, role };
+    if (password && password.length >= 4) up.password_hash = bcrypt.hashSync(password, 10);
+    return up;
+  });
+  writeJSON('users.json', users); res.json({ ok: true });
+});
+app.delete('/api/users/:id', admin, (req, res) => {
+  if (req.params.id === req.session.userId) return res.status(400).json({ error: 'Impossible de supprimer son propre compte' });
+  writeJSON('users.json', readJSON('users.json', []).filter(u => u.id !== req.params.id));
   res.json({ ok: true });
 });
 
-app.delete('/api/users/:id', requireAdmin, (req, res) => {
-  if (req.params.id === req.session.userId)
-    return res.status(400).json({ error: 'Impossible de supprimer son propre compte' });
-  db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
-});
-
-// ── Start ─────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`🚀 RA CRM démarré sur le port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 UpSearch CRM démarré sur le port ${PORT}`));
