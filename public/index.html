@@ -478,7 +478,7 @@ async function loadData(){
   if(!REF.regions)REF.regions=DEFAULT_REFS.regions;if(!REF.villes)REF.villes=DEFAULT_REFS.villes;
   if(!REF.secteurs)REF.secteurs=DEFAULT_REFS.secteurs;if(!REF.familles)REF.familles=DEFAULT_REFS.familles;
   if(!REF.postes)REF.postes=DEFAULT_REFS.postes;
-  DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};});
+  DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.controles_ref)c.controles_ref=[];});
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
 
@@ -646,12 +646,17 @@ function rCommandes(){
 // ══ CLIENTS ════════════════════════════════════════════
 function rClients(){
   const s=(document.getElementById('s-clients')?.value||'').toLowerCase();
+  const consF=document.getElementById('cl-cons-f')?.value||'';
   const fltrs=['Tous','Client','Prospect'];
-  document.getElementById('cl-filters').innerHTML=fltrs.map(f=>`<button class="fb${clFilter===f?' on':''}" onclick="clFilter='${f}';rClients()">${f}</button>`).join('');
-  let res=DB.clients;if(clFilter!=='Tous')res=res.filter(c=>c.type===clFilter);
+  document.getElementById('cl-filters').innerHTML=fltrs.map(f=>`<button class="fb${clFilter===f?' on':''}" onclick="clFilter='${f}';rClients()">${f}</button>`).join('')
+    +`<select id="cl-cons-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les consultants</option>${CONS.map(cn=>`<option value="${cn}"${consF===cn?' selected':''}>${cn}</option>`).join('')}</select>`;
+  let res=DB.clients;
+  if(clFilter!=='Tous')res=res.filter(c=>c.type===clFilter);
+  if(consF)res=res.filter(c=>c.cons===consF);
   if(s)res=res.filter(c=>[c.nom,c.secteur,c.loc,c.cons].join(' ').toLowerCase().includes(s));
-  let h='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">';
-  if(!res.length){document.getElementById('body-clients').innerHTML='<div class="empty">Aucun client / prospect</div>';return;}
+  const totalTxt=`<div style="font-size:12px;color:var(--ts);margin-bottom:14px">${res.length} résultat${res.length!==1?'s':''}</div>`;
+  let h=totalTxt+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">';
+  if(!res.length){document.getElementById('body-clients').innerHTML=totalTxt+'<div class="empty">Aucun client / prospect</div>';return;}
   res.forEach((c,i)=>{
     const [bg,txt]=AV_COLORS[i%AV_COLORS.length];
     const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -787,7 +792,8 @@ function openCandForm(id){
     </div>
     <div class="fld"><label>CV — Ajoutez un PDF pour l'extraction automatique</label><div id="cv-zone">${cvHtml}</div><div id="parse-banner" class="parse-banner"></div></div>
     <div class="fld"><label>Poste visé (libre)</label><input id="f-poste" value="${v('poste')}"></div>
-    <div class="fr"><div class="fld"><label>Famille de poste</label><select id="f-famille_id">${bOpts('familles',null,null,c.famille_id||'','— Famille —')}</select></div><div class="fld"><label>Poste (référentiel)</label><select id="f-poste_ref_id">${bGrp('familles','postes','famille_id',c.poste_ref_id||'','— Poste —')}</select></div></div>
+    <div class="fr3"><div class="fld"><label>Poste 1 (référentiel)</label><select id="f-poste_ref_id">${bGrp('familles','postes','famille_id',c.poste_ref_id||'','— Poste principal —')}</select></div><div class="fld"><label>Poste 2</label><select id="f-poste_ref_id2">${bGrp('familles','postes','famille_id',c.poste_ref_id2||'','— Poste 2 —')}</select></div><div class="fld"><label>Poste 3</label><select id="f-poste_ref_id3">${bGrp('familles','postes','famille_id',c.poste_ref_id3||'','— Poste 3 —')}</select></div></div>
+    <div class="fr"><div class="fld"><label>Statut candidat</label><select id="f-statut_cand"><option value="Candidat"${(c.statut_cand||'Candidat')==='Candidat'?' selected':''}>Candidat</option><option value="Embauché"${c.statut_cand==='Embauché'?' selected':''}>Embauché</option><option value="Indisponible"${c.statut_cand==='Indisponible'?' selected':''}>Indisponible</option></select></div><div class="fld"><label>Famille de poste</label><select id="f-famille_id">${bOpts('familles',null,null,c.famille_id||'','— Famille —')}</select></div></div>
     <div class="fr"><div class="fld"><label>Secteur d'activité</label><select id="f-secteur_act_id">${bOpts('secteurs',null,null,c.secteur_act_id||'','— Secteur —')}</select></div><div class="fld"><label>Secteur du poste</label><select id="f-secteur_poste_id">${bOpts('secteurs',null,null,c.secteur_poste_id||'','— Secteur —')}</select></div></div>
     <div class="fr"><div class="fld"><label>Région</label><select id="f-region_id">${bOpts('regions',null,null,c.region_id||'','— Région —')}</select></div><div class="fld"><label>Ville</label><select id="f-ville_id">${bGrp('regions','villes','region_id',c.ville_id||'','— Ville —')}</select></div></div>
     <div class="fr"><div class="fld"><label>Localisation libre</label><input id="f-loc" value="${v('loc')}"></div><div class="fld"><label>Entreprise actuelle</label><input id="f-ent" value="${v('ent')}"></div></div>
@@ -801,7 +807,7 @@ function saveCand(){
   let photo=EID?getCand(EID)?.photo||null:null;if(window._pPhoto)photo=window._pPhoto;window._pPhoto=null;
   let cv=EID?getCand(EID)?.cv||null:null;if(window._pCV)cv=window._pCV;window._pCV=null;
   const existing=EID?getCand(EID):{};
-  const form={prenom:g('prenom'),nom:g('nom'),email:g('email'),phone:g('phone'),poste:g('poste'),famille_id:g('famille_id'),poste_ref_id:g('poste_ref_id'),secteur_act_id:g('secteur_act_id'),secteur_poste_id:g('secteur_poste_id'),region_id,ville_id,loc:g('loc'),ent:g('ent'),sal:g('sal'),linkedin:g('linkedin'),photo,cv,notes:existing.notes||[],prequalif:existing.prequalif||{}};
+  const form={prenom:g('prenom'),nom:g('nom'),email:g('email'),phone:g('phone'),poste:g('poste'),famille_id:g('famille_id'),poste_ref_id:g('poste_ref_id'),poste_ref_id2:g('poste_ref_id2'),poste_ref_id3:g('poste_ref_id3'),statut_cand:g('statut_cand')||'Candidat',secteur_act_id:g('secteur_act_id'),secteur_poste_id:g('secteur_poste_id'),region_id,ville_id,loc:g('loc'),ent:g('ent'),sal:g('sal'),linkedin:g('linkedin'),photo,cv,notes:existing.notes||[],prequalif:existing.prequalif||{},entretien:existing.entretien||{},controles_ref:existing.controles_ref||[]};
   EID?DB.candidats=DB.candidats.map(c=>c.id===EID?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
   save();CM();R(CV);
 }
@@ -809,7 +815,11 @@ function saveCand(){
 // ══ CANDIDAT DETAIL (avec onglets) ═════════════════════
 function openCandDetail(id){
   const c=getCand(id);if(!c)return;
-  const ville=refLbl('villes',c.ville_id),region=refLbl('regions',c.region_id),sAct=refLbl('secteurs',c.secteur_act_id),sPoste=refLbl('secteurs',c.secteur_poste_id),pRef=refLbl('postes',c.poste_ref_id);
+  const ville=refLbl('villes',c.ville_id),region=refLbl('regions',c.region_id),sAct=refLbl('secteurs',c.secteur_act_id),sPoste=refLbl('secteurs',c.secteur_poste_id);
+  const pRef=refLbl('postes',c.poste_ref_id),pRef2=c.poste_ref_id2?refLbl('postes',c.poste_ref_id2):'',pRef3=c.poste_ref_id3?refLbl('postes',c.poste_ref_id3):'';
+  const allPostes=[c.poste||pRef,pRef2,pRef3].filter(Boolean);
+  const statutColors={Candidat:'background:var(--acc-light);color:var(--acc2)',Embauché:'background:#ecfdf5;color:#065f46',Indisponible:'background:#fef3c7;color:#92400e'};
+  const statutStyle=statutColors[c.statut_cand||'Candidat']||statutColors.Candidat;
   const loc=ville?(ville+(region?', '+region:'')):(c.loc||'—');
   const isPDF=c.cv&&(c.cv.type==='application/pdf'||c.cv.name?.toLowerCase().endsWith('.pdf'));
   const cvS=c.cv?`<div style="margin-bottom:14px"><div class="dl" style="margin-bottom:7px">CV joint</div>
@@ -822,7 +832,7 @@ function openCandDetail(id){
   const html=`
     <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
       ${av(c.prenom+' '+c.nom,c.photo,0,58)}
-      <div style="flex:1"><div style="font-size:19px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts);margin-top:3px">${esc(c.poste||pRef||'—')}${c.ent?' · '+esc(c.ent):''}</div></div>
+      <div style="flex:1"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px"><div style="font-size:19px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div><span style="${statutStyle};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(c.statut_cand||'Candidat')}</span></div><div style="font-size:13px;color:var(--ts)">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div></div>
       <div style="display:flex;gap:7px"><button class="btn btn-s btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier</button></div>
     </div>
     <div class="tabs">
@@ -843,7 +853,7 @@ function openCandDetail(id){
         <div>
           <div class="dg"><div class="dl">Secteur d'activité</div><div class="dv">${esc(sAct||'—')}</div></div>
           <div class="dg"><div class="dl">Secteur du poste</div><div class="dv">${esc(sPoste||'—')}</div></div>
-          <div class="dg"><div class="dl">Poste référentiel</div><div class="dv">${esc(pRef||'—')}</div></div>
+          <div class="dg"><div class="dl">Postes</div><div class="dv">${allPostes.map(p=>`<span style="display:inline-block;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;font-size:12px;margin:0 3px 3px 0">${esc(p)}</span>`).join('')||'—'}</div></div>
           ${c.linkedin?`<div class="dg"><div class="dl" style="display:flex;align-items:center;gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</div><div class="dv"><a href="${esc(c.linkedin)}" target="_blank" style="color:var(--acc);text-decoration:none;font-size:12px">${esc(c.linkedin)}</a></div></div>`:''}
         </div>
       </div>
@@ -865,19 +875,22 @@ function openCandDetail(id){
 
     <!-- TAB: ENTRETIEN -->
     <div id="tab-entr" class="tab-panel">
-      <div style="text-align:center;padding:40px 0;color:var(--tm)">
-        <div style="font-size:32px;margin-bottom:10px">🗂️</div>
-        <div style="font-size:14px;font-weight:500;margin-bottom:6px">Onglet Entretien</div>
-        <div style="font-size:13px">Cette section sera disponible prochainement.</div>
+      ${c.entretien?._saved_by?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--ts)"><svg width="13" height="13" fill="none" stroke="var(--acc)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Dernière saisie par <b style="color:var(--tp)">${esc(c.entretien._saved_by)}</b> le ${esc(c.entretien._saved_date)}</div>`:''}
+      <div id="entr-form-${id}">
+        <div class="fld"><label>Compte-rendu d'entretien</label><textarea id="entr-content-${id}" style="min-height:200px;line-height:1.7" placeholder="Saisissez ici le compte-rendu de l'entretien : impressions générales, points forts, points d'attention, échanges clés...">${esc(c.entretien?.content||'')}</textarea></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <button class="btn btn-p" onclick="saveEntretien('${id}')">💾 Enregistrer le compte-rendu</button>
+        </div>
       </div>
     </div>
 
     <!-- TAB: CONTRÔLE DE RÉFÉRENCE -->
     <div id="tab-ref" class="tab-panel">
-      <div style="text-align:center;padding:40px 0;color:var(--tm)">
-        <div style="font-size:32px;margin-bottom:10px">🔍</div>
-        <div style="font-size:14px;font-weight:500;margin-bottom:6px">Contrôle de référence</div>
-        <div style="font-size:13px">Cette section sera disponible prochainement.</div>
+      <div id="controles-list-${id}">
+        ${buildControlesRefView(id, c.controles_ref||[])}
+      </div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--br)">
+        <button class="btn btn-s btn-sm" onclick="openAddControle('${id}')">+ Ajouter un contrôle de référence</button>
       </div>
     </div>
 
@@ -894,6 +907,63 @@ function switchTab(btn,panelId){
   btn.closest('.mbody').querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById(panelId)?.classList.add('active');
+}
+
+// ══ ENTRETIEN ══════════════════════════════════════════
+function saveEntretien(candId){
+  const content=(document.getElementById('entr-content-'+candId)?.value||'').trim();
+  if(!content){alert('Saisissez un compte-rendu avant d\'enregistrer.');return;}
+  const entretien={content,_saved_by:currentUser?.display_name||'—',_saved_date:TODAY};
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,entretien}:c);
+  save();
+  const msg=document.createElement('div');msg.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';msg.textContent='✓ Compte-rendu enregistré';document.body.appendChild(msg);setTimeout(()=>msg.remove(),2500);
+}
+
+// ══ CONTRÔLES DE RÉFÉRENCE ═════════════════════════════
+function buildControlesRefView(candId, controles){
+  if(!controles||!controles.length) return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:16px 0">Aucun contrôle de référence saisi</div>';
+  return controles.map((ctrl,i)=>`
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:10px;border:1px solid var(--br)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--acc)">Contrôle ${i+1} — ${esc(ctrl.entreprise||'Entreprise')}</div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:11px;color:var(--tm)">${esc(ctrl._saved_by||'')} · ${esc(ctrl._saved_date||'')}</span>
+          <button class="ic-btn" onclick="delControle('${candId}',${i})" style="color:var(--red)">🗑</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><div class="dl">Entreprise</div><div class="dv">${esc(ctrl.entreprise||'—')}</div></div>
+        <div><div class="dl">Interlocuteur</div><div class="dv">${esc(ctrl.interlocuteur||'—')}</div></div>
+        <div><div class="dl">Coordonnées</div><div class="dv">${esc(ctrl.coordonnees||'—')}</div></div>
+      </div>
+      ${ctrl.retour?`<div><div class="dl" style="margin-bottom:4px">Retour du contrôle</div><div style="font-size:13px;color:var(--tp);line-height:1.6;white-space:pre-wrap">${esc(ctrl.retour)}</div></div>`:''}
+    </div>`).join('');
+}
+function openAddControle(candId){
+  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  OM('Nouveau contrôle de référence',`
+    <div class="fr"><div class="fld"><label>Entreprise</label><input id="cr-ent" placeholder="Nom de l'entreprise"></div><div class="fld"><label>Interlocuteur</label><input id="cr-inter" placeholder="Prénom Nom, Fonction"></div></div>
+    <div class="fld"><label>Coordonnées</label><input id="cr-coord" placeholder="Téléphone, email..."></div>
+    <div class="fld"><label>Consultant</label><select id="cr-cons">${cOpts}</select></div>
+    <div class="fld"><label>Retour du contrôle de référence</label><textarea id="cr-retour" style="min-height:150px" placeholder="Saisissez ici le compte-rendu du contrôle de référence..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveControle('${candId}')">Enregistrer</button></div>`,'w');
+}
+function saveControle(candId){
+  const ctrl={
+    entreprise:document.getElementById('cr-ent')?.value||'',
+    interlocuteur:document.getElementById('cr-inter')?.value||'',
+    coordonnees:document.getElementById('cr-coord')?.value||'',
+    retour:(document.getElementById('cr-retour')?.value||'').trim(),
+    _saved_by:document.getElementById('cr-cons')?.value||currentUser?.display_name||'—',
+    _saved_date:TODAY
+  };
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,controles_ref:[...(c.controles_ref||[]),ctrl]}:c);
+  save();CM();openCandDetail(candId);
+}
+function delControle(candId,idx){
+  if(!confirm('Supprimer ce contrôle ?'))return;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,controles_ref:(c.controles_ref||[]).filter((_,i)=>i!==idx)}:c);
+  save();openCandDetail(candId);
 }
 
 // ══ PRÉQUALIFICATION FORM ══════════════════════════════
@@ -1123,7 +1193,10 @@ function openClientDetail(id){
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div style="font-size:13px;font-weight:600">Actions commerciales (${allActs.length})</div>
-        <button class="btn btn-s btn-sm" onclick="openActionForm('${id}')">+ Action</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-s btn-sm" onclick="openActionForm('${id}')">+ Action</button>
+          <button class="btn btn-p btn-sm" onclick="CM();G('dashboard-crm')">📊 Voir le dashboard</button>
+        </div>
       </div>${actsH}
     </div>
     <div class="dact"><button class="btn btn-d btn-sm" onclick="delClient('${id}');CM()">🗑 Supprimer</button><div style="display:flex;gap:7px"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openClientForm('${id}')">✏️ Modifier</button></div></div>`;
@@ -1134,14 +1207,21 @@ function openActionForm(prefClientId){
   const tOpts=ACT_TYPES.map(t=>`<option value="${t}">${ACT_ICO[t]} ${t}</option>`).join('');
   const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
   const clOpts=`<option value="">— Entreprise (obligatoire) —</option>`+DB.clients.map(c=>`<option value="${c.id}"${c.id===prefClientId?' selected':''}>${esc(c.nom)}</option>`).join('');
-  const ctOpts=`<option value="">— Contact (obligatoire) —</option>`+DB.contacts.map(ct=>{const cl=getClient(ct.client_id);return `<option value="${ct.id}">${esc(ct.prenom)} ${esc(ct.nom)}${cl?' — '+esc(cl.nom):''}</option>`;}).join('');
+  // Filter contacts by pre-selected company
+  const filteredCts=prefClientId?DB.contacts.filter(ct=>ct.client_id===prefClientId||ct.client_ids?.includes(prefClientId)):DB.contacts;
+  const ctOpts=`<option value="">— Contact (obligatoire) —</option>`+filteredCts.map(ct=>`<option value="${ct.id}">${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
   OM('Nouvelle action commerciale',`
     <div class="fr"><div class="fld"><label>Type</label><select id="at">${tOpts}</select></div><div class="fld"><label>Date (obligatoire)</label><input type="date" id="ad" value="${TODAY}"></div></div>
     <div class="fld"><label>Consultant (obligatoire)</label><select id="aa">${cOpts}</select></div>
-    <div class="fld"><label>Entreprise (obligatoire)</label><select id="acl">${clOpts}</select></div>
+    <div class="fld"><label>Entreprise (obligatoire)</label><select id="acl" onchange="refreshActionContacts(this.value)">${clOpts}</select></div>
     <div class="fld"><label>Contact (obligatoire)</label><select id="act">${ctOpts}</select></div>
     <div class="fld"><label>Commentaire</label><textarea id="ac" style="min-height:80px" placeholder="Résumé, points abordés..."></textarea></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveAction()">Enregistrer</button></div>`,'w');
+}
+function refreshActionContacts(clientId){
+  const sel=document.getElementById('act');if(!sel)return;
+  const filtered=clientId?DB.contacts.filter(ct=>ct.client_id===clientId||ct.client_ids?.includes(clientId)):DB.contacts;
+  sel.innerHTML=`<option value="">— Contact (obligatoire) —</option>`+filtered.map(ct=>`<option value="${ct.id}">${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
 }
 function saveAction(){
   const type=document.getElementById('at')?.value;
@@ -1231,24 +1311,22 @@ function rDashCRM(){
   acts=acts.sort((a,b)=>b.date>a.date?1:-1);
 
   // KPIs
-  const thisMonth=TODAY.slice(0,7);
-  const monthActs=DB.actions.filter(a=>a.date.startsWith(thisMonth));
   const byType={};ACT_TYPES.forEach(t=>{byType[t]=0;});acts.forEach(a=>{if(byType[a.type]!==undefined)byType[a.type]++;});
+  // Weekly bounds (Monday to Sunday)
+  const now=new Date(TODAY);const dow=now.getDay()||7;
+  const wS=new Date(now);wS.setDate(now.getDate()-dow+1);const wE=new Date(wS);wE.setDate(wS.getDate()+6);
+  const wSstr=wS.toISOString().slice(0,10),wEstr=wE.toISOString().slice(0,10);
+  const weekActs=DB.actions.filter(a=>a.date>=wSstr&&a.date<=wEstr);
+  const byConsWeek={};CONS.forEach(cn=>{byConsWeek[cn]=0;});weekActs.forEach(a=>{if(byConsWeek[a.cons]!==undefined)byConsWeek[a.cons]++;});
+  const topCW=Object.entries(byConsWeek).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+  const maxCW=topCW[0]?.[1]||1;
+
   let h=`<div style="display:grid;grid-template-columns:repeat(${ACT_TYPES.length},1fr);gap:11px;margin-bottom:18px">`;
-  ACT_TYPES.forEach(t=>{h+=`<div class="kpi-card"><div style="font-size:26px;margin-bottom:4px">${ACT_ICO[t]||'📋'}</div><div class="kpi-val">${byType[t]||0}</div><div class="kpi-lbl">${t}${dashF.cons||dashF.date_from?'':' (filtrés)'}</div></div>`;});
+  ACT_TYPES.forEach(t=>{h+=`<div class="kpi-card"><div style="font-size:26px;margin-bottom:4px">${ACT_ICO[t]||'📋'}</div><div class="kpi-val">${byType[t]||0}</div><div class="kpi-lbl">${t}</div></div>`;});
   h+=`</div>`;
 
-  // Stats par consultant
-  const byCons={};acts.forEach(a=>{if(!byCons[a.cons])byCons[a.cons]=0;byCons[a.cons]++;});
-  const topCons=Object.entries(byCons).sort((a,b)=>b[1]-a[1]);
-  const maxC=topCons[0]?.[1]||1;
-
-  h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:16px">
-  <div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:13px">Activité par consultant</div>
-  ${topCons.length===0?'<div class="empty" style="padding:20px 0">Aucune action</div>':topCons.map(([cn,n])=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px"><div style="font-weight:500;width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cn)}</div><div style="flex:1;height:5px;background:var(--bg);border-radius:3px"><div style="height:100%;background:var(--acc);border-radius:3px;width:${Math.round(n/maxC*100)}%"></div></div><div style="font-size:12px;color:var(--ts);flex-shrink:0;min-width:20px;text-align:right">${n}</div></div>`).join('')}
-  </div>
-  <div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:13px">Répartition par type</div>
-  ${ACT_TYPES.map(t=>{const n=byType[t]||0;const tot=acts.length||1;const pct=Math.round(n/tot*100);return `<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${ACT_ICO[t]} ${t}</span><span style="color:var(--ts)">${n} (${pct}%)</span></div><div style="height:5px;background:var(--bg);border-radius:3px"><div style="height:100%;background:var(--acc);border-radius:3px;width:${pct}%"></div></div></div>`;}).join('')}
+  h+=`<div style="margin-bottom:16px"><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px"><div style="font-size:14px;font-weight:600">Activité par consultant — semaine en cours</div><span style="font-size:11px;color:var(--tm)">${wSstr} → ${wEstr}</span></div>
+  ${topCW.length===0?'<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucune action saisie cette semaine</div>':topCW.map(([cn,n])=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px"><div style="font-weight:600;width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cn)}</div><div style="flex:1;height:6px;background:var(--bg);border-radius:3px"><div style="height:100%;background:var(--acc);border-radius:3px;width:${Math.round(n/maxCW*100)}%"></div></div><div style="font-size:13px;color:var(--tp);font-weight:600;flex-shrink:0;min-width:24px;text-align:right">${n}</div></div>`).join('')}
   </div></div>`;
 
   // Liste des actions
