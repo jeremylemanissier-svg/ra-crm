@@ -7,10 +7,17 @@ const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = process.env.DATA_DIR || './data';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'US2026!';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'upsearch-secret-2026';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+
+// Support both DATA_DIR and legacy DB_PATH variable
+let DATA_DIR = process.env.DATA_DIR;
+if (!DATA_DIR && process.env.DB_PATH) {
+  DATA_DIR = path.dirname(process.env.DB_PATH); // /data/crm.db → /data
+}
+if (!DATA_DIR) DATA_DIR = './data';
+console.log('📁 DATA_DIR:', DATA_DIR);
 
 const genId = () => crypto.randomBytes(8).toString('hex');
 
