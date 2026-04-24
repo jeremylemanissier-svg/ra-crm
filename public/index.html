@@ -239,7 +239,13 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 /* ══ ADMIN ══ */
 .admin-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--br);}
 
-/* ══ GEO AUTOCOMPLETE ══ */
+/* ══ BULK IMPORT ══ */
+.bi-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;margin-bottom:5px;font-size:13px;background:var(--bg);}
+.bi-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.bi-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
+.bi-status{font-size:11px;flex-shrink:0;font-weight:500;}
+.bi-progress{height:4px;background:var(--br);border-radius:2px;margin:10px 0;}
+.bi-bar{height:100%;background:var(--acc);border-radius:2px;transition:width .3s;}
 .geo-wrap{position:relative;}
 .geo-input{width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit;}
 .geo-input:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:var(--acc);}
@@ -349,6 +355,8 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
       <div class="view" id="view-vivier">
         <div class="toolbar">
           <button class="btn btn-s btn-sm" onclick="openRef()">⚙ Référentiels</button>
+          <button class="btn btn-s btn-sm" onclick="document.getElementById('bulk-cv-inp').click()">📥 Import CVs en masse</button>
+          <input type="file" id="bulk-cv-inp" style="display:none" accept=".pdf" multiple onchange="openBulkImport(this.files)">
           <button class="btn btn-p" style="margin-left:auto" onclick="openCandForm()">+ Nouveau candidat</button>
         </div>
         <div class="vivier-wrap">
@@ -422,7 +430,6 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 </div>
 
 <script>
-// ══ CONSTANTS ══════════════════════════════════════════
 const CONS=['Jérémy','Simon','Antoine','Anne-Sophie','Shirley','Clémence','Hugo'];
 const TODAY=new Date().toISOString().slice(0,10);
 const AV_COLORS=[['#e8f4f8','#1e6080'],['#ddeef5','#165068'],['#ecfdf5','#065f46'],['#fff7ed','#9a3412'],['#fef3c7','#92400e'],['#f0f4f8','#2c5282'],['#f0fdf4','#166534'],['#fef2f2','#991b1b']];
@@ -448,14 +455,12 @@ const DEFAULT_REFS={
   postes:[{id:'p1',label:'Chef de chantier GO',famille_id:'fam1'},{id:'p2',label:'Chef de chantier TCE',famille_id:'fam1'},{id:'p3',label:'Chef de chantier GC',famille_id:'fam1'},{id:'p4',label:'Conducteur de travaux',famille_id:'fam2'},{id:'p5',label:'CDT TCE',famille_id:'fam2'},{id:'p6',label:'CDT GO',famille_id:'fam2'},{id:'p7',label:'Directeur de travaux',famille_id:'fam3'},{id:'p8',label:'Responsable travaux',famille_id:'fam3'},{id:'p9',label:'Ingénieur structure',famille_id:'fam4'},{id:'p10',label:'Ingénieur fluides',famille_id:'fam4'},{id:'p11',label:"Chargé d'affaires",famille_id:'fam5'},{id:'p12',label:'CA second œuvre',famille_id:'fam5'},{id:'p13',label:"Architecte MOE",famille_id:'fam6'},{id:'p14',label:"Maître d'œuvre",famille_id:'fam6'}],
 };
 
-// ══ STATE ══════════════════════════════════════════════
 let DB={candidats:[],clients:[],contacts:[],commandes:[],relances:[],actions:[]},REF={};
 let currentUser=null,EID=null,showDone=false,clFilter='Tous',cmdFilter='Toutes';
 let vivierF={nom:'',prenom:'',secteur_act_id:'',secteur_poste_id:'',region_id:'',ville_id:'',poste_ref_id:''};
 let dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};
 const genId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 
-// ══ API ════════════════════════════════════════════════
 async function api(method,url,data){
   try{
     const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});
@@ -466,7 +471,6 @@ async function api(method,url,data){
 async function saveKey(k){const v=k==='refs'?REF:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
 function save(){['candidats','clients','contacts','commandes','relances','actions'].forEach(k=>saveKey(k));saveKey('refs');}
 
-// ══ AUTH ═══════════════════════════════════════════════
 function showLogin(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.remove('visible');}
 function showApp(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.add('hidden');document.getElementById('app').classList.add('visible');}
 async function doLogin(){
@@ -495,7 +499,6 @@ async function loadData(){
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
 
-// ══ ROUTER ═════════════════════════════════════════════
 const VTITLES={dash:'Tableau de bord',vivier:'Vivier de candidats',commandes:'Commandes',clients:'Prospects / Clients',contacts:'Contacts','dashboard-crm':'Dashboard commercial',agenda:'Agenda & Relances'};
 let CV='dash';
 function G(name){
@@ -523,7 +526,6 @@ function updBadges(){
   const b=document.getElementById('badge-ag');ov>0?(b.textContent=ov,b.style.display='inline'):b.style.display='none';
 }
 
-// ══ HELPERS ════════════════════════════════════════════
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const getClient=id=>DB.clients.find(c=>c.id===id);const getContact=id=>DB.contacts.find(c=>c.id===id);
 const getCand=id=>DB.candidats.find(c=>c.id===id);
@@ -537,7 +539,6 @@ function av(nom,photo,idx,size=42){
   return `<div style="${sz}background:${bg};color:${txt}">${ini}</div>`;
 }
 
-// ══ DASHBOARD ══════════════════════════════════════════
 function rDash(){
   const todayR=DB.relances.filter(r=>r.date===TODAY&&!r.fait),overdueR=DB.relances.filter(r=>!r.fait&&r.date<TODAY);
   const actCmds=DB.commandes.filter(c=>c.statut==='Active'),thisMonth=TODAY.slice(0,7);
@@ -565,7 +566,6 @@ function rDash(){
   document.getElementById('body-dash').innerHTML=h;
 }
 
-// ══ VIVIER ═════════════════════════════════════════════
 function rVivier(){rVivierSidebar();applyVivierF();}
 function rVivierSidebar(){
   const f=vivierF;
@@ -629,7 +629,6 @@ function applyVivierF(){
   document.getElementById('vivier-list').innerHTML=h;
 }
 
-// ══ COMMANDES ══════════════════════════════════════════
 function rCommandes(){
   const s=(document.getElementById('s-cmds')?.value||'').toLowerCase();
   const fltrs=['Toutes','Active','Suspendue','Pourvue'];
@@ -655,7 +654,6 @@ function rCommandes(){
   document.getElementById('body-cmds').innerHTML=h;
 }
 
-// ══ CLIENTS ════════════════════════════════════════════
 function rClients(){
   const s=(document.getElementById('s-clients')?.value||'').toLowerCase();
   const consF=document.getElementById('cl-cons-f')?.value||'';
@@ -691,7 +689,6 @@ function rClients(){
   document.getElementById('body-clients').innerHTML=h+'</div>';
 }
 
-// ══ CONTACTS ═══════════════════════════════════════════
 function rContacts(){
   const s=(document.getElementById('s-contacts')?.value||'').toLowerCase();
   let res=DB.contacts;
@@ -705,7 +702,6 @@ function rContacts(){
   document.getElementById('body-contacts').innerHTML=h+'</tbody></table>';
 }
 
-// ══ AGENDA ═════════════════════════════════════════════
 function toggleDone(){showDone=!showDone;const b=document.getElementById('btn-done');b.classList.toggle('on',showDone);b.textContent=showDone?'Masquer les faites':'Voir les faites';rAgenda();}
 function rAgenda(){
   const shown=DB.relances.filter(r=>showDone||!r.fait).sort((a,b)=>(a.date+a.heure)>(b.date+b.heure)?1:-1);
@@ -729,12 +725,10 @@ function rAgenda(){
   document.getElementById('body-agenda').innerHTML=h;
 }
 
-// ══ MODAL ══════════════════════════════════════════════
 function OM(title,body,size){document.getElementById('mtitle').textContent=title;document.getElementById('mbody').innerHTML=body;document.getElementById('mb').className=size||'n';document.getElementById('ov').classList.add('open');}
 function CM(){document.getElementById('ov').classList.remove('open');EID=null;}
 function handleOv(e){if(e.target.id==='ov')CM();}
 
-// ══ CV / PHOTO ═════════════════════════════════════════
 function handleDrop(e,type){e.preventDefault();e.stopPropagation();const f=e.dataTransfer?.files[0];if(f)readFile(f,type);}
 function handleSel(inp,type){const f=inp.files[0];if(f)readFile(f,type);}
 function readFile(file,type){
@@ -773,6 +767,114 @@ async function parseCV(name,type,data){
   if(filled>0){banner.className='parse-banner success';banner.innerHTML=`✓ ${filled} information${filled>1?'s':''} extraite${filled>1?'s':''} automatiquement`;}
   else{banner.className='parse-banner error';banner.innerHTML='⚠️ Aucune information trouvée — merci de compléter manuellement.';}
 }
+function openBulkImport(files){
+  if(!files||!files.length)return;
+  const arr=Array.from(files).filter(f=>f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf'));
+  if(!arr.length){alert('Aucun PDF sélectionné.');return;}
+
+  // Build initial modal
+  const rows=arr.map((f,i)=>`
+    <div class="bi-row" id="bi-row-${i}">
+      <div class="bi-icon" style="background:var(--acc-light);color:var(--acc)">📄</div>
+      <div class="bi-name">${esc(f.name)}</div>
+      <div class="bi-status" id="bi-st-${i}" style="color:var(--tm)">En attente...</div>
+    </div>`).join('');
+
+  OM('Import de CVs en masse',`
+    <div style="margin-bottom:14px">
+      <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${arr.length} PDF sélectionné${arr.length>1?'s':''}. L'import démarre automatiquement.</div>
+      <div class="bi-progress"><div class="bi-bar" id="bi-bar" style="width:0%"></div></div>
+      <div style="font-size:12px;color:var(--tm);margin-bottom:12px" id="bi-counter">0 / ${arr.length} traité${arr.length>1?'s':''}</div>
+      <div style="max-height:340px;overflow-y:auto">${rows}</div>
+    </div>
+    <div class="fa">
+      <button class="btn btn-s" id="bi-close-btn" onclick="CM();R('vivier')" disabled>Fermer</button>
+      <div id="bi-summary" style="font-size:13px;color:var(--ts)"></div>
+    </div>`,'w');
+
+  // Start processing
+  processBulkImport(arr);
+
+  // Reset input so same files can be re-imported if needed
+  document.getElementById('bulk-cv-inp').value='';
+}
+
+async function processBulkImport(files){
+  let ok=0,partial=0,failed=0;
+
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    const stEl=document.getElementById('bi-st-'+i);
+    const rowEl=document.getElementById('bi-row-'+i);
+    if(stEl)stEl.innerHTML='<span style="color:var(--acc)">⏳ Traitement...</span>';
+
+    try{
+      // Read file as base64
+      const base64=await new Promise((res,rej)=>{
+        const r=new FileReader();
+        r.onload=e=>res(e.target.result.split(',')[1]);
+        r.onerror=rej;
+        r.readAsDataURL(file);
+      });
+
+      // Parse via Claude API
+      const parsed=await api('POST','/api/parse-cv',{name:file.name,type:file.type,data:base64});
+
+      // Build candidate object
+      const p=parsed?.parsed||{};
+      const hasInfo=p.nom||p.prenom||p.email||p.tel;
+      const cand={
+        id:genId(),
+        nom:p.nom||'',
+        prenom:p.prenom||'',
+        email:p.email||'',
+        phone:p.tel||'',
+        poste:'',statut_cand:'Candidat',
+        cv:{name:file.name,type:file.type,size:file.size,data:base64},
+        notes:[],prequalif:{},entretien:{},controles_ref:[],
+        _imported:true,_import_date:TODAY
+      };
+
+      DB.candidats.push(cand);
+      await saveKey('candidats');
+
+      if(hasInfo){
+        ok++;
+        if(stEl)stEl.innerHTML=`<span style="color:var(--green)">✓ ${esc((p.prenom||'')+' '+(p.nom||'')).trim()||'Créé'}</span>`;
+        if(rowEl)rowEl.style.background='var(--green-bg)';
+      }else{
+        partial++;
+        if(stEl)stEl.innerHTML=`<span style="color:var(--amber)">⚠ Créé — à compléter</span>`;
+        if(rowEl)rowEl.style.background='var(--amber-bg)';
+      }
+
+    }catch(e){
+      failed++;
+      if(stEl)stEl.innerHTML=`<span style="color:var(--red)">✗ Erreur</span>`;
+      if(rowEl)rowEl.style.background='var(--red-bg)';
+    }
+
+    // Update progress
+    const done=i+1;
+    const pct=Math.round(done/files.length*100);
+    const bar=document.getElementById('bi-bar');if(bar)bar.style.width=pct+'%';
+    const ctr=document.getElementById('bi-counter');
+    if(ctr)ctr.textContent=`${done} / ${files.length} traité${files.length>1?'s':''}`;
+  }
+
+  // Final summary
+  const sum=document.getElementById('bi-summary');
+  if(sum){
+    const parts=[];
+    if(ok)parts.push(`<span style="color:var(--green);font-weight:500">✓ ${ok} fiche${ok>1?'s':''} créée${ok>1?'s':''}</span>`);
+    if(partial)parts.push(`<span style="color:var(--amber);font-weight:500">⚠ ${partial} à compléter</span>`);
+    if(failed)parts.push(`<span style="color:var(--red);font-weight:500">✗ ${failed} en erreur</span>`);
+    sum.innerHTML=parts.join(' · ');
+  }
+  const closeBtn=document.getElementById('bi-close-btn');
+  if(closeBtn)closeBtn.disabled=false;
+  updBadges();
+}
 function clearFile(type){
   if(type==='photo'){window._pPhoto=null;const z=document.getElementById('photo-zone');if(z)z.innerHTML=pzE();}
   else{window._pCV=null;const z=document.getElementById('cv-zone');if(z)z.innerHTML=cvzE();}
@@ -790,7 +892,6 @@ function toggleCV(candId){
   }else{w.style.display='none';if(btn)btn.textContent='👁 Afficher';}
 }
 
-// ══ GEO API ════════════════════════════════════════════
 // Utilise l'API officielle geo.api.gouv.fr (gratuite, sans clé)
 let _geoCache={};
 async function geoSearch(q){
@@ -916,7 +1017,6 @@ function saveCand(){
   save();CM();R(CV);
 }
 
-// ══ CANDIDAT DETAIL (avec onglets) ═════════════════════
 function openCandDetail(id){
   const c=getCand(id);if(!c)return;
   const sAct=refLbl('secteurs',c.secteur_act_id),sPoste=refLbl('secteurs',c.secteur_poste_id);
@@ -1014,7 +1114,6 @@ function switchTab(btn,panelId){
   document.getElementById(panelId)?.classList.add('active');
 }
 
-// ══ ENTRETIEN ══════════════════════════════════════════
 function saveEntretien(candId){
   const content=(document.getElementById('entr-content-'+candId)?.value||'').trim();
   if(!content){alert('Saisissez un compte-rendu avant d\'enregistrer.');return;}
@@ -1024,7 +1123,6 @@ function saveEntretien(candId){
   const msg=document.createElement('div');msg.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';msg.textContent='✓ Compte-rendu enregistré';document.body.appendChild(msg);setTimeout(()=>msg.remove(),2500);
 }
 
-// ══ CONTRÔLES DE RÉFÉRENCE ═════════════════════════════
 function buildControlesRefView(candId, controles){
   if(!controles||!controles.length) return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:16px 0">Aucun contrôle de référence saisi</div>';
   return controles.map((ctrl,i)=>`
@@ -1071,7 +1169,6 @@ function delControle(candId,idx){
   save();openCandDetail(candId);
 }
 
-// ══ PRÉQUALIFICATION FORM ══════════════════════════════
 function buildPrequalifForm(candId,pq){
   const v=k=>esc(pq[k]||'');const chk=(k,val)=>pq[k]===val?' checked':'';const bool=(k)=>pq[k]?'checked':'';
   const expBlock=(n,exp={})=>`<div class="exp-block"><div class="exp-block-title">Expérience ${n}</div>
@@ -1180,7 +1277,6 @@ function saveNote(candId){
 }
 function delCand(id){if(!confirm('Supprimer ce candidat ?'))return;DB.candidats=DB.candidats.filter(c=>c.id!==id);DB.commandes=DB.commandes.map(cmd=>({...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==id)}));save();CM();R(CV);}
 
-// ══ COMMANDE FORMS ═════════════════════════════════════
 function openCmdForm(id){
   EID=id||null;const cmd=id?DB.commandes.find(x=>x.id===id):{};const v=f=>esc(cmd[f]||'');
   const clOpts=`<option value="">— Sélectionner —</option>`+DB.clients.map(c=>`<option value="${c.id}"${cmd.client_id===c.id?' selected':''}>${esc(c.nom)}</option>`).join('');
@@ -1234,7 +1330,6 @@ function addCand(cmdId){const candId=document.getElementById('add-csel')?.value;
 function rmCand(cmdId,candId){if(!confirm('Retirer ?'))return;DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==candId)}:cmd);save();openCmdDetail(cmdId);}
 function chEtape(cmdId,candId,etape){DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape}:cc)}:cmd);save();openCmdDetail(cmdId);}
 
-// ══ CLIENT FORMS ═══════════════════════════════════════
 function openClientForm(id){
   EID=id||null;const c=id?getClient(id):{};const v=f=>esc(c[f]||'');
   const tOpts=['Client','Prospect'].map(t=>`<option value="${t}"${(c.type||'Prospect')===t?' selected':''}>${t}</option>`).join('');
@@ -1349,7 +1444,6 @@ function saveAction(){
 }
 function delAction(id){if(!confirm('Supprimer cette action ?'))return;DB.actions=DB.actions.filter(a=>a.id!==id);save();R(CV);}
 
-// ══ CONTACT FORMS ══════════════════════════════════════
 function openContactForm(id){
   EID=id||null;const ct=id?getContact(id):{};const v=f=>esc(ct[f]||'');
   const clOpts=`<option value="">— Rattacher à un client —</option>`+DB.clients.map(c=>`<option value="${c.id}"${ct.client_id===c.id?' selected':''}>${esc(c.nom)}</option>`).join('');
@@ -1368,7 +1462,6 @@ function saveContact(){
 }
 function delContact(id){if(!confirm('Supprimer ?'))return;DB.contacts=DB.contacts.filter(c=>c.id!==id);save();R(CV);}
 
-// ══ AGENDA ═════════════════════════════════════════════
 function openAgendaForm(id){
   EID=id||null;const r=id?DB.relances.find(x=>x.id===id):{};const v=f=>esc(r[f]||'');
   const curT=r.type||'Candidat';
@@ -1399,7 +1492,6 @@ function saveRel(){
 function toggleRel(id){DB.relances=DB.relances.map(r=>r.id===id?{...r,fait:!r.fait}:r);save();R(CV);}
 function delRel(id){if(!confirm('Supprimer ?'))return;DB.relances=DB.relances.filter(r=>r.id!==id);save();R(CV);}
 
-// ══ DASHBOARD CRM ══════════════════════════════════════
 function resetDashF(){dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};document.getElementById('df-cons').value='';document.getElementById('df-from').value='';document.getElementById('df-to').value='';document.getElementById('df-client').value='';document.getElementById('df-contact').value='';document.getElementById('df-sect').value='';rDashCRM();}
 
 function rDashCRM(){
@@ -1463,7 +1555,6 @@ function rDashCRM(){
   document.getElementById('body-dash-crm').innerHTML=h;
 }
 
-// ══ ADMIN ══════════════════════════════════════════════
 async function openAdminPanel(){
   OM('Gestion des utilisateurs','<div style="text-align:center;padding:20px;color:var(--tm)">Chargement...</div>','w');
   const users=await api('GET','/api/users');if(!users)return;
@@ -1507,7 +1598,6 @@ async function deleteUser(id,name){
   if(res?.ok)openAdminPanel();else alert('Impossible de supprimer ce compte.');
 }
 
-// ══ RÉFÉRENTIELS ═══════════════════════════════════════
 let rtab='secteurs';
 function openRef(){rtab='secteurs';renderRef();}
 function renderRef(){OM('Référentiels',`<div class="ref-tabs"><button class="ref-tab${rtab==='secteurs'?' active':''}" onclick="swRef('secteurs')">Secteurs</button><button class="ref-tab${rtab==='geo'?' active':''}" onclick="swRef('geo')">Régions & Villes</button><button class="ref-tab${rtab==='postes'?' active':''}" onclick="swRef('postes')">Familles & Postes</button></div><div id="rc">${rRC()}</div>`,'w');}
@@ -1522,7 +1612,6 @@ function addPoste(fid){const inp=document.getElementById('np-'+fid);const l=(inp
 function renR(arr,id){const it=(REF[arr]||[]).find(x=>x.id===id);if(!it)return;const nl=prompt('Renommer :',it.label);if(!nl||nl.trim()===it.label)return;REF[arr]=REF[arr].map(x=>x.id===id?{...x,label:nl.trim()}:x);saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
 function delR(arr,id){const it=(REF[arr]||[]).find(x=>x.id===id);if(!it||!confirm(`Supprimer "${it.label}" ?`))return;REF[arr]=REF[arr].filter(x=>x.id!==id);if(arr==='regions')REF.villes=(REF.villes||[]).filter(v=>v.region_id!==id);if(arr==='familles')REF.postes=(REF.postes||[]).filter(p=>p.famille_id!==id);saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
 
-// ══ INIT ═══════════════════════════════════════════════
 async function init(){
   try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();G('dash');}else{showLogin();}}
   catch(e){showLogin();}
