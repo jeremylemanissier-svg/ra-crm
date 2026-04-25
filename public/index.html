@@ -1633,49 +1633,281 @@ function openCmdForm(id){
   OM(id?'Modifier la commande':'Nouvelle commande',`
     <div class="fld"><label>Titre du poste</label><input id="f-titre" value="${v('titre')}"></div>
     <div class="fr"><div class="fld"><label>Client</label><select id="f-client_id">${clOpts}</select></div><div class="fld"><label>Contact</label><select id="f-contact_id">${ctOpts}</select></div></div>
-    <div class="fr"><div class="fld"><label>Consultant</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Statut</label><select id="f-statut">${sOpts}</select></div></div>
+    <div class="fr3"><div class="fld"><label>Consultant</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Statut</label><select id="f-statut">${sOpts}</select></div><div class="fld"><label>Date de la commande</label><input type="date" id="f-date_cmd" value="${v('date_cmd')||TODAY}"></div></div>
     <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
 }
 function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
-  const form={titre:g('titre'),client_id:g('client_id'),contact_id:g('contact_id'),cons:g('cons'),statut:g('statut'),desc:g('desc')};
-  EID?DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c):DB.commandes.push({...form,id:genId(),date:TODAY,candidats:[]});
+  const form={titre:g('titre'),client_id:g('client_id'),contact_id:g('contact_id'),cons:g('cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
+  if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
+  else{const existing={id:genId(),date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
   save();CM();R(CV);
 }
 function delCmd(id){if(!confirm('Supprimer ?'))return;DB.commandes=DB.commandes.filter(c=>c.id!==id);save();R(CV);}
 function openCmdDetail(id){
   const cmd=DB.commandes.find(x=>x.id===id);if(!cmd)return;
   const cl=getClient(cmd.client_id),ct=getContact(cmd.contact_id);
-  const byEtape={};PIPE_ETAPES.forEach(e=>{byEtape[e.id]=[];});
-  (cmd.candidats||[]).forEach(cc=>{(byEtape[cc.etape]||byEtape['preq']).push(cc);});
-  const pipeH=`<div class="pipe-cmd">${PIPE_ETAPES.map(e=>{
-    const items=byEtape[e.id]||[];
-    return `<div class="pipe-col"><div class="pipe-col-head"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${e.color};margin-right:5px"></span>${esc(e.label)} (${items.length})</div>
-    ${items.map(cc=>{const cand=getCand(cc.candidat_id);if(!cand)return '';return `<div class="pipe-cand-card" style="border-left-color:${e.color}"><div style="font-size:12px;font-weight:600;margin-bottom:4px">${esc(cand.prenom)} ${esc(cand.nom)}</div><div style="font-size:11px;color:var(--ts);margin-bottom:6px">${esc(cand.poste||'—')}</div><select style="font-size:11px;border:1px solid var(--br);border-radius:5px;padding:2px 5px;width:100%;background:var(--bg);color:var(--tp);font-family:inherit" onchange="chEtape('${id}','${cc.candidat_id}',this.value)">${PIPE_ETAPES.map(pe=>`<option value="${pe.id}"${cc.etape===pe.id?' selected':''}>${esc(pe.label)}</option>`).join('')}</select><button style="margin-top:5px;font-size:10px;color:var(--red);background:transparent;border:none;cursor:pointer;font-family:inherit" onclick="rmCand('${id}','${cc.candidat_id}')">✕ Retirer</button></div>`;}).join('')}
+  const infos=cmd.infos||{},brief=cmd.brief||{},annonce=cmd.annonce||{};
+  const sc={Active:'background:#ecfdf5;color:#065f46',Suspendue:'background:var(--amber-bg);color:var(--amber)',Pourvue:'background:var(--acc-light);color:var(--acc2)'};
+
+  // === TAB 1: INFOS ===
+  const tab1=`
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600">Informations générales sur la commande</div>
+        ${infos._saved_by?`<div style="font-size:11px;color:var(--tm)">Modifié par <b>${esc(infos._saved_by)}</b> le ${infos._saved_at}</div>`:''}
+      </div>
+      <textarea id="cmd-infos-${id}" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:8px 11px;font-size:13px;min-height:120px;font-family:inherit;resize:vertical;background:var(--card)" placeholder="Informations générales, contexte, historique...">${esc(infos.content||cmd.desc||'')}</textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-p btn-sm" onclick="saveCmdInfos('${id}')">💾 Enregistrer</button>
+      </div>
     </div>`;
-  }).join('')}</div>`;
+
+  // === TAB 2: BRIEF ===
+  const bv=k=>esc(brief[k]||'');
+  const tab2=`
+    <div style="margin-bottom:12px;padding:10px 14px;background:var(--acc-light);border-radius:8px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:12px;color:var(--acc2)">📎 Vous pouvez joindre un brief déjà rempli pour pré-remplissage automatique</div>
+      <label class="btn btn-s btn-sm" style="cursor:pointer">📤 Importer brief PDF<input type="file" style="display:none" accept=".pdf" onchange="importBriefPDF(this,'${id}')"></label>
+    </div>
+    ${brief._saved_by?`<div style="font-size:11px;color:var(--tm);margin-bottom:12px">Dernière modification : <b>${esc(brief._saved_by)}</b> · ${brief._saved_at}</div>`:''}
+    <div class="section-title">1. L'entreprise</div>
+    <div class="fr"><div class="fld"><label>Date du brief de poste</label><input type="date" id="b-date_brief" value="${bv('date_brief')}"></div><div class="fld"><label>Interlocuteur & fonction</label><input id="b-interlocuteur" value="${bv('interlocuteur')}" placeholder="Prénom Nom, Directeur RH..."></div></div>
+    <div class="fld"><label>Coordonnées de l'interlocuteur</label><input id="b-coords_interlo" value="${bv('coords_interlo')}" placeholder="Tél, email..."></div>
+    <div class="fld"><label>Activité de l'entreprise</label><textarea id="b-activite_ent" style="min-height:70px">${bv('activite_ent')}</textarea></div>
+    <div class="fr"><div class="fld"><label>Effectif de l'entreprise / agence</label><input id="b-effectif_ent" value="${bv('effectif_ent')}"></div><div class="fld"><label>Concurrents directs</label><input id="b-concurrents" value="${bv('concurrents')}"></div></div>
+    <div class="fld"><label>Habitudes de recrutement & décisionnaire</label><textarea id="b-habitudes_recru" style="min-height:70px">${bv('habitudes_recru')}</textarea></div>
+    <div class="fld"><label>Fiche de poste ou annonce disponible ?</label><input id="b-fiche_dispo" value="${bv('fiche_dispo')}" placeholder="Oui / Non / En cours..."></div>
+    <div class="section-title">2. Le poste</div>
+    <div class="fr"><div class="fld"><label>Depuis quand le recrutement est ouvert ?</label><input id="b-ouvert_depuis" value="${bv('ouvert_depuis')}"></div><div class="fld"><label>Contexte du recrutement</label><select id="b-contexte"><option value="">—</option><option value="Création de poste"${brief.contexte==='Création de poste'?' selected':''}>Création de poste</option><option value="Remplacement"${brief.contexte==='Remplacement'?' selected':''}>Remplacement</option><option value="Démission"${brief.contexte==='Démission'?' selected':''}>Démission</option></select></div></div>
+    <div class="fld"><label>Intitulé du poste / postes équivalents</label><input id="b-intitule_poste" value="${bv('intitule_poste')}"></div>
+    <div class="fld"><label>Rattachement hiérarchique</label><input id="b-rattachement" value="${bv('rattachement')}"></div>
+    <div class="fr"><div class="fld"><label>Niveau d'urgence & date de prise idéale</label><input id="b-urgence_date" value="${bv('urgence_date')}"></div><div class="fld"><label>Période de passation / intégration / formation</label><input id="b-passation" value="${bv('passation')}"></div></div>
+    <div class="fld"><label>Qui travaille actuellement sur le besoin ?</label><input id="b-qui_travaille" value="${bv('qui_travaille')}"></div>
+    <div class="fld"><label>Étapes du processus de recrutement & tests</label><textarea id="b-process_recru" style="min-height:70px">${bv('process_recru')}</textarea></div>
+    <div class="fr"><div class="fld"><label>Entreprises à ne pas approcher</label><textarea id="b-no_approche" style="min-height:60px">${bv('no_approche')}</textarea></div><div class="fld"><label>Recrutement qui n'a pas fonctionné ?</label><textarea id="b-recru_echoue" style="min-height:60px">${bv('recru_echoue')}</textarea></div></div>
+    <div class="section-title">3. Missions & responsabilités</div>
+    <div class="fld"><label>Missions principales</label><textarea id="b-missions_princ" style="min-height:100px">${bv('missions_princ')}</textarea></div>
+    <div class="fld"><label>Missions secondaires</label><textarea id="b-missions_sec" style="min-height:80px">${bv('missions_sec')}</textarea></div>
+    <div class="fld"><label>Journée type sur le poste</label><textarea id="b-journee_type" style="min-height:70px">${bv('journee_type')}</textarea></div>
+    <div class="fr"><div class="fld"><label>Défis majeurs à relever</label><textarea id="b-defis" style="min-height:70px">${bv('defis')}</textarea></div><div class="fld"><label>Évaluation de la performance</label><textarea id="b-evaluation" style="min-height:70px">${bv('evaluation')}</textarea></div></div>
+    <div class="fld"><label>Objectifs court / moyen / long terme</label><textarea id="b-objectifs" style="min-height:70px">${bv('objectifs')}</textarea></div>
+    <div class="section-title">4. Profil recherché</div>
+    <div class="fr"><div class="fld"><label>Diplômes & expérience requis</label><textarea id="b-diplomes" style="min-height:70px">${bv('diplomes')}</textarea></div><div class="fld"><label>Compétences techniques obligatoires</label><textarea id="b-compe_tech" style="min-height:70px">${bv('compe_tech')}</textarea></div></div>
+    <div class="fr"><div class="fld"><label>Savoir-être les plus importants</label><textarea id="b-savoir_etre" style="min-height:70px">${bv('savoir_etre')}</textarea></div><div class="fld"><label>Logiciels / certifications / habilitations</label><textarea id="b-logiciels" style="min-height:70px">${bv('logiciels')}</textarea></div></div>
+    <div class="section-title">5. Conditions & environnement de travail</div>
+    <div class="fr"><div class="fld"><label>Localisation du poste</label><input id="b-localisation" value="${bv('localisation')}"></div><div class="fld"><label>Déplacements</label><input id="b-deplacements" value="${bv('deplacements')}" placeholder="Fréquence, périmètre, découchés..."></div></div>
+    <div class="fr"><div class="fld"><label>Horaires de travail</label><input id="b-horaires" value="${bv('horaires')}" placeholder="Fixe, variable, 35h..."></div><div class="fld"><label>Télétravail</label><input id="b-teletravail" value="${bv('teletravail')}" placeholder="Oui / Non / Partiel..."></div></div>
+    <div class="fld"><label>Taille & composition de l'équipe</label><input id="b-equipe" value="${bv('equipe')}"></div>
+    <div class="section-title">6. Contrat & rémunération</div>
+    <div class="fr"><div class="fld"><label>Type de contrat</label><select id="b-contrat"><option value="">—</option><option value="CDI"${brief.contrat==='CDI'?' selected':''}>CDI</option><option value="CDD"${brief.contrat==='CDD'?' selected':''}>CDD</option></select></div><div class="fld"><label>Statut</label><select id="b-statut_contrat"><option value="">—</option><option value="ETAM"${brief.statut_contrat==='ETAM'?' selected':''}>ETAM</option><option value="Cadre"${brief.statut_contrat==='Cadre'?' selected':''}>Cadre</option></select></div></div>
+    <div class="fr"><div class="fld"><label>Rémunération prévue</label><input id="b-remuneration" value="${bv('remuneration')}"></div><div class="fld"><label>Temps de travail</label><select id="b-temps_travail"><option value="">—</option>${['35h','37.5h','39h'].map(h=>`<option value="${h}"${brief.temps_travail===h?' selected':''}>${h}</option>`).join('')}</select></div></div>
+    <div class="fld"><label>Avantages (13e mois, intéressement, CSE, véhicule, tickets restaurant...)</label><textarea id="b-avantages" style="min-height:70px">${bv('avantages')}</textarea></div>
+    <div class="section-title">7. Hiérarchisation des critères</div>
+    <div class="fr3">
+      <div class="fld"><label style="color:var(--red)">Must Have — Indispensable</label><textarea id="b-must_have" style="min-height:100px;border-color:var(--red)">${bv('must_have')}</textarea></div>
+      <div class="fld"><label style="color:var(--amber)">Should Have — Plus sur la candidature</label><textarea id="b-should_have" style="min-height:100px;border-color:var(--amber)">${bv('should_have')}</textarea></div>
+      <div class="fld"><label style="color:var(--green)">Nice Have — Top candidat</label><textarea id="b-nice_have" style="min-height:100px;border-color:var(--green)">${bv('nice_have')}</textarea></div>
+    </div>
+    <div class="section-title">8. Commentaires & informations supplémentaires</div>
+    <div class="fld"><textarea id="b-commentaires" style="min-height:100px">${bv('commentaires')}</textarea></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-p" onclick="saveCmdBrief('${id}')">💾 Enregistrer le brief</button>
+    </div>`;
+
+  // === TAB 3: ANNONCE ===
+  const av=k=>esc(annonce[k]||'');
+  const salaireType=annonce.salaire_type||'fixe';
+  const villOpts=`<option value="">— Sélectionner —</option>`+(REF.villes||[]).map(v2=>`<option value="${v2.id}"${annonce.ville_id===v2.id?' selected':''}>${esc(v2.label)}</option>`).join('');
+  const tab3=`
+    ${annonce._saved_by?`<div style="font-size:11px;color:var(--tm);margin-bottom:12px">Dernière modification : <b>${esc(annonce._saved_by)}</b> · ${annonce._saved_at}</div>`:''}
+    <div class="fld"><label>Intitulé du poste</label><input id="a-intitule" value="${av('intitule')}" placeholder="Titre exact de l'annonce"></div>
+    <div class="fld"><label>Présentation de l'entreprise</label><textarea id="a-entreprise" style="min-height:120px" placeholder="Description de l'entreprise qui recrute...">${av('entreprise')}</textarea></div>
+    <div class="fld"><label>Missions</label><textarea id="a-missions" style="min-height:120px" placeholder="Les missions du poste...">${av('missions')}</textarea></div>
+    <div class="fld"><label>Profil</label><textarea id="a-profil" style="min-height:120px" placeholder="Le profil recherché...">${av('profil')}</textarea></div>
+    <div class="fld"><label>Lieu du poste</label>
+      <select id="a-ville_id" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit">${villOpts}</select>
+    </div>
+    <div class="fld"><label>Type de salaire</label>
+      <div style="display:flex;gap:12px;margin-bottom:10px">
+        <label class="check-row"><input type="radio" name="salaire_type_${id}" value="fixe" ${salaireType==='fixe'?'checked':''} onchange="toggleSalaireType('${id}','fixe')"> Montant fixe</label>
+        <label class="check-row"><input type="radio" name="salaire_type_${id}" value="fourchette" ${salaireType==='fourchette'?'checked':''} onchange="toggleSalaireType('${id}','fourchette')"> Fourchette</label>
+      </div>
+      <div id="salaire-fixe-${id}" style="display:${salaireType==='fixe'?'block':'none'}">
+        <div class="fr"><div class="fld"><label>Montant</label><input id="a-salaire_fixe" value="${av('salaire_fixe')}" placeholder="ex: 45 000"></div><div class="fld"><label>Périodicité</label><select id="a-periodicite_fixe"><option value="Annuel"${annonce.periodicite_fixe==='Annuel'?' selected':''}>Annuel</option><option value="Mensuel"${annonce.periodicite_fixe==='Mensuel'?' selected':''}>Mensuel</option><option value="Horaire"${annonce.periodicite_fixe==='Horaire'?' selected':''}>Horaire</option></select></div></div>
+      </div>
+      <div id="salaire-fourchette-${id}" style="display:${salaireType==='fourchette'?'block':'none'}">
+        <div class="fr3"><div class="fld"><label>Minimum</label><input id="a-salaire_min" value="${av('salaire_min')}"></div><div class="fld"><label>Maximum</label><input id="a-salaire_max" value="${av('salaire_max')}"></div><div class="fld"><label>Périodicité</label><select id="a-periodicite_four"><option value="Annuel"${annonce.periodicite_four==='Annuel'?' selected':''}>Annuel</option><option value="Mensuel"${annonce.periodicite_four==='Mensuel'?' selected':''}>Mensuel</option><option value="Horaire"${annonce.periodicite_four==='Horaire'?' selected':''}>Horaire</option></select></div></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-p" onclick="saveCmdAnnonce('${id}')">💾 Enregistrer l'annonce</button>
+    </div>`;
+
+  // === TAB 4: CANDIDATURES ===
   const inCmd=new Set((cmd.candidats||[]).map(cc=>cc.candidat_id));
   const avail=DB.candidats.filter(c=>!inCmd.has(c.id));
-  const html=`
-    <div style="padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--br)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div><div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div><div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · 📋 ${esc(cmd.cons)}</div></div>
-        <span style="border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500;background:${cmd.statut==='Active'?'#ecfdf5':cmd.statut==='Pourvue'?'var(--acc-light)':'var(--amber-bg)'};color:${cmd.statut==='Active'?'#065f46':cmd.statut==='Pourvue'?'var(--acc2)':'var(--amber)'};flex-shrink:0">${esc(cmd.statut)}</span>
+  const kCols=PIPE_CMD.map(e=>{
+    const items=(cmd.candidats||[]).filter(cc=>cc.etape===e.id);
+    const cards=items.map(cc=>{
+      const cand=getCand(cc.candidat_id);if(!cand)return '';
+      return `<div class="kcard" draggable="true" data-id="${cc.candidat_id}" data-type="cmd_cand" data-cmd="${id}"
+        ondragstart="cmdKDragStart(event)" style="border-left-color:${e.color};cursor:grab">
+        <div style="font-size:12px;font-weight:600;margin-bottom:3px">${esc(cand.prenom)} ${esc(cand.nom)}</div>
+        <div style="font-size:11px;color:var(--ts);margin-bottom:3px">${esc(cand.poste||(cand.metier1_id?refLbl('metiers',cand.metier1_id):'')||'—')}</div>
+        ${cand.phone?`<div style="font-size:10px;color:var(--tm)">📞 ${esc(cand.phone)}</div>`:''}
+        ${cand.email?`<div style="font-size:10px;color:var(--tm)">✉️ ${esc(cand.email)}</div>`:''}
+        <div style="font-size:10px;color:var(--tm)">${esc(cand.ent||'')} · ${esc(cc.cons||cmd.cons||'')}</div>
+        <button style="margin-top:6px;font-size:10px;color:var(--red);background:transparent;border:none;cursor:pointer;font-family:inherit" onclick="rmCand('${id}','${cc.candidat_id}')">✕ Retirer</button>
+      </div>`;
+    }).join('');
+    return `<div class="kanban-col">
+      <div class="kanban-col-head" style="border-top:3px solid ${e.color}">
+        <span style="font-size:11px">${esc(e.label)}</span><span style="font-size:10px;color:var(--tm)">${items.length}</span>
       </div>
-      ${cmd.desc?`<div style="font-size:13px;color:var(--ts);margin-top:8px;line-height:1.6">${esc(cmd.desc)}</div>`:''}
-    </div>
-    <div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:10px">Pipeline (${(cmd.candidats||[]).length} candidat${(cmd.candidats||[]).length!==1?'s':''})</div>${pipeH}</div>
-    <div style="margin-bottom:14px;padding:13px 15px;background:var(--bg);border-radius:9px;border:1px solid var(--br)">
+      <div class="kanban-col-body" data-etape="${e.id}" data-cmd="${id}"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="cmdKDrop(event,this)">${cards}
+      </div>
+    </div>`;
+  }).join('');
+
+  const tab4=`
+    <div style="margin-bottom:14px;padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br)">
       <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ajouter depuis le vivier</div>
-      <div style="display:flex;gap:8px"><select id="add-csel" style="flex:1;border:1px solid var(--br);border-radius:7px;padding:7px 10px;font-size:13px;color:var(--tp);background:var(--card);outline:none;font-family:inherit"><option value="">— Sélectionner un candidat —</option>${avail.map(c=>`<option value="${c.id}">${esc(c.prenom)} ${esc(c.nom)} · ${esc(c.poste||'—')}</option>`).join('')}</select><button class="btn btn-p" onclick="addCand('${id}')">Ajouter</button></div>
+      <div style="display:flex;gap:8px">
+        <select id="add-csel-${id}" style="flex:1;border:1px solid var(--br);border-radius:7px;padding:7px 10px;font-size:13px;color:var(--tp);background:var(--card);outline:none;font-family:inherit">
+          <option value="">— Rechercher un candidat —</option>
+          ${avail.map(c=>`<option value="${c.id}">${esc(c.prenom)} ${esc(c.nom)} · ${esc(c.poste||refLbl('metiers',c.metier1_id)||'—')}</option>`).join('')}
+        </select>
+        <button class="btn btn-p" onclick="addCandToCmd('${id}')">Ajouter</button>
+      </div>
     </div>
-    <div class="dact"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openCmdForm('${id}')">✏️ Modifier</button></div>`;
+    <div class="kanban-wrap" style="min-height:300px;max-height:500px">${kCols}</div>`;
+
+  const html=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:14px;margin-bottom:0;border-bottom:1px solid var(--br)">
+      <div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div>
+        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · 📋 ${esc(cmd.cons)} · 📅 ${cmd.date_cmd||cmd.date||'—'}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+        <span style="${sc[cmd.statut]||sc.Active};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(cmd.statut)}</span>
+        <button class="btn btn-s btn-sm" onclick="CM();openCmdForm('${id}')">✏️</button>
+      </div>
+    </div>
+    <div class="tabs" style="margin-top:14px">
+      <button class="tab-btn active" onclick="switchTab(this,'cmd-tab-infos-${id}')">📋 Informations</button>
+      <button class="tab-btn" onclick="switchTab(this,'cmd-tab-brief-${id}')">📝 Brief de poste</button>
+      <button class="tab-btn" onclick="switchTab(this,'cmd-tab-annonce-${id}')">📢 Annonce</button>
+      <button class="tab-btn" onclick="switchTab(this,'cmd-tab-cands-${id}')">👥 Candidatures (${(cmd.candidats||[]).length})</button>
+    </div>
+    <div id="cmd-tab-infos-${id}" class="tab-panel active">${tab1}</div>
+    <div id="cmd-tab-brief-${id}" class="tab-panel">${tab2}</div>
+    <div id="cmd-tab-annonce-${id}" class="tab-panel">${tab3}</div>
+    <div id="cmd-tab-cands-${id}" class="tab-panel">${tab4}</div>
+    <div class="dact"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`;
   OM(`Commande — ${esc(cmd.titre)}`,html,'xl');
 }
-function addCand(cmdId){const candId=document.getElementById('add-csel')?.value;if(!candId)return;DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:[...(cmd.candidats||[]),{candidat_id:candId,etape:'preq'}]}:cmd);save();openCmdDetail(cmdId);}
-function rmCand(cmdId,candId){if(!confirm('Retirer ?'))return;DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==candId)}:cmd);save();openCmdDetail(cmdId);}
+
+// Toggle salaire type in annonce
+function toggleSalaireType(cmdId,type){
+  document.getElementById('salaire-fixe-'+cmdId).style.display=type==='fixe'?'block':'none';
+  document.getElementById('salaire-fourchette-'+cmdId).style.display=type==='fourchette'?'block':'none';
+}
+
+// Save functions for each tab
+function saveCmdInfos(cmdId){
+  const content=document.getElementById('cmd-infos-'+cmdId)?.value||'';
+  const infos={content,_saved_by:currentUser?.display_name||'—',_saved_at:TODAY};
+  DB.commandes=DB.commandes.map(c=>c.id===cmdId?{...c,infos}:c);
+  save();showToast('✓ Informations enregistrées');
+}
+function saveCmdBrief(cmdId){
+  const g=id=>document.getElementById('b-'+id)?.value||'';
+  const brief={
+    date_brief:g('date_brief'),interlocuteur:g('interlocuteur'),coords_interlo:g('coords_interlo'),
+    activite_ent:g('activite_ent'),effectif_ent:g('effectif_ent'),concurrents:g('concurrents'),
+    habitudes_recru:g('habitudes_recru'),fiche_dispo:g('fiche_dispo'),
+    ouvert_depuis:g('ouvert_depuis'),contexte:g('contexte'),intitule_poste:g('intitule_poste'),
+    rattachement:g('rattachement'),urgence_date:g('urgence_date'),passation:g('passation'),
+    qui_travaille:g('qui_travaille'),process_recru:g('process_recru'),no_approche:g('no_approche'),recru_echoue:g('recru_echoue'),
+    missions_princ:g('missions_princ'),missions_sec:g('missions_sec'),journee_type:g('journee_type'),
+    defis:g('defis'),evaluation:g('evaluation'),objectifs:g('objectifs'),
+    diplomes:g('diplomes'),compe_tech:g('compe_tech'),savoir_etre:g('savoir_etre'),logiciels:g('logiciels'),
+    localisation:g('localisation'),deplacements:g('deplacements'),horaires:g('horaires'),teletravail:g('teletravail'),equipe:g('equipe'),
+    contrat:g('contrat'),statut_contrat:g('statut_contrat'),remuneration:g('remuneration'),temps_travail:g('temps_travail'),avantages:g('avantages'),
+    must_have:g('must_have'),should_have:g('should_have'),nice_have:g('nice_have'),commentaires:g('commentaires'),
+    _saved_by:currentUser?.display_name||'—',_saved_at:TODAY
+  };
+  DB.commandes=DB.commandes.map(c=>c.id===cmdId?{...c,brief}:c);
+  save();showToast('✓ Brief de poste enregistré');
+}
+function saveCmdAnnonce(cmdId){
+  const g=id=>document.getElementById('a-'+id)?.value||'';
+  const sType=document.querySelector(`input[name="salaire_type_${cmdId}"]:checked`)?.value||'fixe';
+  const annonce={
+    intitule:g('intitule'),entreprise:g('entreprise'),missions:g('missions'),profil:g('profil'),
+    ville_id:g('ville_id'),salaire_type:sType,
+    salaire_fixe:g('salaire_fixe'),periodicite_fixe:g('periodicite_fixe'),
+    salaire_min:g('salaire_min'),salaire_max:g('salaire_max'),periodicite_four:g('periodicite_four'),
+    _saved_by:currentUser?.display_name||'—',_saved_at:TODAY
+  };
+  DB.commandes=DB.commandes.map(c=>c.id===cmdId?{...c,annonce}:c);
+  save();showToast('✓ Annonce enregistrée');
+}
+
+async function importBriefPDF(inp,cmdId){
+  const file=inp.files[0];if(!file)return;
+  const banner=document.createElement('div');banner.style.cssText='position:fixed;bottom:20px;right:20px;background:var(--acc-light);color:var(--acc2);border:1px solid var(--br2);border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999';banner.textContent='⏳ Analyse du brief en cours...';document.body.appendChild(banner);
+  try{
+    const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+    const result=await api('POST','/api/parse-cv',{name:file.name,type:file.type,data:base64,prompt:'brief'});
+    if(result?.parsed){
+      const p=result.parsed;
+      Object.entries(p).forEach(([k,v])=>{const el=document.getElementById('b-'+k);if(el&&v)el.value=v;});
+      banner.textContent='✓ Brief analysé — vérifiez et complétez les champs';banner.style.background='#ecfdf5';banner.style.color='#065f46';
+    }else{banner.textContent='⚠ Extraction partielle — complétez manuellement';banner.style.background='var(--amber-bg)';banner.style.color='var(--amber)';}
+  }catch(e){banner.textContent='✗ Erreur lors de l\'analyse';banner.style.background='var(--red-bg)';banner.style.color='var(--red)';}
+  setTimeout(()=>banner.remove(),4000);
+}
+
+// Commande Kanban drag & drop
+let cmdKDragging=null;
+function cmdKDragStart(e){cmdKDragging=e.currentTarget;e.currentTarget.classList.add('dragging');}
+function cmdKDrop(e,col){
+  e.preventDefault();col.classList.remove('drag-over');
+  if(!cmdKDragging)return;
+  const candId=cmdKDragging.dataset.id,cmdId=col.dataset.cmd,etape=col.dataset.etape;
+  DB.commandes=DB.commandes.map(cmd=>{
+    if(cmd.id!==cmdId)return cmd;
+    const cands=(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape}:cc);
+    return {...cmd,candidats:cands};
+  });
+  // If moved to embauché, update global statut_cand
+  if(etape==='emb'){
+    DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,statut_cand:'Embauché',embauche_cmd_id:cmdId}:c);
+  }
+  save();openCmdDetail(cmdId);
+  cmdKDragging.classList.remove('dragging');cmdKDragging=null;
+}
+
+function addCandToCmd(cmdId){
+  const selId=`add-csel-${cmdId}`;
+  const candId=document.getElementById(selId)?.value;
+  if(!candId)return;
+  DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:[...(cmd.candidats||[]),{candidat_id:candId,etape:'envc',cons:currentUser?.display_name||'—',added_at:TODAY}]}:cmd);
+  save();openCmdDetail(cmdId);
+}
+
+// Keep old addCand as alias
+function addCand(cmdId){addCandToCmd(cmdId);}
+function rmCand(cmdId,candId){if(!confirm('Retirer ce candidat ?'))return;DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==candId)}:cmd);save();openCmdDetail(cmdId);}
 function chEtape(cmdId,candId,etape){DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape}:cc)}:cmd);save();openCmdDetail(cmdId);}
+
+function showToast(msg){const el=document.createElement('div');el.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),2500);}
 
 function openClientForm(id){
   EID=id||null;const c=id?getClient(id):{};const v=f=>esc(c[f]||'');
@@ -2052,10 +2284,22 @@ function addVille(rid){const inp=document.getElementById('nv-'+rid);const l=(inp
 
 // ══ KANBAN ══════════════════════════════════════════════
 
-const CAND_STATUTS=['Candidat','À qualifier','Qualifié','Présenté','En process','Offre','Embauché','Refusé','Vivier'];
-const CAND_STATUT_COLORS={Candidat:'#1e6080','À qualifier':'#7c3aed',Qualifié:'#16a34a',Présenté:'#ea580c','En process':'#d97706',Offre:'#0891b2',Embauché:'#065f46',Refusé:'#dc2626',Vivier:'#475569'};
+const CAND_STATUTS=['Non-contactés','Qualifiés','En process','Embauchés'];
+const CAND_STATUT_MAP={'Non-contactés':'Candidat','Qualifiés':'Qualifié','En process':'En process','Embauchés':'Embauché'};
+const CAND_STATUT_COLORS={'Non-contactés':'#475569',Qualifiés:'#1e6080','En process':'#d97706',Embauchés:'#065f46'};
+
 const CLIENT_STATUTS=['Nouveau prospect','À contacter','Contacté','RDV pris','En négociation','Client signé','Perdu'];
 const CLIENT_STATUT_COLORS={'Nouveau prospect':'#475569','À contacter':'#7c3aed',Contacté:'#1e6080','RDV pris':'#d97706','En négociation':'#ea580c','Client signé':'#065f46',Perdu:'#dc2626'};
+
+// Pipeline spécifique aux commandes (onglet Candidatures en cours)
+const PIPE_CMD=[
+  {id:'envc',label:'Envoyé au client',color:'#1e6080',bg:'#e8f4f8'},
+  {id:'entr_cl',label:'Entretien client',color:'#7c3aed',bg:'#f5f3ff'},
+  {id:'prop',label:'Proposition envoyée',color:'#d97706',bg:'#fffbeb'},
+  {id:'refc',label:'Refus candidat',color:'#dc2626',bg:'#fef2f2'},
+  {id:'refcl',label:'Refus client',color:'#b91c1c',bg:'#fff1f2'},
+  {id:'emb',label:'Embauché',color:'#065f46',bg:'#ecfdf5'},
+];
 
 let vivierView='list',clientsView='list';
 
@@ -2076,7 +2320,11 @@ function setVivierView(v){
 function rVivierKanban(){
   const list=document.getElementById('vivier-list');if(!list)return;
   const cols=CAND_STATUTS.map(status=>{
-    const cands=DB.candidats.filter(c=>(c.statut_cand||'Candidat')===status);
+    const realStatut=CAND_STATUT_MAP[status]||status;
+    const cands=DB.candidats.filter(c=>{
+      const cs=c.statut_cand||'Candidat';
+      return cs===realStatut||(status==='Non-contactés'&&cs==='Candidat')||(status==='Non-contactés'&&!c.statut_cand);
+    });
     const color=CAND_STATUT_COLORS[status]||'#1e6080';
     const cards=cands.map(c=>`
       <div class="kcard" draggable="true" data-id="${c.id}" data-type="cand"
@@ -2143,7 +2391,9 @@ function kDrop(e,col){
   if(!kDragging)return;
   const id=kDragging.dataset.id,type=kDragging.dataset.type,status=col.dataset.status;
   if(type==='cand'){
-    DB.candidats=DB.candidats.map(c=>c.id===id?{...c,statut_cand:status}:c);
+    // Map kanban column to actual statut_cand value
+    const realStatut=CAND_STATUT_MAP[status]||status;
+    DB.candidats=DB.candidats.map(c=>c.id===id?{...c,statut_cand:realStatut}:c);
     save();rVivierKanban();
   }else{
     DB.clients=DB.clients.map(c=>c.id===id?{...c,statut_commercial:status}:c);
@@ -2275,22 +2525,43 @@ const PJ_ICONS={pdf:'📄',doc:'📝',docx:'📝',jpg:'🖼',jpeg:'🖼',png:'�
 function pjIcon(name){const ext=(name||'').split('.').pop().toLowerCase();return PJ_ICONS[ext]||'📎';}
 
 function pjListHtml(candId,pjs,showAdd=true){
-  const list=(pjs||[]).map((p,i)=>`
-    <div class="pj-item">
+  const list=(pjs||[]).map((p,i)=>{
+    const ext=(p.name||'').split('.').pop().toLowerCase();
+    const canPreview=['pdf','jpg','jpeg','png'].includes(ext);
+    return `<div class="pj-item">
       <div class="pj-icon">${pjIcon(p.name)}</div>
       <div class="pj-info">
         <div class="pj-name">${esc(p.name)}</div>
         <div class="pj-meta">${esc(p.cons)} · ${p.date} · ${formatSize(p.size)}</div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0">
+        ${canPreview?`<button class="cv-badge" onclick="previewPJ(${i},'${candId}')">👁 Aperçu</button>`:'<span style="font-size:11px;color:var(--tm)">Aperçu indispo</span>'}
         <button class="cv-badge" onclick="dlPJ(${i},'${candId}')">⬇ DL</button>
         <button class="ic-btn" style="color:var(--red)" onclick="delPJ(${i},'${candId}')">🗑</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const addBtn=(pjs||[]).length>=PJ_MAX
     ?`<div style="font-size:12px;color:var(--amber)">⚠️ Limite de ${PJ_MAX} pièces jointes atteinte</div>`
     :showAdd?`<label class="btn btn-s btn-sm" style="cursor:pointer;margin-top:6px">📎 Ajouter une PJ<input type="file" style="display:none" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="uploadPJ(this,'${candId}')"></label>`:'';
   return list+addBtn;
+}
+
+function previewPJ(idx,candId){
+  const c=getCand(candId);const pj=c?.pieces_jointes?.[idx];if(!pj)return;
+  const ext=(pj.name||'').split('.').pop().toLowerCase();
+  let content='';
+  if(['jpg','jpeg','png'].includes(ext)){
+    content=`<div style="text-align:center;padding:16px"><img src="data:${pj.type};base64,${pj.data}" style="max-width:100%;max-height:75vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div>`;
+  }else if(ext==='pdf'){
+    try{
+      const bytes=atob(pj.data);const arr=new Uint8Array(bytes.length);
+      for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([arr],{type:'application/pdf'}));
+      content=`<iframe src="${url}" width="100%" height="600" style="border:none;border-radius:8px"></iframe>`;
+    }catch(e){content='<div style="padding:20px;text-align:center;color:var(--tm)">Aperçu indisponible</div>';}
+  }
+  OM(esc(pj.name),`<div style="padding:0 0 8px">${content}</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="cv-badge" onclick="dlPJ(${idx},'${candId}')">⬇ Télécharger</button></div>`,'xl');
 }
 
 function uploadPJ(inp,candId){
