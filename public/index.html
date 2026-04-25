@@ -438,6 +438,7 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
             <button class="vtbtn active" id="vivier-list-btn" onclick="setVivierView('list')">☰ Liste</button>
             <button class="vtbtn" id="vivier-kanban-btn" onclick="setVivierView('kanban')">⊞ Kanban</button>
           </div>
+          <button class="btn btn-s btn-sm" onclick="openLinkedInImport()">🔗 Import LinkedIn</button>
           <button class="btn btn-s btn-sm" onclick="document.getElementById('bulk-cv-inp').click()">📥 Import CVs</button>
           <input type="file" id="bulk-cv-inp" style="display:none" accept=".pdf" multiple onchange="openBulkImport(this.files)">
           <button class="btn btn-p" style="margin-left:auto" onclick="openCandForm()">+ Nouveau candidat</button>
@@ -792,12 +793,18 @@ const getClient=id=>DB.clients.find(c=>c.id===id);const getContact=id=>DB.contac
 const getCand=id=>DB.candidats.find(c=>c.id===id);
 const getRef=(arr,id)=>(REF[arr]||[]).find(x=>x.id===id);const refLbl=(arr,id)=>getRef(arr,id)?.label||'';
 const formatSize=b=>{if(!b)return '';if(b<1024)return b+'o';if(b<1048576)return Math.round(b/1024)+'Ko';return (b/1048576).toFixed(1)+'Mo';};
-function av(nom,photo,idx,size=42){
+function av(nom,photo,idx,size=42,clickable=false){
   const [bg,txt]=AV_COLORS[(idx||0)%AV_COLORS.length];
   const ini=(nom||'').split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
   const sz=`width:${size}px;height:${size}px;border-radius:50%;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*.35)}px;font-weight:600;`;
-  if(photo)return `<div style="${sz}"><img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentNode.innerHTML='<span style=color:${txt}>${ini}</span>';this.parentNode.style.background='${bg}'"></div>`;
+  if(photo){
+    const clickAttr=clickable?`onclick="previewPhoto('${photo}')" style="${sz}cursor:pointer"`:` style="${sz}"`;
+    return `<div${clickAttr}><img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentNode.innerHTML='<span style=color:${txt}>${ini}</span>';this.parentNode.style.background='${bg}'"></div>`;
+  }
   return `<div style="${sz}background:${bg};color:${txt}">${ini}</div>`;
+}
+function previewPhoto(src){
+  OM('Photo',`<div style="text-align:center;padding:8px"><img src="${src}" style="max-width:100%;max-height:70vh;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,.2)"></div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
 }
 
 function rDash(){
@@ -963,7 +970,7 @@ function rClients(){
   res.forEach((c,i)=>{
     const [bg,txt]=AV_COLORS[i%AV_COLORS.length];
     const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-    const avatarHtml=c.logo?`<img src="${c.logo}" style="width:42px;height:42px;border-radius:10px;object-fit:cover;flex-shrink:0">`:`<div style="width:42px;height:42px;border-radius:10px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0">${ini}</div>`;
+    const avatarHtml=c.logo?`<img src="${c.logo}" style="width:42px;height:42px;border-radius:10px;object-fit:contain;background:white;border:1px solid var(--br);flex-shrink:0">`:`<div style="width:42px;height:42px;border-radius:10px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0">${ini}</div>`;
     const nbA=DB.actions.filter(a=>a.client_id===c.id).length,nbC=DB.commandes.filter(cmd=>cmd.client_id===c.id).length,nbCt=DB.contacts.filter(ct=>ct.client_id===c.id).length;
     h+=`<div class="cl-card" style="cursor:pointer" onclick="openClientDetail('${c.id}')">
       <div style="display:flex;gap:11px;align-items:center">${avatarHtml}<div style="min-width:0"><div style="font-size:14px;font-weight:600">${esc(c.nom)}</div><div style="font-size:12px;color:var(--ts)">${esc(c.secteur||'—')}</div></div></div>
@@ -1033,7 +1040,7 @@ function readFile(file,type){
     if(type==='photo'){
       window._pPhoto=e.target.result;
       const z=document.getElementById('photo-zone');
-      if(z)z.innerHTML=`<img src="${e.target.result}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="clearFile('photo')" title="Cliquer pour retirer">`;
+      if(z)z.innerHTML=`<div style="position:relative;width:70px;height:70px"><img src="${e.target.result}" style="width:70px;height:70px;border-radius:50%;object-fit:cover"><button onclick="clearFile('photo')" style="position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:12px;line-height:20px;text-align:center;padding:0" title="Supprimer la photo">✕</button></div>`;
     }else{
       const base64=e.target.result.split(',')[1];
       window._pCV={name:file.name,type:file.type,size:file.size,data:base64};
@@ -1168,6 +1175,13 @@ async function processBulkImport(files){
   const closeBtn=document.getElementById('bi-close-btn');
   if(closeBtn)closeBtn.disabled=false;
   updBadges();
+}
+function previewPhoto(candId){
+  const c=getCand(candId);if(!c?.photo)return;
+  OM('Photo du candidat',`<div style="text-align:center;padding:10px"><img src="${c.photo}" style="max-width:100%;max-height:70vh;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+}
+function confirmDeletePhoto(){
+  if(confirm('Supprimer la photo de ce candidat ?'))clearFile('photo');
 }
 function clearFile(type){
   if(type==='photo'){window._pPhoto=null;const z=document.getElementById('photo-zone');if(z)z.innerHTML=pzE();}
@@ -1322,7 +1336,7 @@ function refreshSousSectForm(sectId,prefix){
 function openCandForm(id){
   EID=id||null;window._pPhoto=null;window._pCV=null;
   const c=id?getCand(id):{};const v=f=>esc(c[f]||'');
-  const photoHtml=c.photo?`<img src="${c.photo}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="clearFile('photo')" title="Retirer">`:pzE();
+  const photoHtml=c.photo?`<div style="position:relative;width:70px;height:70px"><img src="${c.photo}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="previewPhoto('${id}')" title="Cliquer pour agrandir"><button onclick="confirmDeletePhoto()" style="position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:12px;line-height:20px;text-align:center;padding:0" title="Supprimer la photo">✕</button></div>`:pzE();
   const cvHtml=c.cv?`<div class="cv-file"><span>📄</span><span style="flex:1;font-size:13px;font-weight:500">${esc(c.cv.name)}</span><span style="font-size:11px;color:var(--tm)">${formatSize(c.cv.size)}</span><button class="btn btn-g btn-sm" onclick="clearFile('cv')">✕</button></div>`:cvzE();
   const famMetiers=(REF.familles_metier||[]).filter(x=>x.actif!==false);
   const metiersFam=c.famille_metier_id?(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===c.famille_metier_id):(REF.metiers||[]).filter(m=>m.actif!==false);
@@ -1422,7 +1436,7 @@ function openCandDetail(id){
 
   const html=`
     <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
-      ${av(c.prenom+' '+c.nom,c.photo,0,58)}
+      ${av(c.prenom+' '+c.nom,c.photo,0,58,true)}
       <div style="flex:1"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px"><div style="font-size:19px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div><span style="${statutStyle};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(c.statut_cand||'Candidat')}</span>${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé · ${esc(c.archive_motif||'')}</span>`:''}</div><div style="font-size:13px;color:var(--ts)">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div></div>
       <button class="btn btn-p" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
     </div>
@@ -1615,7 +1629,7 @@ function unarchiveFiche(type,id){
 // ══ LOGO CLIENT ══════════════════════════════════════════
 function clientAvatarHtml(c,size=50){
   if(c.logo){
-    return `<img src="${c.logo}" style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.24)}px;object-fit:cover;flex-shrink:0" alt="${esc(c.nom)}">`;
+    return `<img src="${c.logo}" style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.24)}px;object-fit:contain;background:white;padding:3px;border:1px solid var(--br);flex-shrink:0" alt="${esc(c.nom)}">`;
   }
   const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length];
   const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -1626,8 +1640,18 @@ function uploadClientLogo(inp,clientId){
   if(file.size>500*1024){alert('Image trop lourde (max 500Ko)');return;}
   const r=new FileReader();
   r.onload=e=>{
-    DB.clients=DB.clients.map(c=>c.id===clientId?{...c,logo:e.target.result}:c);
-    save();openClientDetail(clientId);
+    const logoData=e.target.result;
+    if(clientId){
+      // Existing client — save immediately
+      DB.clients=DB.clients.map(c=>c.id===clientId?{...c,logo:logoData}:c);
+      save();openClientDetail(clientId);
+    }else{
+      // New client — store temporarily, apply on save
+      window._pClientLogo=logoData;
+      // Show preview in form
+      const preview=document.getElementById('client-logo-preview');
+      if(preview)preview.innerHTML=`<img src="${logoData}" style="width:50px;height:50px;border-radius:10px;object-fit:contain;background:white;border:1px solid var(--br)"><span style="font-size:12px;color:var(--ts);margin-left:8px">Logo prêt à enregistrer</span>`;
+    }
   };
   r.readAsDataURL(file);
 }
@@ -1678,7 +1702,7 @@ async function sireneType(q){
   _sireneTimer=setTimeout(async()=>{
     const results=await sireneSearch(q);
     if(!results.length){drop.innerHTML=`<div class="geo-opt" style="color:var(--tm);cursor:default">Aucune entreprise trouvée</div>`;return;}
-    drop.innerHTML=results.map((r,i)=>`<div class="geo-opt" onclick="sireneSelect(${i})">
+    drop.innerHTML=results.map((r,i)=>`<div class="geo-opt" onmousedown="event.preventDefault()" onclick="sireneSelect(${i})">
       <div><span class="geo-opt-name">${esc(r.nom)}</span><span style="font-size:10px;color:var(--tm);margin-left:8px">${esc(r.naf_label)}</span></div>
       <span class="geo-opt-info">${esc(r.ville)} · ${esc(r.siren)}</span>
     </div>`).join('');
@@ -2175,7 +2199,8 @@ function openClientForm(id){
   const effOpts=`<option value="">— Effectif —</option>`+EFFECTIFS.map(e=>`<option value="${e}"${c.effectif===e?' selected':''}>${e}</option>`).join('');
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
-  const logoHtml=c.logo?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><img src="${c.logo}" style="width:50px;height:50px;border-radius:10px;object-fit:cover"><button class="btn btn-d btn-sm" type="button" onclick="DB.clients=DB.clients.map(x=>x.id==='${id}'?{...x,logo:null}:x);save();openClientForm('${id}')">✕ Supprimer</button></div>`:'';
+  const logoHtml=c.logo?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><img src="${c.logo}" style="width:50px;height:50px;border-radius:10px;object-fit:contain;background:white"><button class="btn btn-d btn-sm" type="button" onclick="DB.clients=DB.clients.map(x=>x.id==='${id}'?{...x,logo:null}:x);save();openClientForm('${id}')">✕ Supprimer</button></div>`:'';
+  window._pClientLogo=null; // Reset temp logo
   OM(id?'Modifier':'Nouveau client / prospect',`
     <div style="padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br);margin-bottom:14px">
       <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🔍 Recherche INSEE (auto-remplissage)</div>
@@ -2206,7 +2231,9 @@ function openClientForm(id){
     <div class="fld"><label>Site internet</label><input id="f-site_web" value="${v('site_web')}" placeholder="https://..."></div>
     <div class="fld"><label>Contact principal</label><select id="f-contact_principal_id">${ctOpts}</select></div>
     <div class="section-title">Logo entreprise</div>
-    ${logoHtml}<label class="btn btn-s btn-sm" style="cursor:pointer;display:inline-flex">🖼 ${c.logo?'Remplacer':'Ajouter'} un logo<input type="file" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="uploadClientLogo(this,'${id||''}')"></label>
+    ${logoHtml}
+    <div id="client-logo-preview" style="display:flex;align-items:center;margin-bottom:8px"></div>
+    <label class="btn btn-s btn-sm" style="cursor:pointer;display:inline-flex">🖼 ${c.logo?'Remplacer':'Ajouter'} un logo<input type="file" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="uploadClientLogo(this,'${id||''}')"></label>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveClient()">Enregistrer</button></div>`,'w');
 }
 function saveClient(){
@@ -2226,8 +2253,9 @@ function saveClient(){
     statut_sirene:g('statut_sirene'),date_creation_sirene:g('date_creation_sirene'),
     source_sirene:g('source_sirene')||'Manuel',
     email:g('email'),phone:g('phone'),contact_principal_id:g('contact_principal_id'),
-    logo:existing.logo||null,
+    logo:EID?existing.logo||null:(window._pClientLogo||null),
   };
+  window._pClientLogo=null;
   EID?DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c):DB.clients.push({...form,id:genId(),actions:[]});
   save();CM();R(CV);
 }
@@ -2244,7 +2272,7 @@ function openClientDetail(id){
   const ctsH=buildClientContacts(id,cts);
   const html=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
-      ${c.logo?`<img src="${c.logo}" style="width:50px;height:50px;border-radius:12px;object-fit:cover;flex-shrink:0" alt="${esc(c.nom)}">`:`<div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>`}
+      ${c.logo?`<img src="${c.logo}" style="width:50px;height:50px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);flex-shrink:0" alt="${esc(c.nom)}">`:`<div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>`}
       <div style="flex:1"><div style="font-size:17px;font-weight:700">${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts)">${esc(c.secteur||'—')} · ${esc(c.ville||c.loc||'—')}${c.departement?' ('+esc(c.departement)+')':''}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
         <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
@@ -2275,8 +2303,22 @@ function openClientDetail(id){
     </div>
     <div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Commandes (${cmds.length})</div>${cmdsH}</div>
     <div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:600">Actions commerciales (${allActs.length})</div>
+      <div style="font-size:13px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--br);padding-top:14px;margin-top:14px;margin-bottom:10px">📋 Conditions commerciales</div>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600">Conventions de recrutement (${(c.conventions||[]).length})</div>
+          <label class="btn btn-s btn-sm" style="cursor:pointer">+ Ajouter une convention<input type="file" style="display:none" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="uploadConvention(this,'${id}')"></label>
+        </div>
+        <div id="conv-list-${id}">${buildConventionsHtml(id,c.conventions||[])}</div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600">Conditions tarifaires (${(c.conditions_tarif||[]).length})</div>
+          <button class="btn btn-s btn-sm" onclick="openAddCondTarif('${id}')">+ Ajouter une condition</button>
+        </div>
+        <div id="tarif-list-${id}">${buildCondTarifHtml(id,c.conditions_tarif||[])}</div>
+      </div>
+    </div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-s btn-sm" onclick="openActionForm('${id}')">+ Action</button>
           <button class="btn btn-p btn-sm" onclick="CM();G('dashboard-crm')">📊 Voir le dashboard</button>
@@ -3282,19 +3324,7 @@ function sirenePickEtab(idx){
   showToast('✓ Établissement sélectionné');
 }
 
-// Update sireneType to show étabs button after company select
-const _origSireneSelect=sireneSelect;
-function sireneSelect(idx){
-  _origSireneSelect(idx);
-  const drop=document.getElementById('sirene-drop');
-  const r=drop?._results?.[idx];
-  if(r?.siren){
-    const etabsContainer=document.getElementById('sirene-etabs');
-    if(etabsContainer){
-      etabsContainer.innerHTML=`<button class="btn btn-s btn-sm" onclick="sireneShowEtablissements('${r.siren}')">🏢 Voir les établissements (${r.siren})</button>`;
-    }
-  }
-}
+// (sireneSelect est défini plus haut — pas de redéclaration)
 
 // ══ DICTÉE VOCALE ═══════════════════════════════════════
 let _voiceActive=null;let _voiceRec=null;
@@ -3477,6 +3507,163 @@ function openEtabPicker(siren,onSelect){
 // ══ LOGO UPSEARCH ════════════════════════════════════════
 // Configurable via variable LOGO_URL (peut être une data URL ou URL externe)
 const UPSEARCH_LOGO=window.UPSEARCH_LOGO||null;
+
+// ══ CONDITIONS COMMERCIALES ══════════════════════════════
+function buildConventionsHtml(clientId,convs){
+  if(!convs.length)return '<div style="font-size:12px;color:var(--tm);font-style:italic">Aucune convention</div>';
+  const ext=n=>(n||'').split('.').pop().toLowerCase();
+  const icon=n=>({pdf:'📄',doc:'📝',docx:'📝',jpg:'🖼',jpeg:'🖼',png:'🖼'})[ext(n)]||'📎';
+  const canPrev=n=>['pdf','jpg','jpeg','png'].includes(ext(n));
+  return convs.map((p,i)=>`<div class="pj-item">
+    <div class="pj-icon">${icon(p.name)}</div>
+    <div class="pj-info"><div class="pj-name">${esc(p.name)}</div><div class="pj-meta">${esc(p.cons)} · ${p.date}</div></div>
+    <div style="display:flex;gap:5px;flex-shrink:0">
+      ${canPrev(p.name)?`<button class="cv-badge" onclick="previewConvention(${i},'${clientId}')">👁</button>`:''}
+      <button class="cv-badge" onclick="dlConvention(${i},'${clientId}')">⬇</button>
+      <button class="ic-btn" style="color:var(--red)" onclick="delConvention(${i},'${clientId}')">🗑</button>
+    </div>
+  </div>`).join('');
+}
+function uploadConvention(inp,clientId){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>10*1024*1024){alert('Fichier trop lourd (max 10Mo)');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    const conv={name:file.name,type:file.type,size:file.size,data:e.target.result.split(',')[1],cons:currentUser?.display_name||'—',date:TODAY};
+    DB.clients=DB.clients.map(c=>c.id===clientId?{...c,conventions:[...(c.conventions||[]),conv]}:c);
+    save();const el=document.getElementById('conv-list-'+clientId);if(el)el.innerHTML=buildConventionsHtml(clientId,getClient(clientId)?.conventions||[]);showToast('✓ Convention ajoutée');
+  };r.readAsDataURL(file);
+}
+function dlConvention(idx,cId){const c=getClient(cId),p=c?.conventions?.[idx];if(!p)return;const a=document.createElement('a');a.href=`data:${p.type};base64,${p.data}`;a.download=p.name;a.click();}
+function delConvention(idx,cId){if(!confirm('Supprimer cette convention ?'))return;DB.clients=DB.clients.map(c=>c.id===cId?{...c,conventions:(c.conventions||[]).filter((_,i)=>i!==idx)}:c);save();const el=document.getElementById('conv-list-'+cId);if(el)el.innerHTML=buildConventionsHtml(cId,getClient(cId)?.conventions||[]);}
+function previewConvention(idx,cId){const c=getClient(cId),p=c?.conventions?.[idx];if(!p)return;const x=(p.name||'').split('.').pop().toLowerCase();let content='';if(['jpg','jpeg','png'].includes(x)){content=`<img src="data:${p.type};base64,${p.data}" style="max-width:100%;max-height:75vh;border-radius:8px">`;}else if(x==='pdf'){const b=atob(p.data),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);const u=URL.createObjectURL(new Blob([a],{type:'application/pdf'}));content=`<iframe src="${u}" width="100%" height="600" style="border:none;border-radius:8px">`;}OM(esc(p.name),`<div>${content}</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'xl');}
+
+function buildCondTarifHtml(clientId,conds){
+  if(!conds.length)return '<div style="font-size:12px;color:var(--tm);font-style:italic">Aucune condition tarifaire</div>';
+  return conds.map((ct,i)=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:7px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--acc2)">${ct.type==='Forfait'?'💶 Forfait : '+esc(ct.montant)+'':'📊 '+esc(ct.pourcentage)+'%'}</div>
+        ${ct.precision?`<div style="font-size:12px;color:var(--ts);margin-top:3px">${esc(ct.precision)}</div>`:''}
+        <div style="font-size:10px;color:var(--tm);margin-top:5px">${esc(ct.cons)} · ${ct.date}</div>
+      </div>
+      <button class="ic-btn" style="color:var(--red)" onclick="delCondTarif(${i},'${clientId}')">🗑</button>
+    </div>
+  </div>`).join('');
+}
+function openAddCondTarif(clientId){
+  OM('Ajouter une condition tarifaire',`
+    <div class="fld"><label>Type</label>
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <label class="check-row"><input type="radio" name="ct_type" value="Forfait" checked onchange="toggleCondTarifType(this.value)"> 💶 Forfait</label>
+        <label class="check-row"><input type="radio" name="ct_type" value="Pourcentage" onchange="toggleCondTarifType(this.value)"> 📊 Pourcentage</label>
+      </div>
+    </div>
+    <div id="ct-forfait"><div class="fld"><label>Montant</label><input id="ct-montant" placeholder="ex: 6 000€ HT"></div></div>
+    <div id="ct-pourcent" style="display:none"><div class="fld"><label>Pourcentage</label><input id="ct-pourcent-val" placeholder="ex: 15"></div></div>
+    <div class="fld"><label>Précision / commentaire</label><input id="ct-precision" placeholder="ex: Cadre, ETAM, mission spécifique..."></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveCondTarif('${clientId}')">Ajouter</button></div>`,'n');
+}
+function toggleCondTarifType(v){document.getElementById('ct-forfait').style.display=v==='Forfait'?'block':'none';document.getElementById('ct-pourcent').style.display=v==='Pourcentage'?'block':'none';}
+function saveCondTarif(clientId){
+  const type=document.querySelector('input[name="ct_type"]:checked')?.value||'Forfait';
+  const montant=type==='Forfait'?document.getElementById('ct-montant')?.value||'':'';
+  const pourcentage=type==='Pourcentage'?document.getElementById('ct-pourcent-val')?.value||'':'';
+  const precision=document.getElementById('ct-precision')?.value||'';
+  const cond={type,montant,pourcentage,precision,cons:currentUser?.display_name||'—',date:TODAY,id:genId()};
+  DB.clients=DB.clients.map(c=>c.id===clientId?{...c,conditions_tarif:[...(c.conditions_tarif||[]),cond]}:c);
+  save();CM();const el=document.getElementById('tarif-list-'+clientId);if(el)el.innerHTML=buildCondTarifHtml(clientId,getClient(clientId)?.conditions_tarif||[]);showToast('✓ Condition tarifaire ajoutée');
+}
+function delCondTarif(idx,clientId){if(!confirm('Supprimer cette condition ?'))return;DB.clients=DB.clients.map(c=>c.id===clientId?{...c,conditions_tarif:(c.conditions_tarif||[]).filter((_,i)=>i!==idx)}:c);save();const el=document.getElementById('tarif-list-'+clientId);if(el)el.innerHTML=buildCondTarifHtml(clientId,getClient(clientId)?.conditions_tarif||[]);}
+
+// ══ IMPORT LINKEDIN MANUEL ═══════════════════════════════
+function openLinkedInImport(){
+  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  OM('Import LinkedIn — saisie manuelle',`
+    <div style="background:var(--acc-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--acc2)">
+      📋 Ouvrez le profil LinkedIn, copiez les informations visibles (nom, poste, entreprise, résumé, expériences…) et collez-les ci-dessous.
+    </div>
+    <div class="fld"><label>URL LinkedIn du profil</label><input id="li-url" placeholder="https://www.linkedin.com/in/..." style="width:100%"></div>
+    <div class="fld"><label>Consultant</label><select id="li-cons">${cOpts}</select></div>
+    <div class="fld"><label>Texte du profil LinkedIn (copier-coller)</label><textarea id="li-text" style="min-height:200px;font-family:monospace;font-size:12px" placeholder="Collez ici le contenu copié depuis le profil LinkedIn…
+Exemple :
+Jean Dupont
+Conducteur de travaux chez Bouygues Construction
+Rouen, Normandie
+..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="analyzeLinkedIn()">Analyser →</button></div>`,'w');
+}
+
+async function analyzeLinkedIn(){
+  const url=(document.getElementById('li-url')?.value||'').trim();
+  const text=(document.getElementById('li-text')?.value||'').trim();
+  const cons=document.getElementById('li-cons')?.value||'—';
+  if(!text){alert('Collez le texte du profil LinkedIn avant d\'analyser.');return;}
+
+  // Check for existing LinkedIn URL
+  if(url){
+    const existing=DB.candidats.find(c=>c.linkedin&&c.linkedin.trim()===url);
+    if(existing){
+      if(!confirm(`⚠️ Un candidat avec cette URL LinkedIn existe déjà : ${existing.prenom} ${existing.nom}.\nContinuer quand même ?`))return;
+    }
+  }
+
+  const banner=document.createElement('div');banner.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;z-index:9999;font-size:14px;color:white;font-weight:500';banner.innerHTML='<div style="background:var(--card);color:var(--tp);border-radius:12px;padding:24px 32px;text-align:center">⏳ Analyse du profil en cours...</div>';document.body.appendChild(banner);
+  try{
+    const resp=await fetch('/api/parse-cv',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({linkedin_text:text,linkedin_url:url,type:'linkedin'})});
+    const data=await resp.json();
+    const p=data?.parsed||{};
+    banner.remove();
+    showLinkedInReview(p,url,cons,text);
+  }catch(e){
+    banner.remove();
+    // Fallback: parse manually with simple heuristics
+    const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+    const p={
+      prenom:lines[0]?.split(' ')?.[0]||'',
+      nom:lines[0]?.split(' ').slice(1).join(' ')||'',
+      poste:lines[1]||'',
+      ent:lines[2]?.includes(' chez ')?lines[2].split(' chez ')[1]:'',
+      loc:lines.find(l=>/,/.test(l)&&l.length<50&&!l.includes('@'))||'',
+      linkedin:url,
+    };
+    showLinkedInReview(p,url,cons,text);
+  }
+}
+
+function showLinkedInReview(p,url,cons,rawText){
+  OM('Vérification — Données LinkedIn',`
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--ts)">Vérifiez et corrigez les informations extraites avant d'enregistrer.</div>
+    <div class="fr"><div class="fld"><label>Prénom</label><input id="lr-prenom" value="${esc(p.prenom||'')}"></div><div class="fld"><label>Nom</label><input id="lr-nom" value="${esc(p.nom||'')}"></div></div>
+    <div class="fld"><label>Poste actuel</label><input id="lr-poste" value="${esc(p.poste||'')}"></div>
+    <div class="fld"><label>Entreprise actuelle</label><input id="lr-ent" value="${esc(p.ent||'')}"></div>
+    <div class="fld"><label>Localisation</label><input id="lr-loc" value="${esc(p.loc||'')}"></div>
+    <div class="fld"><label>Email (si présent)</label><input id="lr-email" type="email" value="${esc(p.email||'')}"></div>
+    <div class="fld"><label>Téléphone (si présent)</label><input id="lr-phone" value="${esc(p.tel||'')}"></div>
+    <div class="fld"><label>URL LinkedIn</label><input id="lr-linkedin" value="${esc(url||p.linkedin||'')}"></div>
+    <div class="fld"><label>Consultant</label><input value="${esc(cons)}" id="lr-cons" readonly style="background:var(--bg)"></div>
+    <div class="fa">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="createCandFromLinkedIn()">✅ Créer la fiche candidat</button>
+    </div>`,'w');
+}
+
+function createCandFromLinkedIn(){
+  const g=id=>document.getElementById(id)?.value?.trim()||'';
+  const prenom=g('lr-prenom'),nom=g('lr-nom'),email=g('lr-email'),phone=g('lr-phone'),linkedin=g('lr-linkedin');
+  if(!prenom&&!nom){alert('Prénom ou nom requis.');return;}
+  const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
+  const doCreate=()=>{
+    const cand={
+      id:genId(),prenom,nom,email,phone,poste:g('lr-poste'),ent:g('lr-ent'),loc:g('lr-loc'),
+      linkedin,statut_cand:'Candidat',
+      notes:[],prequalif:{},entretien:{},entretiens:[],controles_ref:[],mots_cles:[],pieces_jointes:[],
+      _source:'LinkedIn manuel',_source_cons:g('lr-cons'),_source_date:TODAY,
+    };
+    DB.candidats.push(cand);save();CM();R(CV);showToast('✓ Fiche candidat créée depuis LinkedIn');
+  };
+  if(dupes.length){showDuplicatesAlert(dupes,'cand',doCreate);}else{doCreate();}
+}
 
 async function init(){
   try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();G('dash');}else{showLogin();}}
