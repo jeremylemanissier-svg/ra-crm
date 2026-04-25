@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UpSearch — CRM/ATS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -258,6 +260,54 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 .geo-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;}
 .geo-tag{background:var(--acc-light);color:var(--acc2);border-radius:5px;padding:2px 8px;font-size:11px;font-weight:500;}
 
+/* ══ DETAIL LABELS (gras) ══ */
+.dl{font-size:11px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
+.dv{font-size:13px;color:var(--tp);}
+.dg{margin-bottom:10px;}
+.dg2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.dact{display:flex;justify-content:space-between;padding-top:14px;border-top:1px solid var(--br);}
+.dnotes{background:var(--bg);border-radius:9px;padding:11px 14px;margin-bottom:14px;}
+
+/* ══ KANBAN ══ */
+.kanban-wrap{display:flex;gap:12px;overflow-x:auto;padding:0 0 12px;flex:1;}
+.kanban-col{flex-shrink:0;width:220px;display:flex;flex-direction:column;}
+.kanban-col-head{font-size:12px;font-weight:600;color:var(--ts);padding:8px 12px;border-radius:8px 8px 0 0;border:1px solid var(--br);border-bottom:none;background:var(--card);display:flex;align-items:center;justify-content:space-between;}
+.kanban-col-body{flex:1;background:#f8fafc;border:1px solid var(--br);border-radius:0 0 8px 8px;padding:8px;min-height:120px;overflow-y:auto;max-height:calc(100vh - 250px);}
+.kanban-col-body.drag-over{background:var(--acc-light);border-color:var(--acc);}
+.kcard{background:var(--card);border:1px solid var(--br);border-radius:8px;padding:10px 12px;margin-bottom:7px;cursor:grab;border-left:3px solid var(--acc);}
+.kcard:active{cursor:grabbing;box-shadow:0 4px 20px rgba(0,0,0,.15);}
+.kcard.dragging{opacity:.5;}
+.view-toggle{display:flex;gap:4px;background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:3px;}
+.vtbtn{padding:5px 10px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--ts);font-family:inherit;}
+.vtbtn.active{background:var(--card);color:var(--tp);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+
+/* ══ MOTS-CLÉS ══ */
+.tag-wrap{display:flex;flex-wrap:wrap;gap:5px;border:1px solid var(--br);border-radius:7px;padding:6px 8px;background:var(--bg);min-height:36px;cursor:text;}
+.tag-wrap:focus-within{outline:2px solid var(--acc);outline-offset:-1px;}
+.mk-tag{background:var(--acc-light);color:var(--acc2);border-radius:5px;padding:2px 8px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:4px;}
+.mk-tag button{background:none;border:none;cursor:pointer;color:var(--acc);font-size:14px;line-height:1;padding:0;}
+.mk-input{border:none;outline:none;background:transparent;font-size:12px;font-family:inherit;color:var(--tp);min-width:120px;flex:1;}
+.bool-hint{font-size:11px;color:var(--tm);margin-top:4px;padding:6px 8px;background:var(--bg);border-radius:6px;border:1px solid var(--br);}
+
+/* ══ PIÈCES JOINTES ══ */
+.pj-item{display:flex;align-items:center;gap:9px;background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:8px 12px;margin-bottom:6px;}
+.pj-icon{font-size:18px;flex-shrink:0;}
+.pj-info{flex:1;min-width:0;}
+.pj-name{font-size:13px;font-weight:600;color:var(--tp);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pj-meta{font-size:11px;color:var(--tm);}
+.pj-tag{display:inline-block;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;margin-right:4px;}
+
+/* ══ ANONYMIZE ══ */
+.anon-wrap{position:relative;background:#222;border-radius:8px;overflow:hidden;}
+.anon-canvas-wrap{position:relative;display:inline-block;cursor:crosshair;}
+#anon-pdf-canvas{display:block;}
+#anon-overlay{position:absolute;top:0;left:0;pointer-events:none;}
+.anon-rect{position:absolute;background:white;border:2px solid #e74c3c;cursor:move;box-sizing:border-box;}
+.anon-rect .resize-handle{position:absolute;bottom:0;right:0;width:10px;height:10px;background:#e74c3c;cursor:se-resize;}
+.anon-rect .del-btn{position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;background:#e74c3c;color:white;border:none;cursor:pointer;font-size:12px;line-height:18px;text-align:center;padding:0;}
+.anon-toolbar{background:var(--sb);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.anon-page-nav{display:flex;align-items:center;gap:8px;color:white;font-size:13px;}
+
 .empty{text-align:center;padding:60px 0;color:var(--tm);font-size:13px;}
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -355,11 +405,15 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
       <div class="view" id="view-vivier">
         <div class="toolbar">
           <button class="btn btn-s btn-sm" onclick="openRef()">⚙ Référentiels</button>
-          <button class="btn btn-s btn-sm" onclick="document.getElementById('bulk-cv-inp').click()">📥 Import CVs en masse</button>
+          <div class="view-toggle">
+            <button class="vtbtn active" id="vivier-list-btn" onclick="setVivierView('list')">☰ Liste</button>
+            <button class="vtbtn" id="vivier-kanban-btn" onclick="setVivierView('kanban')">⊞ Kanban</button>
+          </div>
+          <button class="btn btn-s btn-sm" onclick="document.getElementById('bulk-cv-inp').click()">📥 Import CVs</button>
           <input type="file" id="bulk-cv-inp" style="display:none" accept=".pdf" multiple onchange="openBulkImport(this.files)">
           <button class="btn btn-p" style="margin-left:auto" onclick="openCandForm()">+ Nouveau candidat</button>
         </div>
-        <div class="vivier-wrap">
+        <div class="vivier-wrap" id="vivier-main">
           <div class="vivier-sidebar" id="vivier-sidebar"></div>
           <div class="vivier-list" id="vivier-list"></div>
         </div>
@@ -380,6 +434,10 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
         <div class="toolbar">
           <div class="sw"><svg class="si" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Nom, secteur..." id="s-clients" oninput="rClients()"></div>
           <div id="cl-filters" style="display:flex;gap:6px"></div>
+          <div class="view-toggle">
+            <button class="vtbtn active" id="cl-list-btn" onclick="setClientsView('list')">☰ Liste</button>
+            <button class="vtbtn" id="cl-kanban-btn" onclick="setClientsView('kanban')">⊞ Kanban</button>
+          </div>
           <button class="btn btn-p" style="margin-left:auto" onclick="openClientForm()">+ Nouveau client</button>
         </div>
         <div class="view-body" id="body-clients"></div>
@@ -669,7 +727,7 @@ async function loadData(){
   // Migration familles_metier : si l'ancien contient des familles trop spécifiques BTP
   const oldFM=REF.familles_metier&&REF.familles_metier.length>0&&(REF.familles_metier[0]?.label||'').includes('Gros Œuvre');
   if(oldFM){REF.familles_metier=DEFAULT_REFS.familles_metier;REF.metiers=DEFAULT_REFS.metiers;}
-  DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.controles_ref)c.controles_ref=[];});
+  DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.controles_ref)c.controles_ref=[];if(!c.mots_cles)c.mots_cles=[];if(!c.pieces_jointes)c.pieces_jointes=[];});
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
 
@@ -752,6 +810,11 @@ function rVivierSidebar(){
   const ssOpts=`<option value="">Tous sous-secteurs</option>`+ssList.map(s=>`<option value="${s.id}"${f.sous_secteur_id===s.id?' selected':''}>${esc(s.label)}</option>`).join('');
   document.getElementById('vivier-sidebar').innerHTML=`
     <div class="vs-title">Filtres de recherche</div>
+    <div class="vs-sect">Recherche avancée</div>
+    <div class="vs-field"><label>Recherche booléenne</label>
+      <input id="vivier-bool-search" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder='ex: "chef chantier" AND VRD' oninput="applyVivierF()">
+      <div style="font-size:10px;color:var(--tm);margin-top:3px">AND · OR · NOT · "expression exacte"</div>
+    </div>
     <div class="vs-sect">Identité</div>
     <div class="vs-field"><label>Prénom</label><input value="${esc(f.prenom)}" oninput="vf('prenom',this.value)" placeholder="Rechercher..."></div>
     <div class="vs-field"><label>Nom</label><input value="${esc(f.nom)}" oninput="vf('nom',this.value)" placeholder="Rechercher..."></div>
@@ -779,8 +842,10 @@ function applyVivierF(){
   if(f.famille_metier_id)res=res.filter(c=>c.famille_metier_id===f.famille_metier_id);
   if(f.metier_id)res=res.filter(c=>c.metier1_id===f.metier_id||c.metier2_id===f.metier_id||c.metier3_id===f.metier_id);
   if(f.secteur_act_new_id)res=res.filter(c=>c.secteur_act_new_id===f.secteur_act_new_id||c.secteur_act_id===f.secteur_act_new_id);
-  if(f.sous_secteur_id)res=res.filter(c=>c.sous_secteur_id===f.sous_secteur_id);
   let h=`<div style="font-size:12px;color:var(--ts);margin-bottom:14px">${res.length} profil${res.length!==1?'s':''} trouvé${res.length!==1?'s':''}</div>`;
+  // Boolean search
+  const boolQ=(document.getElementById('vivier-bool-search')?.value||'').trim();
+  if(boolQ)res=vivierBoolSearch(boolQ,res);
   if(!res.length){h+='<div class="empty">Aucun candidat correspondant aux filtres</div>';}
   else res.forEach((c,i)=>{
     const locTag=c.ville?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">📍 ${esc(c.ville)}${c.departement_code?' ('+esc(c.departement_code)+')':''}</span>`:'';
@@ -851,6 +916,7 @@ function rClients(){
   if(sectF)res=res.filter(c=>c.secteur_act_new_id===sectF||c.secteur_ref_id===sectF);
   if(s)res=res.filter(c=>[c.nom,c.secteur,c.ville||c.loc,c.departement,c.region,c.cons].join(' ').toLowerCase().includes(s));
   const totalTxt=`<div style="font-size:12px;color:var(--ts);margin-bottom:14px">${res.length} résultat${res.length!==1?'s':''}</div>`;
+  if(clientsView==='kanban'){document.getElementById('body-clients').innerHTML=totalTxt+rClientsKanban(res);return;}
   let h=totalTxt+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">';
   if(!res.length){document.getElementById('body-clients').innerHTML=totalTxt+'<div class="empty">Aucun client / prospect</div>';return;}
   res.forEach((c,i)=>{
@@ -1264,7 +1330,11 @@ function saveCand(){
     ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,
     loc:geo.ville||(existing.loc||''),
     ent:g('ent'),sal:g('sal'),linkedin:g('linkedin'),
-    photo,cv,notes:existing.notes||[],prequalif:existing.prequalif||{},entretien:existing.entretien||{},controles_ref:existing.controles_ref||[]
+    photo,cv,
+    mots_cles:existing.mots_cles||[],
+    pieces_jointes:existing.pieces_jointes||[],
+    cv_anonymise:existing.cv_anonymise||null,
+    notes:existing.notes||[],prequalif:existing.prequalif||{},entretien:existing.entretien||{},controles_ref:existing.controles_ref||[]
   };
   EID?DB.candidats=DB.candidats.map(c=>c.id===EID?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
   save();CM();R(CV);
@@ -1321,6 +1391,25 @@ function openCandDetail(id){
         </div>
       </div>
       ${cvS}
+      ${c.cv_anonymise?`<div style="margin-bottom:14px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600;color:#065f46">✅ CV Anonymisé disponible</div>
+          <div style="font-size:11px;color:var(--tm)">${esc(c.cv_anonymise.cons)} · ${c.cv_anonymise.date}</div>
+        </div>
+        <div class="cv-file" style="background:white">
+          <span>📄</span><span style="flex:1;font-size:13px;font-weight:500">${esc(c.cv_anonymise.name)}</span>
+          <button class="cv-badge" onclick="dlAnonCV('${id}')">⬇ Télécharger</button>
+          <button class="btn btn-s btn-sm" onclick="openAnonymize('${id}')">🔄 Réanonymiser</button>
+        </div>
+      </div>`:`<div style="margin-bottom:8px">${c.cv?`<button class="btn btn-s btn-sm" onclick="openAnonymize('${id}')">🔒 Anonymiser le CV</button>`:''}</div>`}
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pièces jointes (${(c.pieces_jointes||[]).length}/${PJ_MAX})</div>
+        <div id="pj-list-${id}">${pjListHtml(id,c.pieces_jointes||[])}</div>
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Mots-clés</div>
+        ${mkTagsHtml(id,c.mots_cles||[])}
+      </div>
       <div style="margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div class="dl">Notes (${(c.notes||[]).length})</div>
@@ -1641,12 +1730,28 @@ function openClientDetail(id){
   const cts=DB.contacts.filter(ct=>ct.client_id===id);
   const actsH=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${esc(a.cons)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><button class="ic-btn" onclick="delAction('${a.id}')" style="flex-shrink:0">🗑</button></div>`;}).join('');
   const cmdsH=cmds.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune commande</div>':cmds.map(cmd=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="CM();openCmdDetail('${cmd.id}')"><div style="flex:1;font-weight:500;color:var(--tp)">${esc(cmd.titre)}</div><span style="background:${cmd.statut==='Active'?'#ecfdf5':'var(--acc-light)'};color:${cmd.statut==='Active'?'#065f46':'var(--acc2)'};border-radius:20px;padding:1px 8px;font-size:11px">${esc(cmd.statut)}</span></div>`).join('');
-  const ctsH=cts.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucun contact</div>':cts.map(ct=>`<div style="font-size:12px;padding:6px 0;border-bottom:1px solid var(--bg)"><span style="font-weight:500">${esc(ct.prenom)} ${esc(ct.nom)}</span> · ${esc(ct.fonction||'—')} · ${esc(ct.email||'—')}</div>`).join('');
+  const ctsH=cts.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic;padding:10px 0">Aucun contact rattaché à cette entreprise</div>':
+    cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer" onclick="openContactDetail('${ct.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:3px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+          <div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:6px">${esc(ct.fonction||'—')}</div>
+          <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:2px">
+            ${ct.phone?`<div>📞 ${esc(ct.phone)}</div>`:''}
+            ${ct.email?`<div>✉️ ${esc(ct.email)}</div>`:''}
+          </div>
+        </div>
+        <button class="ic-btn" onclick="event.stopPropagation();openContactForm('${ct.id}')">✏️</button>
+      </div>
+    </div>`).join('');
   const html=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
       <div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>
       <div style="flex:1"><div style="font-size:17px;font-weight:700">${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts)">${esc(c.secteur||'—')} · ${esc(c.ville||c.loc||'—')}${c.departement?' ('+esc(c.departement)+')':''}</div></div>
-      <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
+        <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
+      </div>
     </div>
     <div class="dg2" style="margin-bottom:14px">
       <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${esc(c.cons||'—')}</div></div>
@@ -1726,6 +1831,27 @@ function saveContact(){
   const form={prenom:g('prenom'),nom:g('nom'),fonction:g('fonction'),client_id:g('client_id'),email:g('email'),phone:g('phone')};
   EID?DB.contacts=DB.contacts.map(c=>c.id===EID?{...c,...form}:c):DB.contacts.push({...form,id:genId()});
   save();CM();R(CV);
+}
+function openContactDetail(id){
+  const ct=getContact(id);if(!ct)return;
+  const cl=getClient(ct.client_id);
+  OM(`${esc(ct.prenom)} ${esc(ct.nom)}`,`
+    <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--br)">
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+      <div style="font-size:14px;font-weight:600;color:var(--acc2);margin-bottom:8px">${esc(ct.fonction||'—')}</div>
+      ${cl?`<span style="font-size:12px;background:var(--acc-light);color:var(--acc2);border-radius:5px;padding:2px 9px">${esc(cl.nom)}</span>`:''}
+    </div>
+    <div class="dg2">
+      <div>
+        <div class="dg"><div class="dl">Téléphone</div><div class="dv">${esc(ct.phone||'—')}</div></div>
+        <div class="dg"><div class="dl">Email</div><div class="dv">${esc(ct.email||'—')}</div></div>
+      </div>
+      <div><div class="dg"><div class="dl">Entreprise</div><div class="dv">${esc(cl?.nom||'—')}</div></div></div>
+    </div>
+    <div class="fa">
+      <button class="btn btn-d btn-sm" onclick="delContact('${id}');CM()">🗑 Supprimer</button>
+      <div style="display:flex;gap:7px"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openContactForm('${id}')">✏️ Modifier</button></div>
+    </div>`,'n');
 }
 function delContact(id){if(!confirm('Supprimer ?'))return;DB.contacts=DB.contacts.filter(c=>c.id!==id);save();R(CV);}
 
@@ -1923,6 +2049,463 @@ function checkRefUsed(arr,id){
 function rRF(arr,lbl){return `<div>${(REF[arr]||[]).map(it=>`<div class="rpr"><span style="flex:1;font-size:13px">${esc(it.label)}</span><button class="ic-btn" onclick="renRefItem('${arr}','${it.id}')">✏️</button></div>`).join('')}</div><div class="radd"><input type="text" id="new-${arr}" placeholder="Nouveau..."><button onclick="addRefFlat('${arr}')">+ Ajouter</button></div>`;}
 function rRG(){let h='<div>';(REF.regions||[]).forEach(reg=>{const ch=(REF.villes||[]).filter(v=>v.region_id===reg.id);h+=`<div style="margin-bottom:10px"><div class="rpr"><span style="flex:1;font-size:13px;font-weight:500">🗺 ${esc(reg.label)}</span><button class="ic-btn" onclick="renRefItem('regions','${reg.id}')">✏️</button></div>`;if(ch.length)h+=`<div class="rchildren">${ch.map(v=>`<div class="rcr"><span style="flex:1;font-size:12px">📍 ${esc(v.label)}</span><button class="ic-btn" onclick="renRefItem('villes','${v.id}')">✏️</button></div>`).join('')}</div>`;h+=`<div style="padding-left:16px;margin-top:5px"><div class="radd"><input type="text" id="nv-${reg.id}" placeholder="Nouvelle ville..."><button onclick="addVille('${reg.id}')">+ Ville</button></div></div></div>`;});return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px"><div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une région</div><div class="radd"><input type="text" id="new-regions" placeholder="Nom de la région..."><button onclick="addRefFlat('regions')">+ Région</button></div></div>`;}
 function addVille(rid){const inp=document.getElementById('nv-'+rid);const l=(inp?.value||'').trim();if(!l)return;if(!REF.villes)REF.villes=[];REF.villes.push({id:genId(),label:l,region_id:rid,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
+
+// ══ KANBAN ══════════════════════════════════════════════
+
+const CAND_STATUTS=['Candidat','À qualifier','Qualifié','Présenté','En process','Offre','Embauché','Refusé','Vivier'];
+const CAND_STATUT_COLORS={Candidat:'#1e6080','À qualifier':'#7c3aed',Qualifié:'#16a34a',Présenté:'#ea580c','En process':'#d97706',Offre:'#0891b2',Embauché:'#065f46',Refusé:'#dc2626',Vivier:'#475569'};
+const CLIENT_STATUTS=['Nouveau prospect','À contacter','Contacté','RDV pris','En négociation','Client signé','Perdu'];
+const CLIENT_STATUT_COLORS={'Nouveau prospect':'#475569','À contacter':'#7c3aed',Contacté:'#1e6080','RDV pris':'#d97706','En négociation':'#ea580c','Client signé':'#065f46',Perdu:'#dc2626'};
+
+let vivierView='list',clientsView='list';
+
+function setVivierView(v){
+  vivierView=v;
+  document.getElementById('vivier-list-btn')?.classList.toggle('active',v==='list');
+  document.getElementById('vivier-kanban-btn')?.classList.toggle('active',v==='kanban');
+  const main=document.getElementById('vivier-main');
+  if(main){
+    main.style.flexDirection=v==='kanban'?'column':'row';
+    main.style.overflow=v==='kanban'?'hidden':'';
+  }
+  const sidebar=document.getElementById('vivier-sidebar');
+  if(sidebar)sidebar.style.display=v==='kanban'?'none':'block';
+  if(v==='list')applyVivierF(); else rVivierKanban();
+}
+
+function rVivierKanban(){
+  const list=document.getElementById('vivier-list');if(!list)return;
+  const cols=CAND_STATUTS.map(status=>{
+    const cands=DB.candidats.filter(c=>(c.statut_cand||'Candidat')===status);
+    const color=CAND_STATUT_COLORS[status]||'#1e6080';
+    const cards=cands.map(c=>`
+      <div class="kcard" draggable="true" data-id="${c.id}" data-type="cand"
+        ondragstart="kDragStart(event)" onclick="openCandDetail('${c.id}')">
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">${esc(c.prenom)} ${esc(c.nom)}</div>
+        <div style="font-size:11px;color:var(--ts);margin-bottom:4px">${esc(c.poste||(c.metier1_id?refLbl('metiers',c.metier1_id):'')||'—')}</div>
+        ${c.secteur_act_new_id?`<div style="font-size:10px;color:var(--tm)">${esc(refLbl('secteurs_act',c.secteur_act_new_id))}</div>`:''}
+        <div style="font-size:10px;color:var(--tm);margin-top:4px">${esc(c.ent||'')}</div>
+      </div>`).join('');
+    return `<div class="kanban-col">
+      <div class="kanban-col-head" style="border-top:3px solid ${color}">
+        <span>${esc(status)}</span><span style="font-size:11px;color:var(--tm)">${cands.length}</span>
+      </div>
+      <div class="kanban-col-body" data-status="${esc(status)}" data-type="cand"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="kDrop(event,this)">${cards}
+      </div>
+    </div>`;
+  }).join('');
+  list.style.overflow='auto';
+  list.style.padding='16px';
+  list.innerHTML=`<div class="kanban-wrap" style="min-height:400px">${cols}</div>`;
+}
+
+function setClientsView(v){
+  clientsView=v;
+  document.getElementById('cl-list-btn')?.classList.toggle('active',v==='list');
+  document.getElementById('cl-kanban-btn')?.classList.toggle('active',v==='kanban');
+  rClients();
+}
+
+function rClientsKanban(res){
+  let h=`<div class="kanban-wrap" style="min-height:400px">`;
+  CLIENT_STATUTS.forEach(status=>{
+    const items=res.filter(c=>(c.statut_commercial||'Nouveau prospect')===status);
+    const color=CLIENT_STATUT_COLORS[status]||'#475569';
+    const cards=items.map(c=>`
+      <div class="kcard" draggable="true" data-id="${c.id}" data-type="client"
+        ondragstart="kDragStart(event)" onclick="openClientDetail('${c.id}')"
+        style="border-left-color:${color}">
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">${esc(c.nom)}</div>
+        <div style="font-size:11px;color:var(--ts);margin-bottom:3px">${esc(c.secteur||'—')}</div>
+        <div style="font-size:11px;color:var(--tm)">${esc(c.cons||'')}</div>
+      </div>`).join('');
+    h+=`<div class="kanban-col">
+      <div class="kanban-col-head" style="border-top:3px solid ${color}">
+        <span>${esc(status)}</span><span style="font-size:11px;color:var(--tm)">${items.length}</span>
+      </div>
+      <div class="kanban-col-body" data-status="${esc(status)}" data-type="client"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="kDrop(event,this)">${cards}
+      </div>
+    </div>`;
+  });
+  return h+'</div>';
+}
+
+let kDragging=null;
+function kDragStart(e){kDragging=e.currentTarget;e.currentTarget.classList.add('dragging');}
+function kDrop(e,col){
+  e.preventDefault();col.classList.remove('drag-over');
+  if(!kDragging)return;
+  const id=kDragging.dataset.id,type=kDragging.dataset.type,status=col.dataset.status;
+  if(type==='cand'){
+    DB.candidats=DB.candidats.map(c=>c.id===id?{...c,statut_cand:status}:c);
+    save();rVivierKanban();
+  }else{
+    DB.clients=DB.clients.map(c=>c.id===id?{...c,statut_commercial:status}:c);
+    save();rClients();
+  }
+  kDragging.classList.remove('dragging');kDragging=null;
+}
+
+// ══ MOTS-CLÉS & RECHERCHE BOOLÉENNE ══════════════════════
+
+function mkTagsHtml(cId,tags){
+  return `<div class="tag-wrap" onclick="document.getElementById('mk-inp-${cId}').focus()">
+    ${(tags||[]).map((t,i)=>`<span class="mk-tag">${esc(t)}<button onclick="removeMkTag('${cId}',${i})">×</button></span>`).join('')}
+    <input class="mk-input" id="mk-inp-${cId}" placeholder="Ajouter un mot-clé..." 
+      onkeydown="mkKeydown(event,'${cId}')">
+  </div>
+  <div class="bool-hint">💡 Recherche : AND · OR · NOT · "expression exacte"</div>`;
+}
+function mkKeydown(e,cId){
+  if(e.key==='Enter'||e.key===','||e.key===';'){
+    e.preventDefault();
+    const val=e.target.value.trim();
+    if(!val)return;
+    const c=getCand(cId);if(!c)return;
+    const tags=[...(c.mots_cles||[]),val];
+    DB.candidats=DB.candidats.map(x=>x.id===cId?{...x,mots_cles:tags}:x);
+    e.target.value='';
+    save();
+    const wrap=e.target.parentNode;
+    const span=document.createElement('span');span.className='mk-tag';
+    span.innerHTML=`${esc(val)}<button onclick="removeMkTag('${cId}',${tags.length-1})">×</button>`;
+    wrap.insertBefore(span,e.target);
+  }
+}
+function removeMkTag(cId,idx){
+  const c=getCand(cId);if(!c)return;
+  const tags=(c.mots_cles||[]).filter((_,i)=>i!==idx);
+  DB.candidats=DB.candidats.map(x=>x.id===cId?{...x,mots_cles:tags}:x);
+  save();openCandDetail(cId);
+}
+
+function parseBoolQuery(q){
+  // Tokenize: handle quoted strings, AND/OR/NOT, parentheses
+  const tokens=[];let i=0;const s=q.trim();
+  while(i<s.length){
+    if(s[i]==='"'){
+      let j=i+1;while(j<s.length&&s[j]!=='"')j++;
+      tokens.push({type:'term',val:s.slice(i+1,j).toLowerCase()});i=j+1;
+    }else if(s.slice(i,i+3)==='AND'){tokens.push({type:'AND'});i+=3;}
+    else if(s.slice(i,i+2)==='OR'){tokens.push({type:'OR'});i+=2;}
+    else if(s.slice(i,i+3)==='NOT'){tokens.push({type:'NOT'});i+=3;}
+    else if(s[i]==='('){tokens.push({type:'LPAREN'});i++;}
+    else if(s[i]===')'){tokens.push({type:'RPAREN'});i++;}
+    else if(s[i]===' '){i++;}
+    else{
+      let j=i;while(j<s.length&&s[j]!==' '&&s[j]!=='('&&s[j]!==')')j++;
+      const word=s.slice(i,j);
+      if(word)tokens.push({type:'term',val:word.toLowerCase()});
+      i=j;
+    }
+  }
+  return tokens;
+}
+
+function boolMatch(tokens,text){
+  // Simple boolean evaluator
+  const tl=text.toLowerCase();
+  let pos=0;
+  function peek(){return tokens[pos];}
+  function consume(){return tokens[pos++];}
+  function matchTerm(t){return t&&t.type==='term'&&tl.includes(t.val);}
+
+  function parseExpr(){
+    let left=parsePrimary();
+    while(pos<tokens.length){
+      const op=peek();
+      if(op&&op.type==='AND'){consume();const right=parsePrimary();left=left&&right;}
+      else if(op&&op.type==='OR'){consume();const right=parsePrimary();left=left||right;}
+      else break;
+    }
+    return left;
+  }
+  function parsePrimary(){
+    const t=peek();
+    if(!t)return false;
+    if(t.type==='NOT'){consume();return !parsePrimary();}
+    if(t.type==='LPAREN'){consume();const r=parseExpr();if(peek()?.type==='RPAREN')consume();return r;}
+    if(t.type==='term'){consume();return tl.includes(t.val);}
+    return false;
+  }
+  try{return parseExpr();}catch(e){return false;}
+}
+
+function vivierBoolSearch(q,cands){
+  if(!q.trim())return cands;
+  // Check if simple search (no operators)
+  const hasOps=/\b(AND|OR|NOT)\b|[()"]/.test(q);
+  if(!hasOps){
+    const ql=q.toLowerCase();
+    return cands.filter(c=>{
+      const text=[c.prenom,c.nom,c.poste,c.ent,(c.mots_cles||[]).join(' '),c.notes?.map(n=>n.content).join(' ')||''].join(' ');
+      return text.toLowerCase().includes(ql);
+    });
+  }
+  const tokens=parseBoolQuery(q);
+  return cands.filter(c=>{
+    const text=[c.prenom,c.nom,c.poste,c.ent,
+      (c.mots_cles||[]).join(' '),
+      c.notes?.map(n=>n.content).join(' ')||'',
+      refLbl('metiers',c.metier1_id),refLbl('secteurs_act',c.secteur_act_new_id)
+    ].join(' ');
+    const toksCopy=tokens.map(t=>({...t}));
+    let pos2=0;
+    const tl=text.toLowerCase();
+    const saved=tokens;
+    try{
+      const tcopy=[...tokens];let p=0;
+      function pe(){let l=pp();while(p<tcopy.length){const op=tcopy[p];if(op?.type==='AND'){p++;const r=pp();l=l&&r;}else if(op?.type==='OR'){p++;const r=pp();l=l||r;}else break;}return l;}
+      function pp(){const t=tcopy[p];if(!t)return false;if(t.type==='NOT'){p++;return!pp();}if(t.type==='LPAREN'){p++;const r=pe();if(tcopy[p]?.type==='RPAREN')p++;return r;}if(t.type==='term'){p++;return tl.includes(t.val);}return false;}
+      return pe();
+    }catch(e){return tl.includes(q.toLowerCase());}
+  });
+}
+
+// ══ PIÈCES JOINTES ══════════════════════════════════════
+
+const PJ_MAX=5;
+const PJ_ICONS={pdf:'📄',doc:'📝',docx:'📝',jpg:'🖼',jpeg:'🖼',png:'🖼'};
+function pjIcon(name){const ext=(name||'').split('.').pop().toLowerCase();return PJ_ICONS[ext]||'📎';}
+
+function pjListHtml(candId,pjs,showAdd=true){
+  const list=(pjs||[]).map((p,i)=>`
+    <div class="pj-item">
+      <div class="pj-icon">${pjIcon(p.name)}</div>
+      <div class="pj-info">
+        <div class="pj-name">${esc(p.name)}</div>
+        <div class="pj-meta">${esc(p.cons)} · ${p.date} · ${formatSize(p.size)}</div>
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        <button class="cv-badge" onclick="dlPJ(${i},'${candId}')">⬇ DL</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="delPJ(${i},'${candId}')">🗑</button>
+      </div>
+    </div>`).join('');
+  const addBtn=(pjs||[]).length>=PJ_MAX
+    ?`<div style="font-size:12px;color:var(--amber)">⚠️ Limite de ${PJ_MAX} pièces jointes atteinte</div>`
+    :showAdd?`<label class="btn btn-s btn-sm" style="cursor:pointer;margin-top:6px">📎 Ajouter une PJ<input type="file" style="display:none" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="uploadPJ(this,'${candId}')"></label>`:'';
+  return list+addBtn;
+}
+
+function uploadPJ(inp,candId){
+  const file=inp.files[0];if(!file)return;
+  const c=getCand(candId);if(!c)return;
+  if((c.pieces_jointes||[]).length>=PJ_MAX){alert(`Maximum ${PJ_MAX} pièces jointes.`);return;}
+  if(file.size>5*1024*1024){alert('Fichier trop lourd (max 5Mo).');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    const pj={name:file.name,type:file.type,size:file.size,data:e.target.result.split(',')[1],cons:currentUser?.display_name||'—',date:TODAY};
+    DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,pieces_jointes:[...(x.pieces_jointes||[]),pj]}:x);
+    save();
+    const el=document.getElementById('pj-list-'+candId);
+    if(el)el.innerHTML=pjListHtml(candId,getCand(candId)?.pieces_jointes||[]);
+  };
+  r.readAsDataURL(file);
+}
+function dlPJ(idx,candId){
+  const c=getCand(candId);const pj=c?.pieces_jointes?.[idx];if(!pj)return;
+  const a=document.createElement('a');a.href=`data:${pj.type};base64,${pj.data}`;a.download=pj.name;a.click();
+}
+function delPJ(idx,candId){
+  if(!confirm('Supprimer cette pièce jointe ?'))return;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,pieces_jointes:(c.pieces_jointes||[]).filter((_,i)=>i!==idx)}:c);
+  save();
+  const el=document.getElementById('pj-list-'+candId);
+  if(el)el.innerHTML=pjListHtml(candId,getCand(candId)?.pieces_jointes||[]);
+}
+
+// ══ CV ANONYMISATION ════════════════════════════════════
+
+let anonState={rects:[],pageNum:1,numPages:0,pdfDoc:null,scale:1.5,currentCandId:null,drawing:false,startX:0,startY:0,currentRect:null};
+
+async function openAnonymize(candId){
+  const c=getCand(candId);if(!c?.cv)return;
+  anonState={rects:[],pageNum:1,numPages:0,pdfDoc:null,scale:1.5,currentCandId:candId,drawing:false,startX:0,startY:0,currentRect:null};
+
+  OM(`Anonymiser le CV — ${esc(c.prenom)} ${esc(c.nom)}`,`
+    <div class="anon-toolbar">
+      <div class="anon-page-nav">
+        <button class="btn btn-s btn-sm" onclick="anonPrevPage()">◀</button>
+        <span id="anon-page-info">Page 1/1</span>
+        <button class="btn btn-s btn-sm" onclick="anonNextPage()">▶</button>
+      </div>
+      <button class="btn btn-s btn-sm" onclick="anonClearRects()">🗑 Effacer les zones</button>
+      <span style="color:var(--sbt);font-size:12px">Cliquez-glissez pour masquer des zones</span>
+      <button class="btn btn-p" style="margin-left:auto" onclick="generateAnonPDF('${candId}')">✅ Générer le CV anonymisé</button>
+    </div>
+    <div style="overflow:auto;background:#555;padding:16px;display:flex;justify-content:center;" id="anon-scroll">
+      <div class="anon-canvas-wrap" id="anon-canvas-wrap" style="position:relative;display:inline-block">
+        <canvas id="anon-pdf-canvas"></canvas>
+        <div id="anon-rects-layer" style="position:absolute;top:0;left:0;pointer-events:none;"></div>
+      </div>
+    </div>
+    <div style="padding:10px 16px;font-size:12px;color:var(--ts)">
+      💡 <b>Conseil :</b> tracez des rectangles sur les zones à masquer (nom, prénom, photo, téléphone, email...). 
+      Les rectangles sont numérotés — cliquez sur ✕ pour en supprimer un.
+    </div>`,'xl');
+
+  // Setup canvas interaction
+  const wrap=document.getElementById('anon-canvas-wrap');
+  const canvas=document.getElementById('anon-pdf-canvas');
+  if(!wrap||!canvas)return;
+
+  canvas.addEventListener('mousedown',anonMouseDown);
+  canvas.addEventListener('mousemove',anonMouseMove);
+  canvas.addEventListener('mouseup',anonMouseUp);
+
+  // Load PDF
+  try{
+    if(!window.pdfjsLib){alert('PDF.js non chargé.');return;}
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const bytes=atob(c.cv.data);
+    const arr=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+    anonState.pdfDoc=await pdfjsLib.getDocument({data:arr}).promise;
+    anonState.numPages=anonState.pdfDoc.numPages;
+    anonRenderPage(1);
+  }catch(e){alert('Impossible de charger le PDF: '+e.message);}
+}
+
+async function anonRenderPage(num){
+  if(!anonState.pdfDoc)return;
+  anonState.pageNum=num;
+  const page=await anonState.pdfDoc.getPage(num);
+  const vp=page.getViewport({scale:anonState.scale});
+  const canvas=document.getElementById('anon-pdf-canvas');if(!canvas)return;
+  canvas.width=vp.width;canvas.height=vp.height;
+  const ctx=canvas.getContext('2d');
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  // Draw existing rects for this page
+  anonDrawRects();
+  const info=document.getElementById('anon-page-info');
+  if(info)info.textContent=`Page ${num}/${anonState.numPages}`;
+}
+
+function anonDrawRects(){
+  const layer=document.getElementById('anon-rects-layer');if(!layer)return;
+  const canvas=document.getElementById('anon-pdf-canvas');if(!canvas)return;
+  layer.style.width=canvas.width+'px';layer.style.height=canvas.height+'px';
+  layer.innerHTML='';
+  const pageRects=anonState.rects.filter(r=>r.page===anonState.pageNum);
+  pageRects.forEach((r,i)=>{
+    const globalIdx=anonState.rects.indexOf(r);
+    const div=document.createElement('div');
+    div.style.cssText=`position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:white;border:2px solid #e74c3c;box-sizing:border-box;pointer-events:all;`;
+    div.innerHTML=`<button style="position:absolute;top:-9px;right:-9px;width:18px;height:18px;border-radius:50%;background:#e74c3c;color:white;border:none;cursor:pointer;font-size:12px;line-height:18px;text-align:center;padding:0;pointer-events:all;" onclick="anonDelRect(${globalIdx})">×</button>`;
+    layer.appendChild(div);
+  });
+}
+
+function anonMouseDown(e){
+  const rect=e.target.getBoundingClientRect();
+  anonState.drawing=true;
+  anonState.startX=e.clientX-rect.left;
+  anonState.startY=e.clientY-rect.top;
+}
+function anonMouseMove(e){
+  if(!anonState.drawing)return;
+  const rect=e.target.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  // Show preview
+  const layer=document.getElementById('anon-rects-layer');if(!layer)return;
+  let preview=document.getElementById('anon-preview');
+  if(!preview){preview=document.createElement('div');preview.id='anon-preview';preview.style.cssText='position:absolute;background:rgba(255,255,255,0.7);border:2px dashed #e74c3c;box-sizing:border-box;pointer-events:none;';layer.appendChild(preview);}
+  const px=Math.min(anonState.startX,x),py=Math.min(anonState.startY,y);
+  const pw=Math.abs(x-anonState.startX),ph=Math.abs(y-anonState.startY);
+  preview.style.left=px+'px';preview.style.top=py+'px';preview.style.width=pw+'px';preview.style.height=ph+'px';
+}
+function anonMouseUp(e){
+  if(!anonState.drawing)return;
+  anonState.drawing=false;
+  const rect=e.target.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const px=Math.min(anonState.startX,x),py=Math.min(anonState.startY,y);
+  const pw=Math.abs(x-anonState.startX),ph=Math.abs(y-anonState.startY);
+  if(pw>5&&ph>5){
+    anonState.rects.push({page:anonState.pageNum,x:px,y:py,w:pw,h:ph});
+  }
+  document.getElementById('anon-preview')?.remove();
+  anonDrawRects();
+}
+function anonDelRect(idx){anonState.rects.splice(idx,1);anonDrawRects();}
+function anonClearRects(){anonState.rects=anonState.rects.filter(r=>r.page!==anonState.pageNum);anonDrawRects();}
+function anonPrevPage(){if(anonState.pageNum>1)anonRenderPage(anonState.pageNum-1);}
+function anonNextPage(){if(anonState.pageNum<anonState.numPages)anonRenderPage(anonState.pageNum+1);}
+
+async function generateAnonPDF(candId){
+  if(!anonState.pdfDoc){alert('PDF non chargé.');return;}
+  const btn=document.querySelector('.anon-toolbar .btn-p');
+  if(btn){btn.textContent='⏳ Génération...';btn.disabled=true;}
+  try{
+    const {jsPDF}=window.jspdf;
+    let pdfOut=null;
+    for(let p=1;p<=anonState.numPages;p++){
+      const page=await anonState.pdfDoc.getPage(p);
+      const vp=page.getViewport({scale:2});
+      const canvas=document.createElement('canvas');
+      canvas.width=vp.width;canvas.height=vp.height;
+      const ctx=canvas.getContext('2d');
+      await page.render({canvasContext:ctx,viewport:vp}).promise;
+      // Apply white rectangles for this page
+      const pageRects=anonState.rects.filter(r=>r.page===p);
+      pageRects.forEach(r=>{
+        ctx.fillStyle='white';
+        // Scale rects from display scale to render scale
+        const scaleFactor=2/anonState.scale;
+        ctx.fillRect(r.x*scaleFactor,r.y*scaleFactor,r.w*scaleFactor,r.h*scaleFactor);
+      });
+      const imgData=canvas.toDataURL('image/jpeg',0.95);
+      const wPt=vp.width*0.75,hPt=vp.height*0.75;
+      if(!pdfOut){pdfOut=new jsPDF({orientation:wPt>hPt?'landscape':'portrait',unit:'pt',format:[wPt,hPt]});}
+      else{pdfOut.addPage([wPt,hPt],wPt>hPt?'landscape':'portrait');}
+      pdfOut.addImage(imgData,'JPEG',0,0,wPt,hPt);
+    }
+    const pdfB64=pdfOut.output('datauristring').split(',')[1];
+    const c=getCand(candId);
+    const anonCv={name:`CV_anonymise_${esc(c.prenom)}_${esc(c.nom)}.pdf`,type:'application/pdf',size:Math.round(pdfB64.length*0.75),data:pdfB64,cons:currentUser?.display_name||'—',date:TODAY,original_name:c.cv?.name||''};
+    DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,cv_anonymise:anonCv}:x);
+    save();CM();openCandDetail(candId);
+    setTimeout(()=>{
+      const el=document.createElement('div');el.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';
+      el.textContent='✓ CV anonymisé enregistré';document.body.appendChild(el);setTimeout(()=>el.remove(),3000);
+    },100);
+  }catch(e){
+    alert('Erreur lors de la génération : '+e.message);
+    if(btn){btn.textContent='✅ Générer le CV anonymisé';btn.disabled=false;}
+  }
+}
+function dlAnonCV(candId){
+  const c=getCand(candId);if(!c?.cv_anonymise)return;
+  const a=document.createElement('a');a.href=`data:${c.cv_anonymise.type};base64,${c.cv_anonymise.data}`;a.download=c.cv_anonymise.name;a.click();
+}
+
+// ══ VIVIER SEARCH UPDATE ════════════════════════════════
+
+function rVivier(){
+  if(vivierView==='kanban'){rVivierKanban();return;}
+  rVivierSidebar();applyVivierF();
+}
+
+// ══ KANBAN STATUT PICKER FOR CLIENT FORM ════════════════
+
+function openClientStatutPicker(id){
+  const c=getClient(id);if(!c)return;
+  const cur=c.statut_commercial||'Nouveau prospect';
+  OM('Modifier le statut commercial',`
+    <div style="display:flex;flex-direction:column;gap:8px;padding:8px 0">
+      ${CLIENT_STATUTS.map(s=>`<button class="btn ${s===cur?'btn-p':'btn-s'}" style="justify-content:flex-start" onclick="setClientStatut('${id}','${s}')">${s===cur?'✓ ':''} ${esc(s)}</button>`).join('')}
+    </div>`,'n');
+}
+function setClientStatut(id,statut){
+  DB.clients=DB.clients.map(c=>c.id===id?{...c,statut_commercial:statut}:c);
+  save();CM();rClients();
+}
 
 async function init(){
   try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();G('dash');}else{showLogin();}}
