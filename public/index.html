@@ -678,7 +678,7 @@ const DEFAULT_REFS={
 
 let DB={candidats:[],clients:[],contacts:[],commandes:[],relances:[],actions:[]},REF={};
 let currentUser=null,EID=null,showDone=false,clFilter='Tous',cmdFilter='Toutes';
-let vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:''};
+let vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:'',showArchived:false};
 let dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};
 const genId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 
@@ -727,7 +727,7 @@ async function loadData(){
   // Migration familles_metier : si l'ancien contient des familles trop spécifiques BTP
   const oldFM=REF.familles_metier&&REF.familles_metier.length>0&&(REF.familles_metier[0]?.label||'').includes('Gros Œuvre');
   if(oldFM){REF.familles_metier=DEFAULT_REFS.familles_metier;REF.metiers=DEFAULT_REFS.metiers;}
-  DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.controles_ref)c.controles_ref=[];if(!c.mots_cles)c.mots_cles=[];if(!c.pieces_jointes)c.pieces_jointes=[];});
+  DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.entretiens)c.entretiens=[];if(!c.controles_ref)c.controles_ref=[];if(!c.mots_cles)c.mots_cles=[];if(!c.pieces_jointes)c.pieces_jointes=[];});
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
 
@@ -810,6 +810,11 @@ function rVivierSidebar(){
   const ssOpts=`<option value="">Tous sous-secteurs</option>`+ssList.map(s=>`<option value="${s.id}"${f.sous_secteur_id===s.id?' selected':''}>${esc(s.label)}</option>`).join('');
   document.getElementById('vivier-sidebar').innerHTML=`
     <div class="vs-title">Filtres de recherche</div>
+    <div class="vs-sect">Vue</div>
+    <div class="vs-field" style="display:flex;gap:5px">
+      <button class="fb${!vivierF.showArchived?' on':''}" onclick="vivierF.showArchived=false;applyVivierF()">Actifs</button>
+      <button class="fb${vivierF.showArchived?' on':''}" onclick="vivierF.showArchived=true;applyVivierF()">📦 Archivés</button>
+    </div>
     <div class="vs-sect">Recherche avancée</div>
     <div class="vs-field"><label>Recherche booléenne</label>
       <input id="vivier-bool-search" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder='ex: "chef chantier" AND VRD' oninput="applyVivierF()">
@@ -834,6 +839,9 @@ function vf(k,v){vivierF[k]=v;if(k==='famille_metier_id')vivierF.metier_id='';if
 function resetVivierF(){vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:''};rVivier();}
 function applyVivierF(){
   const f=vivierF;let res=DB.candidats;
+  // Archive filter: by default only show active
+  if(f.showArchived){res=res.filter(c=>c.archived===true);}
+  else{res=res.filter(c=>!c.archived);}
   if(f.prenom)res=res.filter(c=>c.prenom?.toLowerCase().includes(f.prenom.toLowerCase()));
   if(f.nom)res=res.filter(c=>c.nom?.toLowerCase().includes(f.nom.toLowerCase()));
   if(f.ville)res=res.filter(c=>(c.ville||c.loc||'').toLowerCase().includes(f.ville.toLowerCase()));
@@ -888,15 +896,15 @@ function rCommandes(){
   if(!res.length){h='<div class="empty">Aucune commande</div>';}
   else res.forEach(cmd=>{
     const cl=getClient(cmd.client_id),ct=getContact(cmd.contact_id),nc=cmd.candidats?.length||0;
-    h+=`<div class="cmd-row"><div style="flex:1;min-width:0">
+    h+=`<div class="cmd-row" style="cursor:pointer" onclick="openCmdDetail('${cmd.id}')"><div style="flex:1;min-width:0">
       <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center"><span style="font-size:14px;font-weight:600">${esc(cmd.titre)}</span><span style="${sc[cmd.statut]||sc.Active};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(cmd.statut)}</span></div>
-      <div style="display:flex;gap:12px;font-size:12px;color:var(--ts);flex-wrap:wrap;margin-bottom:6px"><span>🏢 ${esc(cl?.nom||'—')}</span>${ct?`<span>👤 ${esc(ct.prenom)} ${esc(ct.nom)}</span>`:''}<span>📋 ${esc(cmd.cons)}</span><span>📅 ${cmd.date||''}</span></div>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--ts);flex-wrap:wrap;margin-bottom:6px"><span>🏢 ${esc(cl?.nom||'—')}</span>${ct?`<span>👤 ${esc(ct.prenom)} ${esc(ct.nom)}</span>`:''}<span>📋 ${esc(cmd.cons)}</span><span>📅 ${cmd.date_cmd||cmd.date||''}</span></div>
       ${cmd.desc?`<div style="font-size:12px;color:var(--tm);line-height:1.5">${esc(cmd.desc.length>100?cmd.desc.slice(0,100)+'…':cmd.desc)}</div>`:''}
       ${nc>0?`<div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">${(cmd.candidats||[]).slice(0,4).map(cc=>{const cand=getCand(cc.candidat_id);const e=getEtape(cc.etape);return cand?`<span style="font-size:11px;background:${e.bg};color:${e.color};border:1px solid ${e.br};border-radius:5px;padding:2px 8px">${esc(cand.prenom)} ${esc(cand.nom)}</span>`:'';}).join('')}${nc>4?`<span style="font-size:11px;color:var(--tm)">+${nc-4}</span>`:''}</div>`:''}
     </div>
-    <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+    <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px" onclick="event.stopPropagation()">
       <span style="font-size:11px;color:var(--tm)">${nc} candidat${nc!==1?'s':''}</span>
-      <div style="display:flex;gap:4px"><button class="btn btn-s btn-sm" onclick="openCmdDetail('${cmd.id}')">Voir</button><button class="ic-btn" onclick="openCmdForm('${cmd.id}')">✏️</button><button class="ic-btn" onclick="delCmd('${cmd.id}')">🗑</button></div>
+      <div style="display:flex;gap:4px"><button class="ic-btn" onclick="openCmdForm('${cmd.id}')">✏️</button><button class="ic-btn" onclick="delCmd('${cmd.id}')">🗑</button></div>
     </div></div>`;
   });
   document.getElementById('body-cmds').innerHTML=h;
@@ -906,11 +914,15 @@ function rClients(){
   const s=(document.getElementById('s-clients')?.value||'').toLowerCase();
   const consF=document.getElementById('cl-cons-f')?.value||'';
   const sectF=document.getElementById('cl-sect-f')?.value||'';
+  const archF=document.getElementById('cl-arch-f')?.value||'active';
   const fltrs=['Tous','Client','Prospect'];
   document.getElementById('cl-filters').innerHTML=fltrs.map(f=>`<button class="fb${clFilter===f?' on':''}" onclick="clFilter='${f}';rClients()">${f}</button>`).join('')
     +`<select id="cl-cons-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les consultants</option>${CONS.map(cn=>`<option value="${cn}"${consF===cn?' selected':''}>${cn}</option>`).join('')}</select>`
-    +`<select id="cl-sect-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les secteurs</option>${(REF.secteurs_act||[]).filter(x=>x.actif!==false).map(s=>`<option value="${s.id}"${sectF===s.id?' selected':''}>${esc(s.label)}</option>`).join('')}</select>`;
+    +`<select id="cl-sect-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les secteurs</option>${(REF.secteurs_act||[]).filter(x=>x.actif!==false).map(s=>`<option value="${s.id}"${sectF===s.id?' selected':''}>${esc(s.label)}</option>`).join('')}</select>`
+    +`<select id="cl-arch-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="active"${archF==='active'?' selected':''}>Actifs</option><option value="archived"${archF==='archived'?' selected':''}>📦 Archivés</option></select>`;
   let res=DB.clients;
+  if(archF==='archived'){res=res.filter(c=>c.archived===true);}
+  else{res=res.filter(c=>!c.archived);}
   if(clFilter!=='Tous')res=res.filter(c=>c.type===clFilter);
   if(consF)res=res.filter(c=>c.cons===consF);
   if(sectF)res=res.filter(c=>c.secteur_act_new_id===sectF||c.secteur_ref_id===sectF);
@@ -922,19 +934,20 @@ function rClients(){
   res.forEach((c,i)=>{
     const [bg,txt]=AV_COLORS[i%AV_COLORS.length];
     const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-    const nbA=c.actions?.length||0,nbC=DB.commandes.filter(cmd=>cmd.client_id===c.id).length,nbCt=DB.contacts.filter(ct=>ct.client_id===c.id).length;
-    h+=`<div class="cl-card">
-      <div style="display:flex;gap:11px;align-items:center"><div style="width:42px;height:42px;border-radius:10px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0">${ini}</div><div style="min-width:0"><div style="font-size:14px;font-weight:600">${esc(c.nom)}</div><div style="font-size:12px;color:var(--ts)">${esc(c.secteur||'—')}</div></div></div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>${c.effectif?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(c.effectif)}</span>`:''}<span style="font-size:11px;color:var(--tm)">${esc(c.cons||'')}</span></div>
+    const avatarHtml=c.logo?`<img src="${c.logo}" style="width:42px;height:42px;border-radius:10px;object-fit:cover;flex-shrink:0">`:`<div style="width:42px;height:42px;border-radius:10px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0">${ini}</div>`;
+    const nbA=DB.actions.filter(a=>a.client_id===c.id).length,nbC=DB.commandes.filter(cmd=>cmd.client_id===c.id).length,nbCt=DB.contacts.filter(ct=>ct.client_id===c.id).length;
+    h+=`<div class="cl-card" style="cursor:pointer" onclick="openClientDetail('${c.id}')">
+      <div style="display:flex;gap:11px;align-items:center">${avatarHtml}<div style="min-width:0"><div style="font-size:14px;font-weight:600">${esc(c.nom)}</div><div style="font-size:12px;color:var(--ts)">${esc(c.secteur||'—')}</div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">📦 Archivé</span>`:''}${c.effectif?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(c.effectif)}</span>`:''}<span style="font-size:11px;color:var(--tm)">${esc(c.cons||'')}</span></div>
       <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:3px">
         <div>📍 ${esc(c.ville||c.loc||'—')}${c.departement?' · '+esc(c.departement):''}</div>
         <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">✉️ ${esc(c.email||'—')}</div>
         <div>📞 ${esc(c.phone||'—')}</div>
-        ${c.site_web?`<div><a href="${esc(c.site_web)}" target="_blank" style="color:var(--acc);text-decoration:none;font-size:11px">🌐 ${esc(c.site_web)}</a></div>`:''}
+        ${c.site_web?`<div><a href="${esc(c.site_web)}" target="_blank" style="color:var(--acc);text-decoration:none;font-size:11px" onclick="event.stopPropagation()">🌐 ${esc(c.site_web)}</a></div>`:''}
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--br);padding-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--br);padding-top:8px" onclick="event.stopPropagation()">
         <div style="font-size:11px;color:var(--tm)">${nbC} cmd · ${nbCt} contact${nbCt!==1?'s':''} · ${nbA} action${nbA!==1?'s':''}</div>
-        <div style="display:flex;gap:5px"><button class="btn btn-s btn-sm" onclick="openClientDetail('${c.id}')">Voir</button><button class="ic-btn" onclick="openClientForm('${c.id}')">✏️</button><button class="ic-btn" onclick="delClient('${c.id}')">🗑</button></div>
+        <div style="display:flex;gap:5px"><button class="ic-btn" onclick="openClientForm('${c.id}')">✏️</button><button class="ic-btn" onclick="delClient('${c.id}')">🗑</button></div>
       </div>
     </div>`;
   });
@@ -1364,7 +1377,7 @@ function openCandDetail(id){
   const html=`
     <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
       ${av(c.prenom+' '+c.nom,c.photo,0,58)}
-      <div style="flex:1"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px"><div style="font-size:19px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div><span style="${statutStyle};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(c.statut_cand||'Candidat')}</span></div><div style="font-size:13px;color:var(--ts)">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div></div>
+      <div style="flex:1"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px"><div style="font-size:19px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div><span style="${statutStyle};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(c.statut_cand||'Candidat')}</span>${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé · ${esc(c.archive_motif||'')}</span>`:''}</div><div style="font-size:13px;color:var(--ts)">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div></div>
       <button class="btn btn-p" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
     </div>
     <div class="tabs">
@@ -1427,13 +1440,11 @@ function openCandDetail(id){
 
     <!-- TAB: ENTRETIEN -->
     <div id="tab-entr" class="tab-panel">
-      ${c.entretien?._saved_by?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--ts)"><svg width="13" height="13" fill="none" stroke="var(--acc)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Dernière saisie par <b style="color:var(--tp)">${esc(c.entretien._saved_by)}</b> le ${esc(c.entretien._saved_date)}</div>`:''}
-      <div id="entr-form-${id}">
-        <div class="fld"><label>Compte-rendu d'entretien</label><textarea id="entr-content-${id}" style="min-height:200px;line-height:1.7" placeholder="Saisissez ici le compte-rendu de l'entretien : impressions générales, points forts, points d'attention, échanges clés...">${esc(c.entretien?.content||'')}</textarea></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px">
-          <button class="btn btn-p" onclick="saveEntretien('${id}')">💾 Enregistrer le compte-rendu</button>
-        </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:600">Entretiens (${(c.entretiens||[]).length + (c.entretien?.content?1:0)})</div>
+        <button class="btn btn-p btn-sm" onclick="openAddEntretien('${id}')">+ Ajouter un entretien</button>
       </div>
+      <div id="entretiens-list-${id}">${buildEntretiensView(id, c)}</div>
     </div>
 
     <!-- TAB: CONTRÔLE DE RÉFÉRENCE -->
@@ -1447,6 +1458,10 @@ function openCandDetail(id){
     </div>
 
     <div class="dact">
+      ${c.archived
+        ?`<button class="btn btn-s btn-sm" onclick="unarchiveFiche('cand','${id}')">♻️ Restaurer</button>`
+        :`<button class="btn btn-d btn-sm" onclick="archiveFiche('cand','${id}')">📦 Archiver</button>`
+      }
       <button class="btn btn-d btn-sm" onclick="delCand('${id}')">🗑 Supprimer</button>
       <button class="btn btn-s" onclick="CM()">Fermer</button>
     </div>`;
@@ -1459,15 +1474,185 @@ function switchTab(btn,panelId){
   btn.closest('.mbody').querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById(panelId)?.classList.add('active');
+  // Store active tab for commands
+  const match=panelId.match(/^cmd-tab-(\w+)-([\w]+)$/);
+  if(match)activeCmdTab[match[2]]=match[1];
 }
 
-function saveEntretien(candId){
-  const content=(document.getElementById('entr-content-'+candId)?.value||'').trim();
-  if(!content){alert('Saisissez un compte-rendu avant d\'enregistrer.');return;}
-  const entretien={content,_saved_by:currentUser?.display_name||'—',_saved_date:TODAY};
-  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,entretien}:c);
+// ══ MULTI-ENTRETIENS ════════════════════════════════════
+function buildEntretiensView(candId, c){
+  const list=[];
+  // Migration: ancien champ unique → premier entretien
+  if(c.entretien?.content){
+    list.push({id:'legacy',date:c.entretien._saved_date||TODAY,cons:c.entretien._saved_by||'—',poste_label:'',content:c.entretien.content,_legacy:true});
+  }
+  (c.entretiens||[]).forEach(e=>list.push(e));
+  list.sort((a,b)=>b.date>a.date?1:-1);
+  if(!list.length)return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:16px 0">Aucun entretien enregistré</div>';
+  return list.map((e,i)=>`
+    <div style="background:var(--bg);border:1px solid var(--br);border-radius:9px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--tp)">Entretien du ${esc(e.date)}</div>
+          <div style="font-size:12px;color:var(--ts);margin-top:2px">
+            👤 <b>${esc(e.cons)}</b>${e.poste_label?' · 💼 '+esc(e.poste_label):''}
+            ${e._legacy?'<span style="font-size:10px;color:var(--tm);margin-left:6px">(migré)</span>':''}
+          </div>
+        </div>
+        ${!e._legacy?`<button class="ic-btn" style="color:var(--red)" onclick="delEntretien('${candId}','${e.id}')">🗑</button>`:''}
+      </div>
+      <div style="font-size:13px;color:var(--tp);line-height:1.7;white-space:pre-wrap">${esc(e.content)}</div>
+    </div>`).join('');
+}
+
+function openAddEntretien(candId){
+  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  const metierOpts=`<option value="">— Poste concerné —</option>`+(REF.metiers||[]).filter(m=>m.actif!==false).map(m=>`<option value="${m.id}">${esc(m.label)}</option>`).join('');
+  OM('Ajouter un entretien',`
+    <div class="fr"><div class="fld"><label>Date de l'entretien</label><input type="date" id="ei-date" value="${TODAY}"></div><div class="fld"><label>Consultant</label><select id="ei-cons">${cOpts}</select></div></div>
+    <div class="fld"><label>Poste concerné</label><select id="ei-poste">${metierOpts}</select></div>
+    <div class="fld"><label>Compte-rendu de l'entretien</label><textarea id="ei-content" style="min-height:180px;line-height:1.7" placeholder="Impressions générales, points forts, points d'attention, échanges clés..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNewEntretien('${candId}')">Enregistrer</button></div>`,'w');
+}
+
+function saveNewEntretien(candId){
+  const date=document.getElementById('ei-date')?.value||TODAY;
+  const cons=document.getElementById('ei-cons')?.value||'—';
+  const poste_id=document.getElementById('ei-poste')?.value||'';
+  const poste_label=poste_id?refLbl('metiers',poste_id):'';
+  const content=(document.getElementById('ei-content')?.value||'').trim();
+  if(!content){alert('Le compte-rendu est obligatoire.');return;}
+  const entretien={id:genId(),date,cons,poste_id,poste_label,content,created_at:TODAY};
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,entretiens:[...(c.entretiens||[]),entretien]}:c);
+  save();CM();
+  const el=document.getElementById('entretiens-list-'+candId);
+  if(el)el.innerHTML=buildEntretiensView(candId,getCand(candId));
+  showToast('✓ Entretien enregistré');
+}
+
+function delEntretien(candId,entretienId){
+  if(!confirm('Supprimer cet entretien ?'))return;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,entretiens:(c.entretiens||[]).filter(e=>e.id!==entretienId)}:c);
   save();
-  const msg=document.createElement('div');msg.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';msg.textContent='✓ Compte-rendu enregistré';document.body.appendChild(msg);setTimeout(()=>msg.remove(),2500);
+  const el=document.getElementById('entretiens-list-'+candId);
+  if(el)el.innerHTML=buildEntretiensView(candId,getCand(candId));
+}
+
+// ══ ARCHIVAGE ════════════════════════════════════════════
+function archiveFiche(type,id){
+  const motifs=['Inactif','Refus candidat','Refus client','Doublon','Client perdu','Hors cible','Autre'];
+  const mOpts=motifs.map(m=>`<option value="${m}">${m}</option>`).join('');
+  OM('Archiver cette fiche',`
+    <div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:9px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--amber)">
+      ⚠️ La fiche sera archivée mais jamais supprimée. Elle restera accessible depuis le filtre "Archivés".
+    </div>
+    <div class="fld"><label>Motif d'archivage (obligatoire)</label><select id="arch-motif">${mOpts}</select></div>
+    <div class="fld"><label>Commentaire (optionnel)</label><textarea id="arch-comment" style="min-height:70px" placeholder="Précisez si nécessaire..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-d" onclick="confirmArchive('${type}','${id}')">Archiver</button></div>`,'n');
+}
+function confirmArchive(type,id){
+  const motif=document.getElementById('arch-motif')?.value;
+  const comment=(document.getElementById('arch-comment')?.value||'').trim();
+  if(!motif){alert('Sélectionnez un motif.');return;}
+  const archiveData={archived:true,archive_motif:motif,archive_comment:comment,archive_date:TODAY,archive_by:currentUser?.display_name||'—'};
+  if(type==='cand')DB.candidats=DB.candidats.map(c=>c.id===id?{...c,...archiveData}:c);
+  else DB.clients=DB.clients.map(c=>c.id===id?{...c,...archiveData}:c);
+  save();CM();R(CV);showToast('✓ Fiche archivée');
+}
+function unarchiveFiche(type,id){
+  if(!confirm('Restaurer cette fiche ?'))return;
+  if(type==='cand')DB.candidats=DB.candidats.map(c=>c.id===id?{...c,archived:false,archive_motif:'',archive_date:'',archive_by:''}:c);
+  else DB.clients=DB.clients.map(c=>c.id===id?{...c,archived:false,archive_motif:'',archive_date:'',archive_by:''}:c);
+  save();CM();R(CV);showToast('✓ Fiche restaurée');
+}
+
+// ══ LOGO CLIENT ══════════════════════════════════════════
+function clientAvatarHtml(c,size=50){
+  if(c.logo){
+    return `<img src="${c.logo}" style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.24)}px;object-fit:cover;flex-shrink:0" alt="${esc(c.nom)}">`;
+  }
+  const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length];
+  const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<div style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.24)}px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.34)}px;font-weight:700;flex-shrink:0">${ini}</div>`;
+}
+function uploadClientLogo(inp,clientId){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>500*1024){alert('Image trop lourde (max 500Ko)');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    DB.clients=DB.clients.map(c=>c.id===clientId?{...c,logo:e.target.result}:c);
+    save();openClientDetail(clientId);
+  };
+  r.readAsDataURL(file);
+}
+function removeClientLogo(clientId){
+  if(!confirm('Supprimer le logo ?'))return;
+  DB.clients=DB.clients.map(c=>c.id===clientId?{...c,logo:null}:c);
+  save();openClientDetail(clientId);
+}
+
+// ══ API SIRENE (INSEE) ═══════════════════════════════════
+let _sireneCache={};let _sireneTimer=null;
+async function sireneSearch(q){
+  if(!q||q.length<3)return[];
+  const key=q.toLowerCase();
+  if(_sireneCache[key])return _sireneCache[key];
+  try{
+    // Use recherche-entreprises.api.gouv.fr (no auth required, free)
+    const r=await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&page=1&per_page=8`);
+    if(!r.ok)return[];
+    const data=await r.json();
+    const results=(data.results||[]).map(e=>{
+      const etab=e.siege||{};
+      return {
+        nom:e.nom_complet||e.nom_raison_sociale||'',
+        siren:e.siren||'',
+        siret:etab.siret||'',
+        adresse:[etab.numero_voie,etab.type_voie,etab.libelle_voie,etab.code_postal,etab.libelle_commune].filter(Boolean).join(' '),
+        ville:etab.libelle_commune||'',
+        code_postal:etab.code_postal||'',
+        naf:e.activite_principale||'',
+        naf_label:e.libelle_activite_principale||'',
+        statut:e.etat_administratif==='A'?'Active':'Fermée',
+        date_creation:e.date_creation||'',
+      };
+    });
+    _sireneCache[key]=results;
+    return results;
+  }catch(e){return [];}
+}
+
+function sireneDrop(id){const d=document.getElementById(id+'-sirene-drop');if(d)d.classList.remove('open');}
+async function sireneType(q){
+  clearTimeout(_sireneTimer);
+  const drop=document.getElementById('sirene-drop');if(!drop)return;
+  if(!q||q.length<2){drop.classList.remove('open');drop.innerHTML='';return;}
+  drop.innerHTML=`<div class="geo-opt" style="color:var(--tm);cursor:default">Recherche...</div>`;
+  drop.classList.add('open');
+  _sireneTimer=setTimeout(async()=>{
+    const results=await sireneSearch(q);
+    if(!results.length){drop.innerHTML=`<div class="geo-opt" style="color:var(--tm);cursor:default">Aucune entreprise trouvée</div>`;return;}
+    drop.innerHTML=results.map((r,i)=>`<div class="geo-opt" onclick="sireneSelect(${i})">
+      <div><span class="geo-opt-name">${esc(r.nom)}</span><span style="font-size:10px;color:var(--tm);margin-left:8px">${esc(r.naf_label)}</span></div>
+      <span class="geo-opt-info">${esc(r.ville)} · ${esc(r.siren)}</span>
+    </div>`).join('');
+    drop._results=results;
+  },300);
+}
+
+function sireneSelect(idx){
+  const drop=document.getElementById('sirene-drop');if(!drop||!drop._results)return;
+  const r=drop._results[idx];if(!r)return;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  set('f-nom',r.nom);set('f-siret',r.siret);set('f-siren',r.siren);
+  set('f-adresse_sirene',r.adresse);set('f-naf',r.naf);set('f-naf_label',r.naf_label);
+  set('f-statut_sirene',r.statut);set('f-date_creation_sirene',r.date_creation);
+  set('f-source_sirene','API SIRENE');
+  // Also fill geo field
+  const geoInp=document.getElementById('geo-cl-ville');if(geoInp){geoInp.value=r.ville;}
+  const sireneInp=document.getElementById('sirene-inp');if(sireneInp)sireneInp.value=r.nom;
+  drop.classList.remove('open');
+  showToast('✓ Données INSEE importées — vérifiez et complétez');
 }
 
 function buildControlesRefView(candId, controles){
@@ -1810,6 +1995,10 @@ function openCmdDetail(id){
     <div id="cmd-tab-cands-${id}" class="tab-panel">${tab4}</div>
     <div class="dact"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`;
   OM(`Commande — ${esc(cmd.titre)}`,html,'xl');
+  // Restore active tab (defaults to 'infos' on first open)
+  const lastTab=activeCmdTab[id]||'infos';
+  const tabBtn=document.querySelector(`[onclick*="cmd-tab-${lastTab}-${id}"]`);
+  if(tabBtn&&lastTab!=='infos'){switchTab(tabBtn,`cmd-tab-${lastTab}-${id}`);}
 }
 
 // Toggle salaire type in annonce
@@ -1890,6 +2079,7 @@ function cmdKDrop(e,col){
   if(etape==='emb'){
     DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,statut_cand:'Embauché',embauche_cmd_id:cmdId}:c);
   }
+  activeCmdTab[cmdId]='cands';
   save();openCmdDetail(cmdId);
   cmdKDragging.classList.remove('dragging');cmdKDragging=null;
 }
@@ -1899,13 +2089,22 @@ function addCandToCmd(cmdId){
   const candId=document.getElementById(selId)?.value;
   if(!candId)return;
   DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:[...(cmd.candidats||[]),{candidat_id:candId,etape:'envc',cons:currentUser?.display_name||'—',added_at:TODAY}]}:cmd);
+  activeCmdTab[cmdId]='cands';
   save();openCmdDetail(cmdId);
 }
 
-// Keep old addCand as alias
 function addCand(cmdId){addCandToCmd(cmdId);}
-function rmCand(cmdId,candId){if(!confirm('Retirer ce candidat ?'))return;DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==candId)}:cmd);save();openCmdDetail(cmdId);}
-function chEtape(cmdId,candId,etape){DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape}:cc)}:cmd);save();openCmdDetail(cmdId);}
+function rmCand(cmdId,candId){
+  if(!confirm('Retirer ce candidat ?'))return;
+  DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==candId)}:cmd);
+  activeCmdTab[cmdId]='cands';
+  save();openCmdDetail(cmdId);
+}
+function chEtape(cmdId,candId,etape){
+  DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape}:cc)}:cmd);
+  activeCmdTab[cmdId]='cands';
+  save();openCmdDetail(cmdId);
+}
 
 function showToast(msg){const el=document.createElement('div');el.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),2500);}
 
@@ -1913,13 +2112,21 @@ function openClientForm(id){
   EID=id||null;const c=id?getClient(id):{};const v=f=>esc(c[f]||'');
   const tOpts=['Client','Prospect'].map(t=>`<option value="${t}"${(c.type||'Prospect')===t?' selected':''}>${t}</option>`).join('');
   const cOpts=CONS.map(cn=>`<option value="${cn}"${(c.cons||currentUser?.display_name)===cn?' selected':''}>${cn}</option>`).join('');
-  const sOpts=`<option value="">— Secteur d'activité —</option>`+(REF.secteurs||[]).map(s=>`<option value="${s.id}"${c.secteur_ref_id===s.id?' selected':''}>${esc(s.label)}</option>`).join('');
-  const vOpts=`<option value="">— Ville —</option>`+(REF.villes||[]).map(v2=>`<option value="${v2.id}"${c.ville_ref_id===v2.id?' selected':''}>${esc(v2.label)}</option>`).join('');
-  const ctOpts=`<option value="">— Contact principal —</option>`+DB.contacts.filter(ct=>!id||ct.client_id===id||!ct.client_id).map(ct=>`<option value="${ct.id}"${c.contact_principal_id===ct.id?' selected':''}>${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
+  const ctOpts=`<option value="">— Aucun —</option>`+DB.contacts.filter(ct=>!id||ct.client_id===id||!ct.client_id).map(ct=>`<option value="${ct.id}"${c.contact_principal_id===ct.id?' selected':''}>${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
   const effOpts=`<option value="">— Effectif —</option>`+EFFECTIFS.map(e=>`<option value="${e}"${c.effectif===e?' selected':''}>${e}</option>`).join('');
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
+  const logoHtml=c.logo?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><img src="${c.logo}" style="width:50px;height:50px;border-radius:10px;object-fit:cover"><button class="btn btn-d btn-sm" type="button" onclick="DB.clients=DB.clients.map(x=>x.id==='${id}'?{...x,logo:null}:x);save();openClientForm('${id}')">✕ Supprimer</button></div>`:'';
   OM(id?'Modifier':'Nouveau client / prospect',`
+    <div style="padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br);margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🔍 Recherche INSEE (auto-remplissage)</div>
+      <div class="geo-wrap">
+        <input class="geo-input" id="sirene-inp" placeholder="Tapez le nom, SIREN ou SIRET..." autocomplete="off"
+          oninput="sireneType(this.value)" onblur="setTimeout(()=>sireneDrop(''),250)" value="${v('nom')}">
+        <div class="geo-drop" id="sirene-drop" style="max-height:250px"></div>
+      </div>
+      <div style="font-size:11px;color:var(--tm);margin-top:4px">Source : ${c.source_sirene?`<b>${esc(c.source_sirene)}</b>`:'non renseignée'}</div>
+    </div>
     <div class="fr"><div class="fld"><label>Nom entreprise</label><input id="f-nom" value="${v('nom')}"></div><div class="fld"><label>Type</label><select id="f-type">${tOpts}</select></div></div>
     <div class="fr"><div class="fld"><label>Consultant responsable</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Effectif</label><select id="f-effectif">${effOpts}</select></div></div>
     <div class="fr">
@@ -1927,9 +2134,18 @@ function openClientForm(id){
       <div class="fld"><label>Sous-secteur</label><div id="cl-ss-wrap">${searchSel('cl-ss',ssItems,c.sous_secteur_id||'','— Sous-secteur —')}</div></div>
     </div>
     <div class="fld"><label>Localisation</label>${geoWidget('geo-cl',c.ville||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
-    <div class="fr"><div class="fld"><label>SIRET</label><input id="f-siret" value="${v('siret')}" placeholder="ex: 123 456 789 00010"></div><div class="fld"><label>Site internet</label><input id="f-site_web" value="${v('site_web')}" placeholder="https://..."></div></div>
+    <div class="section-title">Données officielles INSEE</div>
+    <div class="fr"><div class="fld"><label>SIREN</label><input id="f-siren" value="${v('siren')}"></div><div class="fld"><label>SIRET</label><input id="f-siret" value="${v('siret')}"></div></div>
+    <div class="fld"><label>Adresse officielle</label><input id="f-adresse_sirene" value="${v('adresse_sirene')}"></div>
+    <div class="fr"><div class="fld"><label>Code APE / NAF</label><input id="f-naf" value="${v('naf')}"></div><div class="fld"><label>Libellé activité</label><input id="f-naf_label" value="${v('naf_label')}"></div></div>
+    <div class="fr"><div class="fld"><label>Statut INSEE</label><input id="f-statut_sirene" value="${v('statut_sirene')||'Active'}"></div><div class="fld"><label>Date de création</label><input id="f-date_creation_sirene" value="${v('date_creation_sirene')}"></div></div>
+    <input type="hidden" id="f-source_sirene" value="${v('source_sirene')||'Manuel'}">
+    <div class="section-title">Contact & Web</div>
     <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div></div>
-    <div class="fld"><label>Contact principal</label><select id="f-contact_principal_id">${ctOpts}</select><div class="fld-hint">Sélectionnez ou créez d'abord un contact.</div></div>
+    <div class="fld"><label>Site internet</label><input id="f-site_web" value="${v('site_web')}" placeholder="https://..."></div>
+    <div class="fld"><label>Contact principal</label><select id="f-contact_principal_id">${ctOpts}</select></div>
+    <div class="section-title">Logo entreprise</div>
+    ${logoHtml}<label class="btn btn-s btn-sm" style="cursor:pointer;display:inline-flex">🖼 ${c.logo?'Remplacer':'Ajouter'} un logo<input type="file" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="uploadClientLogo(this,'${id||''}')"></label>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveClient()">Enregistrer</button></div>`,'w');
 }
 function saveClient(){
@@ -1937,17 +2153,19 @@ function saveClient(){
   const secteur_act_new_id=ssGet('cl-sa');
   const secteurLabel=refLbl('secteurs_act',secteur_act_new_id)||refLbl('secteurs',secteur_act_new_id)||'';
   const geo=geoGetVal('geo-cl');
+  const existing=EID?getClient(EID):{};
   const form={
     nom:g('nom'),type:g('type'),cons:g('cons'),
-    secteur:secteurLabel,
-    secteur_act_new_id,
-    sous_secteur_id:ssGet('cl-ss'),
-    // Anciens champs conservés
-    secteur_ref_id:EID?getClient(EID)?.secteur_ref_id||'':'',
-    ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,
-    loc:geo.ville||'',
-    effectif:g('effectif'),siret:g('siret'),site_web:g('site_web'),
-    email:g('email'),phone:g('phone'),contact_principal_id:g('contact_principal_id')
+    secteur:secteurLabel,secteur_act_new_id,sous_secteur_id:ssGet('cl-ss'),
+    secteur_ref_id:existing.secteur_ref_id||'',
+    ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,loc:geo.ville||'',
+    effectif:g('effectif'),
+    siren:g('siren'),siret:g('siret'),site_web:g('site_web'),
+    adresse_sirene:g('adresse_sirene'),naf:g('naf'),naf_label:g('naf_label'),
+    statut_sirene:g('statut_sirene'),date_creation_sirene:g('date_creation_sirene'),
+    source_sirene:g('source_sirene')||'Manuel',
+    email:g('email'),phone:g('phone'),contact_principal_id:g('contact_principal_id'),
+    logo:existing.logo||null,
   };
   EID?DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c):DB.clients.push({...form,id:genId(),actions:[]});
   save();CM();R(CV);
@@ -1978,10 +2196,11 @@ function openClientDetail(id){
     </div>`).join('');
   const html=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
-      <div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>
+      ${c.logo?`<img src="${c.logo}" style="width:50px;height:50px;border-radius:12px;object-fit:cover;flex-shrink:0" alt="${esc(c.nom)}">`:`<div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>`}
       <div style="flex:1"><div style="font-size:17px;font-weight:700">${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts)">${esc(c.secteur||'—')} · ${esc(c.ville||c.loc||'—')}${c.departement?' ('+esc(c.departement)+')':''}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
         <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
+        ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé</span>`:''}
         <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
       </div>
     </div>
@@ -2010,7 +2229,14 @@ function openClientDetail(id){
         </div>
       </div>${actsH}
     </div>
-    <div class="dact"><button class="btn btn-d btn-sm" onclick="delClient('${id}');CM()">🗑 Supprimer</button><div style="display:flex;gap:7px"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openClientForm('${id}')">✏️ Modifier</button></div></div>`;
+    <div class="dact">
+      ${c.archived
+        ?`<button class="btn btn-s btn-sm" onclick="unarchiveFiche('client','${id}')">♻️ Restaurer</button>`
+        :`<button class="btn btn-d btn-sm" onclick="archiveFiche('client','${id}')">📦 Archiver</button>`
+      }
+      <button class="btn btn-d btn-sm" onclick="delClient('${id}');CM()">🗑 Supprimer</button>
+      <div style="display:flex;gap:7px"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openClientForm('${id}')">✏️ Modifier</button></div>
+    </div>`;
   OM(esc(c.nom),html,'xl');
 }
 function openActionForm(prefClientId){
@@ -2302,6 +2528,7 @@ const PIPE_CMD=[
 ];
 
 let vivierView='list',clientsView='list';
+let activeCmdTab={};  // Store active tab per command ID
 
 function setVivierView(v){
   vivierView=v;
