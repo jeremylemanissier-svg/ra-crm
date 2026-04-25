@@ -168,6 +168,9 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 #mb.n{max-width:460px;}
 #mb.w{max-width:660px;}
 #mb.xl{max-width:880px;}
+#mb.xxl{max-width:96vw;width:1200px;}
+#mb.xxl .mbody{max-height:88vh;}
+#mb.xxl .split-panel{height:78vh;}
 .mh{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 0;}
 .mh h3{font-size:16px;font-weight:600;color:var(--tp);}
 .mhx{background:none;border:none;cursor:pointer;color:var(--tm);font-size:22px;line-height:1;padding:0;transition:color .15s;}
@@ -241,7 +244,24 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 /* ══ ADMIN ══ */
 .admin-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--br);}
 
-/* ══ BULK IMPORT ══ */
+/* ══ VOICE DICTATION ══ */
+.mic-btn{background:none;border:1px solid var(--br);border-radius:7px;padding:4px 10px;cursor:pointer;font-size:13px;color:var(--ts);font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:all .2s;}
+.mic-btn.active{background:#fef2f2;border-color:#dc2626;color:#dc2626;animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.mic-wrap{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.mic-status{font-size:11px;color:var(--tm);font-style:italic;}
+
+/* ══ DOUBLON ALERT ══ */
+.doublon-alert{background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:12px 14px;margin-bottom:12px;}
+.doublon-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--br);font-size:12px;cursor:pointer;}
+.doublon-row:last-child{border-bottom:none;}
+.doublon-row:hover{color:var(--acc);}
+
+/* ══ SPLIT PANEL ══ */
+.split-panel{display:grid;grid-template-columns:1fr 1fr;gap:0;height:100%;}
+.split-left{overflow-y:auto;padding:0 16px 16px 0;border-right:1px solid var(--br);}
+.split-right{overflow-y:auto;padding:0 0 16px 16px;background:var(--bg);}
+.split-right-title{font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
 .bi-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;margin-bottom:5px;font-size:13px;background:var(--bg);}
 .bi-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
 .bi-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
@@ -308,6 +328,11 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 .anon-toolbar{background:var(--sb);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .anon-page-nav{display:flex;align-items:center;gap:8px;color:white;font-size:13px;}
 
+/* ══ VOICE BTN ══ */
+.voice-btn{border:none;background:var(--bg);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:14px;color:var(--ts);margin-left:6px;vertical-align:middle;transition:all .15s;}
+.voice-btn:hover{background:var(--br);color:var(--tp);}
+.fld label{display:flex;align-items:center;flex-wrap:wrap;gap:4px;}
+
 .empty{text-align:center;padding:60px 0;color:var(--tm);font-size:13px;}
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -341,9 +366,13 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 <div id="app">
   <div class="app-inner">
     <div id="sidebar">
-      <div class="sb-logo">
-        <div class="sb-logo-mark">US</div>
-        <div class="sb-logo-text">Up<span>Search</span></div>
+      <div class="sb-logo" onclick="G('dash')" style="cursor:pointer" title="Retour accueil">
+        <img src="/logo.png" alt="UpSearch" style="height:34px;max-width:150px;object-fit:contain"
+          onerror="this.style.display='none';document.getElementById('sb-logo-fallback').style.display='flex'">
+        <div id="sb-logo-fallback" style="display:none;align-items:center;gap:10px">
+          <div class="sb-logo-mark">US</div>
+          <div class="sb-logo-text">Up<span>Search</span></div>
+        </div>
       </div>
       <nav>
         <button class="sb-btn active" onclick="G('dash')" id="nav-dash">
@@ -1238,23 +1267,31 @@ function bOpts(arr,pf,pv,sel,ph){let it=REF[arr]||[];if(pf&&pv)it=it.filter(x=>x
 function bGrp(pA,cA,pId,sel,ph){let h=`<option value="">${ph}</option>`;(REF[pA]||[]).forEach(p=>{const ch=(REF[cA]||[]).filter(c=>c[pId]===p.id);if(ch.length)h+=`<optgroup label="${esc(p.label)}">`+ch.map(c=>`<option value="${c.id}"${sel===c.id?' selected':''}>${esc(c.label)}</option>`).join('')+'</optgroup>';});return h;}
 
 // Searchable select widget
+// Indexed items cache for searchSel (avoids HTML encoding bugs with apostrophes & special chars)
+const _ssItems={};
 function searchSel(id,items,selVal,placeholder){
   const filtered=(items||[]).filter(x=>x.actif!==false);
+  _ssItems[id]=filtered; // Store for click handler
   const selLabel=filtered.find(x=>x.id===selVal)?.label||'';
   return `<div class="search-sel-wrap" style="position:relative">
     <input class="geo-input" id="${id}-inp" placeholder="${esc(placeholder)}" autocomplete="off" value="${esc(selLabel)}"
       oninput="ssFilter('${id}',this.value)" onfocus="ssOpen('${id}')" onblur="setTimeout(()=>ssClose('${id}'),200)">
     <input type="hidden" id="${id}-val" value="${esc(selVal||'')}">
     <div class="geo-drop" id="${id}-drop" style="max-height:200px">
-      ${filtered.map(x=>`<div class="geo-opt" onclick="ssPick('${id}','${esc(x.id)}','${esc(x.label).replace(/'/g,"&#39;")}')"><span class="geo-opt-name">${esc(x.label)}</span></div>`).join('')}
+      ${filtered.map((x,i)=>`<div class="geo-opt" data-idx="${i}" data-ssid="${esc(id)}" onmousedown="event.preventDefault()" onclick="ssPickIdx('${id}',${i})"><span class="geo-opt-name">${esc(x.label)}</span></div>`).join('')}
     </div>
   </div>`;
 }
+function ssPickIdx(id,idx){
+  const items=_ssItems[id]||[];
+  const x=items[idx];if(!x)return;
+  ssPick(id,x.id,x.label);
+}
 function ssFilter(id,q){
   const drop=document.getElementById(id+'-drop');if(!drop)return;
-  const ql=q.toLowerCase();let any=false;
-  drop.querySelectorAll('.geo-opt').forEach(o=>{const show=!ql||o.textContent.toLowerCase().includes(ql);o.style.display=show?'':'none';if(show)any=true;});
-  drop.classList.toggle('open',true);
+  const ql=q.toLowerCase();
+  drop.querySelectorAll('.geo-opt').forEach(o=>{const show=!ql||o.textContent.toLowerCase().includes(ql);o.style.display=show?'':'none';});
+  drop.classList.add('open');
 }
 function ssOpen(id){
   const drop=document.getElementById(id+'-drop');if(!drop)return;
@@ -1264,7 +1301,7 @@ function ssOpen(id){
 function ssClose(id){const d=document.getElementById(id+'-drop');if(d)d.classList.remove('open');}
 function ssPick(id,val,label){
   const inp=document.getElementById(id+'-inp');const hidden=document.getElementById(id+'-val');
-  if(inp)inp.value=label;if(hidden)hidden.value=val;
+  if(inp)inp.value=label||'';if(hidden)hidden.value=val||'';
   ssClose(id);
   if(id==='f-fm')refreshMetiersForm(val);
   if(id==='f-sa')refreshSousSectForm(val,'f-ss','cand');
@@ -1276,7 +1313,7 @@ function refreshMetiersForm(famId){
   const metiers=(REF.metiers||[]).filter(m=>m.actif!==false&&(!famId||m.famille_id===famId));
   c.innerHTML=[1,2,3].map(n=>`<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em">Métier ${n}${n===1?' (principal)':''}</label>${searchSel('f-m'+n,metiers,ssGet('f-m'+n)||'','— Métier —')}</div>`).join('');
 }
-function refreshSousSectForm(sectId,prefix,ctx){
+function refreshSousSectForm(sectId,prefix){
   const c=document.getElementById(prefix+'-wrap');if(!c)return;
   const ss=(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&(!sectId||s.secteur_id===sectId));
   c.innerHTML=searchSel(prefix,ss,ssGet(prefix)||'','— Sous-secteur —');
@@ -1291,12 +1328,20 @@ function openCandForm(id){
   const metiersFam=c.famille_metier_id?(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===c.famille_metier_id):(REF.metiers||[]).filter(m=>m.actif!==false);
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
-  const html=`
+  const isPDF=c.cv&&(c.cv.type==='application/pdf'||c.cv.name?.toLowerCase().endsWith('.pdf'));
+  const cvPanelHtml=c.cv?`
+    <div class="split-right">
+      <div class="split-right-title">📄 CV — ${esc(c.cv.name)}</div>
+      ${isPDF?`<iframe src="data:application/pdf;base64,${c.cv.data}" width="100%" height="700" style="border:1px solid var(--br);border-radius:8px;display:block"></iframe>`
+        :`<div style="text-align:center;padding:20px"><img src="data:${c.cv.type};base64,${c.cv.data}" style="max-width:100%;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.1)"></div>`}
+    </div>`:'';
+  const formHtml=`
+    <div id="doublon-cand-alert"></div>
     <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px">
       <div><div class="fld" style="margin:0"><label style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px;display:block">Photo</label><div id="photo-zone">${photoHtml}</div></div></div>
       <div style="flex:1">
-        <div class="fr"><div class="fld"><label>Prénom</label><input id="f-prenom" value="${v('prenom')}"></div><div class="fld"><label>Nom</label><input id="f-nom" value="${v('nom')}"></div></div>
-        <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div></div>
+        <div class="fr"><div class="fld"><label>Prénom</label><input id="f-prenom" value="${v('prenom')}" oninput="checkCandDoublons()"></div><div class="fld"><label>Nom</label><input id="f-nom" value="${v('nom')}" oninput="checkCandDoublons()"></div></div>
+        <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}" oninput="checkCandDoublons()"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}" oninput="checkCandDoublons()"></div></div>
       </div>
     </div>
     <div class="fld"><label>CV — Ajoutez un PDF pour l'extraction automatique</label><div id="cv-zone">${cvHtml}</div><div id="parse-banner" class="parse-banner"></div></div>
@@ -1312,9 +1357,10 @@ function openCandForm(id){
     <div class="section-title">Localisation & Expérience</div>
     <div class="fld"><label>Localisation</label>${geoWidget('geo-c',c.ville||c.loc||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
     <div class="fr"><div class="fld"><label>Entreprise actuelle</label><input id="f-ent" value="${v('ent')}"></div><div class="fld"><label>Prétentions salariales</label><input id="f-sal" value="${v('sal')}"></div></div>
-    <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="f-linkedin" value="${v('linkedin')}" placeholder="https://linkedin.com/in/..."></div>
+    <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="f-linkedin" value="${v('linkedin')}" placeholder="https://linkedin.com/in/..." oninput="checkCandDoublons()"></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveCand()">Enregistrer</button></div>`;
-  OM(id?'Modifier le candidat':'Nouveau candidat',html,'w');
+  const html=c.cv?`<div class="split-panel"><div class="split-left">${formHtml}</div>${cvPanelHtml}</div>`:formHtml;
+  OM(id?'Modifier le candidat':'Nouveau candidat',html,c.cv?'xxl':'w');
 }
 function saveCand(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
@@ -1322,35 +1368,35 @@ function saveCand(){
   let photo=EID?getCand(EID)?.photo||null:null;if(window._pPhoto)photo=window._pPhoto;window._pPhoto=null;
   let cv=EID?getCand(EID)?.cv||null:null;if(window._pCV)cv=window._pCV;window._pCV=null;
   const existing=EID?getCand(EID):{};
-  const form={
-    // Identité
-    prenom:g('prenom'),nom:g('nom'),email:g('email'),phone:g('phone'),
-    poste:g('poste'),statut_cand:g('statut_cand')||'Candidat',
-    // Nouveaux champs métier
-    famille_metier_id:ssGet('f-fm'),
-    metier1_id:ssGet('f-m1'),metier2_id:ssGet('f-m2'),metier3_id:ssGet('f-m3'),
-    // Nouveaux champs secteur
-    secteur_act_new_id:ssGet('f-sa'),
-    sous_secteur_id:ssGet('f-ss'),
-    // Anciens champs conservés (rétrocompat)
-    secteur_act_id:existing.secteur_act_id||'',
-    secteur_poste_id:existing.secteur_poste_id||'',
-    famille_id:existing.famille_id||'',
-    poste_ref_id:existing.poste_ref_id||'',
-    poste_ref_id2:existing.poste_ref_id2||'',
-    poste_ref_id3:existing.poste_ref_id3||'',
-    // Localisation
-    ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,
-    loc:geo.ville||(existing.loc||''),
-    ent:g('ent'),sal:g('sal'),linkedin:g('linkedin'),
-    photo,cv,
-    mots_cles:existing.mots_cles||[],
-    pieces_jointes:existing.pieces_jointes||[],
-    cv_anonymise:existing.cv_anonymise||null,
-    notes:existing.notes||[],prequalif:existing.prequalif||{},entretien:existing.entretien||{},controles_ref:existing.controles_ref||[]
+  const prenom=g('prenom'),nom=g('nom'),email=g('email'),phone=g('phone'),linkedin=g('linkedin');
+  const doSave=()=>{
+    const form={
+      prenom,nom,email,phone,
+      poste:g('poste'),statut_cand:g('statut_cand')||'Candidat',
+      famille_metier_id:ssGet('f-fm'),
+      metier1_id:ssGet('f-m1'),metier2_id:ssGet('f-m2'),metier3_id:ssGet('f-m3'),
+      secteur_act_new_id:ssGet('f-sa'),sous_secteur_id:ssGet('f-ss'),
+      secteur_act_id:existing.secteur_act_id||'',secteur_poste_id:existing.secteur_poste_id||'',
+      famille_id:existing.famille_id||'',poste_ref_id:existing.poste_ref_id||'',
+      poste_ref_id2:existing.poste_ref_id2||'',poste_ref_id3:existing.poste_ref_id3||'',
+      ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,
+      loc:geo.ville||(existing.loc||''),
+      ent:g('ent'),sal:g('sal'),linkedin,
+      photo,cv,
+      mots_cles:existing.mots_cles||[],pieces_jointes:existing.pieces_jointes||[],
+      cv_anonymise:existing.cv_anonymise||null,
+      notes:existing.notes||[],prequalif:existing.prequalif||{},entretien:existing.entretien||{},
+      entretiens:existing.entretiens||[],controles_ref:existing.controles_ref||[]
+    };
+    EID?DB.candidats=DB.candidats.map(c=>c.id===EID?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
+    save();CM();R(CV);
   };
-  EID?DB.candidats=DB.candidats.map(c=>c.id===EID?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
-  save();CM();R(CV);
+  // Duplicate check only on creation
+  if(!EID){
+    const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
+    if(dupes.length){showDuplicatesAlert(dupes,'cand',doSave);return;}
+  }
+  doSave();
 }
 
 function openCandDetail(id){
@@ -1511,7 +1557,7 @@ function openAddEntretien(candId){
   OM('Ajouter un entretien',`
     <div class="fr"><div class="fld"><label>Date de l'entretien</label><input type="date" id="ei-date" value="${TODAY}"></div><div class="fld"><label>Consultant</label><select id="ei-cons">${cOpts}</select></div></div>
     <div class="fld"><label>Poste concerné</label><select id="ei-poste">${metierOpts}</select></div>
-    <div class="fld"><label>Compte-rendu de l'entretien</label><textarea id="ei-content" style="min-height:180px;line-height:1.7" placeholder="Impressions générales, points forts, points d'attention, échanges clés..."></textarea></div>
+    <div class="fld"><label>Compte-rendu de l'entretien</label>${micWidget('ei-content')}<textarea id="ei-content" style="min-height:180px;line-height:1.7" placeholder="Impressions générales, points forts, points d'attention, échanges clés..."></textarea></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNewEntretien('${candId}')">Enregistrer</button></div>`,'w');
 }
 
@@ -1644,15 +1690,27 @@ function sireneSelect(idx){
   const drop=document.getElementById('sirene-drop');if(!drop||!drop._results)return;
   const r=drop._results[idx];if(!r)return;
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
-  set('f-nom',r.nom);set('f-siret',r.siret);set('f-siren',r.siren);
+  set('f-nom',r.nom);set('f-siren',r.siren);set('f-siret',r.siret);
   set('f-adresse_sirene',r.adresse);set('f-naf',r.naf);set('f-naf_label',r.naf_label);
   set('f-statut_sirene',r.statut);set('f-date_creation_sirene',r.date_creation);
   set('f-source_sirene','API SIRENE');
-  // Also fill geo field
-  const geoInp=document.getElementById('geo-cl-ville');if(geoInp){geoInp.value=r.ville;}
+  const geoInp=document.getElementById('geo-cl-ville');if(geoInp&&r.ville){geoInp.value=r.ville;}
   const sireneInp=document.getElementById('sirene-inp');if(sireneInp)sireneInp.value=r.nom;
   drop.classList.remove('open');
-  showToast('✓ Données INSEE importées — vérifiez et complétez');
+  // Offer to pick specific établissement if SIREN available
+  if(r.siren){
+    showToast('✓ Données INSEE importées');
+    setTimeout(()=>{
+      if(confirm('Souhaitez-vous sélectionner un établissement précis (SIRET) ?')){
+        openEtabPicker(r.siren,(etab)=>{
+          set('f-siret',etab.siret);
+          set('f-adresse_sirene',etab.adresse);
+          const gv=document.getElementById('geo-cl-ville');if(gv&&etab.ville)gv.value=etab.ville;
+          showToast('✓ Établissement sélectionné');
+        });
+      }
+    },500);
+  }
 }
 
 function buildControlesRefView(candId, controles){
@@ -1843,6 +1901,7 @@ function openCmdDetail(id){
         <div style="font-size:13px;font-weight:600">Informations générales sur la commande</div>
         ${infos._saved_by?`<div style="font-size:11px;color:var(--tm)">Modifié par <b>${esc(infos._saved_by)}</b> le ${infos._saved_at}</div>`:''}
       </div>
+      ${micWidget('cmd-infos-'+id)}
       <textarea id="cmd-infos-${id}" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:8px 11px;font-size:13px;min-height:120px;font-family:inherit;resize:vertical;background:var(--card)" placeholder="Informations générales, contexte, historique...">${esc(infos.content||cmd.desc||'')}</textarea>
       <div style="display:flex;justify-content:flex-end;margin-top:8px">
         <button class="btn btn-p btn-sm" onclick="saveCmdInfos('${id}')">💾 Enregistrer</button>
@@ -2125,8 +2184,10 @@ function openClientForm(id){
           oninput="sireneType(this.value)" onblur="setTimeout(()=>sireneDrop(''),250)" value="${v('nom')}">
         <div class="geo-drop" id="sirene-drop" style="max-height:250px"></div>
       </div>
+      <div id="sirene-etabs" style="margin-top:8px"></div>
       <div style="font-size:11px;color:var(--tm);margin-top:4px">Source : ${c.source_sirene?`<b>${esc(c.source_sirene)}</b>`:'non renseignée'}</div>
     </div>
+    <div id="doublon-client-alert"></div>
     <div class="fr"><div class="fld"><label>Nom entreprise</label><input id="f-nom" value="${v('nom')}"></div><div class="fld"><label>Type</label><select id="f-type">${tOpts}</select></div></div>
     <div class="fr"><div class="fld"><label>Consultant responsable</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Effectif</label><select id="f-effectif">${effOpts}</select></div></div>
     <div class="fr">
@@ -2180,20 +2241,7 @@ function openClientDetail(id){
   const cts=DB.contacts.filter(ct=>ct.client_id===id);
   const actsH=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${esc(a.cons)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><button class="ic-btn" onclick="delAction('${a.id}')" style="flex-shrink:0">🗑</button></div>`;}).join('');
   const cmdsH=cmds.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune commande</div>':cmds.map(cmd=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="CM();openCmdDetail('${cmd.id}')"><div style="flex:1;font-weight:500;color:var(--tp)">${esc(cmd.titre)}</div><span style="background:${cmd.statut==='Active'?'#ecfdf5':'var(--acc-light)'};color:${cmd.statut==='Active'?'#065f46':'var(--acc2)'};border-radius:20px;padding:1px 8px;font-size:11px">${esc(cmd.statut)}</span></div>`).join('');
-  const ctsH=cts.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic;padding:10px 0">Aucun contact rattaché à cette entreprise</div>':
-    cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer" onclick="openContactDetail('${ct.id}')">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:3px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
-          <div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:6px">${esc(ct.fonction||'—')}</div>
-          <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:2px">
-            ${ct.phone?`<div>📞 ${esc(ct.phone)}</div>`:''}
-            ${ct.email?`<div>✉️ ${esc(ct.email)}</div>`:''}
-          </div>
-        </div>
-        <button class="ic-btn" onclick="event.stopPropagation();openContactForm('${ct.id}')">✏️</button>
-      </div>
-    </div>`).join('');
+  const ctsH=buildClientContacts(id,cts);
   const html=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
       ${c.logo?`<img src="${c.logo}" style="width:50px;height:50px;border-radius:12px;object-fit:cover;flex-shrink:0" alt="${esc(c.nom)}">`:`<div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>`}
@@ -2218,7 +2266,13 @@ function openClientDetail(id){
         <div class="dg"><div class="dl">Contacts</div><div class="dv">${cts.length}</div></div>
       </div>
     </div>
-    <div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Contacts (${cts.length})</div>${ctsH}</div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">Contacts (${cts.length})</div>
+        <button class="btn btn-p btn-sm" onclick="openAddContactFromClient('${id}')">+ Ajouter un contact</button>
+      </div>
+      <div class="client-contacts-list">${ctsH}</div>
+    </div>
     <div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Commandes (${cmds.length})</div>${cmdsH}</div>
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -3004,6 +3058,425 @@ function setClientStatut(id,statut){
   DB.clients=DB.clients.map(c=>c.id===id?{...c,statut_commercial:statut}:c);
   save();CM();rClients();
 }
+
+// ══ DICTÉE VOCALE ═══════════════════════════════════════
+let _micActive=null; // currently active recognition instance
+
+function micWidget(targetId,label=''){
+  return `<div class="mic-wrap">
+    <button class="mic-btn" id="mic-btn-${targetId}" onclick="micToggle('${targetId}')" type="button">🎤 Dicter</button>
+    <span class="mic-status" id="mic-st-${targetId}"></span>
+  </div>`;
+}
+
+function micToggle(targetId){
+  const btn=document.getElementById('mic-btn-'+targetId);
+  const st=document.getElementById('mic-st-'+targetId);
+  const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRec){
+    if(st)st.textContent='⚠ Nécessite Chrome ou Edge';
+    return;
+  }
+  // Stop if already active on this field
+  if(_micActive&&_micActive._fieldId===targetId){
+    _micActive.stop();return;
+  }
+  // Stop any other active mic
+  if(_micActive){_micActive.stop();}
+
+  const rec=new SpeechRec();
+  rec._fieldId=targetId;
+  rec.lang='fr-FR';
+  rec.continuous=true;
+  rec.interimResults=true;
+
+  let finalText='';
+  const field=document.getElementById(targetId);
+  const baseText=field?field.value:'';
+
+  rec.onstart=()=>{
+    _micActive=rec;
+    if(btn){btn.classList.add('active');btn.textContent='⏹ Arrêter';}
+    if(st)st.textContent='🔴 Dictée en cours...';
+  };
+  rec.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)finalText+=e.results[i][0].transcript+' ';
+      else interim=e.results[i][0].transcript;
+    }
+    if(field)field.value=baseText+(finalText+interim);
+  };
+  rec.onerror=e=>{
+    if(e.error==='not-allowed'){if(st)st.textContent='⚠ Accès micro refusé';}
+    else{if(st)st.textContent='⚠ Erreur: '+e.error;}
+    micStop(targetId,btn,st);
+  };
+  rec.onend=()=>micStop(targetId,btn,st);
+  rec.start();
+}
+function micStop(targetId,btn,st){
+  _micActive=null;
+  if(btn){btn.classList.remove('active');btn.textContent='🎤 Dicter';}
+  if(st)st.textContent='';
+}
+
+// ══ DÉTECTION DOUBLONS ══════════════════════════════════
+function normalize(s){return(s||'').toLowerCase().replace(/[\s\-\.]/g,'');}
+
+function findCandDoublons(prenom,nom,email,phone,linkedin,excludeId){
+  const results=[];
+  DB.candidats.filter(c=>c.id!==excludeId).forEach(c=>{
+    const reasons=[];
+    if(email&&normalize(email)===normalize(c.email))reasons.push('Email identique');
+    if(phone&&normalize(phone)===normalize(c.phone))reasons.push('Téléphone identique');
+    if(linkedin&&normalize(linkedin)===normalize(c.linkedin))reasons.push('LinkedIn identique');
+    if(!reasons.length&&prenom&&nom&&normalize(prenom)===normalize(c.prenom)&&normalize(nom)===normalize(c.nom))reasons.push('Nom + Prénom identiques');
+    if(reasons.length)results.push({fiche:c,reasons,type:'candidat'});
+  });
+  return results;
+}
+function findClientDoublons(nom,siren,siret,site_web,excludeId){
+  const results=[];
+  DB.clients.filter(c=>c.id!==excludeId).forEach(c=>{
+    const reasons=[];
+    if(siret&&normalize(siret)===normalize(c.siret))reasons.push('SIRET identique');
+    else if(siren&&normalize(siren)===normalize(c.siren))reasons.push('SIREN identique');
+    else if(nom&&normalize(nom)===normalize(c.nom))reasons.push('Raison sociale identique');
+    if(site_web&&site_web.length>4&&normalize(site_web)===normalize(c.site_web))reasons.push('Site web identique');
+    if(reasons.length)results.push({fiche:c,reasons,type:'client'});
+  });
+  return results;
+}
+function findContactDoublons(email,phone,nom,prenom,excludeId){
+  const results=[];
+  DB.contacts.filter(c=>c.id!==excludeId).forEach(c=>{
+    const reasons=[];
+    if(email&&normalize(email)===normalize(c.email))reasons.push('Email identique');
+    if(phone&&normalize(phone)===normalize(c.phone))reasons.push('Téléphone identique');
+    if(!reasons.length&&nom&&prenom&&normalize(nom)===normalize(c.nom)&&normalize(prenom)===normalize(c.prenom))reasons.push('Nom + Prénom identiques');
+    if(reasons.length)results.push({fiche:c,reasons,type:'contact'});
+  });
+  return results;
+}
+
+function showDoublonAlert(doublons,containerId,onContinue){
+  const el=document.getElementById(containerId);if(!el)return;
+  if(!doublons.length){el.innerHTML='';return;}
+  const rows=doublons.map(d=>{
+    const f=d.fiche;
+    const name=f.prenom?`${esc(f.prenom)} ${esc(f.nom)}`:(esc(f.nom)||'—');
+    const detail=f.email?esc(f.email):(f.siren?`SIREN: ${esc(f.siren)}`:'');
+    return `<div class="doublon-row" onclick="${d.type==='candidat'?`CM();openCandDetail('${f.id}')`:`CM();openClientDetail('${f.id}')`}">
+      <div style="font-size:18px">${d.type==='candidat'?'👤':'🏢'}</div>
+      <div style="flex:1"><div style="font-weight:600">${name}</div><div style="color:var(--tm)">${detail} · ${esc(d.reasons.join(', '))}</div></div>
+      <span style="color:var(--acc);font-size:11px">Voir →</span>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="doublon-alert">
+    <div style="font-weight:600;margin-bottom:8px;color:#d97706">⚠️ Fiche(s) similaire(s) déjà existante(s)</div>
+    ${rows}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="btn btn-s btn-sm" onclick="document.getElementById('${containerId}').innerHTML=''">Ignorer et continuer</button>
+    </div>
+  </div>`;
+}
+
+// Wrappers appelés depuis les formulaires
+function checkCandDoublons(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const d=findCandDoublons(g('prenom'),g('nom'),g('email'),g('phone'),g('linkedin'),EID||'');
+  showDoublonAlert(d,'doublon-cand-alert');
+}
+function checkClientDoublons(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const d=findClientDoublons(g('nom'),g('siren'),g('siret'),g('site_web'),EID||'');
+  showDoublonAlert(d,'doublon-client-alert');
+}
+
+// ══ CONTACT DEPUIS FICHE CLIENT ════════════════════════
+function openCreateContactForClient(clientId){
+  const cl=getClient(clientId);
+  OM('Ajouter un contact — '+esc(cl?.nom||''),`
+    <div style="font-size:12px;color:var(--acc2);background:var(--acc-light);border-radius:7px;padding:8px 12px;margin-bottom:14px">
+      Le contact sera automatiquement rattaché à <b>${esc(cl?.nom||'')}</b>
+    </div>
+    <div class="fr"><div class="fld"><label>Prénom</label><input id="ct-prenom" placeholder="Prénom"></div><div class="fld"><label>Nom</label><input id="ct-nom" placeholder="Nom"></div></div>
+    <div class="fld"><label>Fonction</label><input id="ct-fonction" placeholder="ex: Directeur travaux, DRH..."></div>
+    <div class="fr"><div class="fld"><label>Téléphone</label><input id="ct-phone" type="tel"></div><div class="fld"><label>Email</label><input id="ct-email" type="email"></div></div>
+    <div class="fld"><label>LinkedIn</label><input id="ct-linkedin" placeholder="https://linkedin.com/in/..."></div>
+    <div class="fld"><label>Note</label><textarea id="ct-note" style="min-height:70px" placeholder="Informations complémentaires..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveContactForClient('${clientId}')">Créer le contact</button></div>`,'w');
+}
+function saveContactForClient(clientId){
+  const g=id=>document.getElementById('ct-'+id)?.value||'';
+  const prenom=g('prenom'),nom=g('nom');
+  if(!prenom||!nom){alert('Prénom et nom sont obligatoires.');return;}
+  const ct={id:genId(),prenom,nom,fonction:g('fonction'),phone:g('phone'),email:g('email'),linkedin:g('linkedin'),note:g('note'),client_id:clientId,created_at:TODAY};
+  DB.contacts.push(ct);
+  save();CM();
+  // Refresh the contact list in the open client detail
+  const cts=DB.contacts.filter(c=>c.client_id===clientId);
+  const container=document.querySelector(`[data-client-contacts="${clientId}"]`);
+  if(container)container.innerHTML=buildClientContacts(clientId,cts);
+  showToast('✓ Contact créé et rattaché au client');
+}
+function buildClientContacts(clientId,cts){
+  if(!cts.length)return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:10px 0">Aucun contact rattaché à cette entreprise</div>';
+  return cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer" onclick="openContactDetail('${ct.id}')">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:3px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:6px">${esc(ct.fonction||'—')}</div>
+        <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:2px">
+          ${ct.phone?`<div>📞 ${esc(ct.phone)}</div>`:''}
+          ${ct.email?`<div>✉️ ${esc(ct.email)}</div>`:''}
+        </div>
+      </div>
+      <button class="ic-btn" onclick="event.stopPropagation();openContactForm('${ct.id}')">✏️</button>
+    </div>
+  </div>`).join('');
+}
+
+// ══ ÉTABLISSEMENTS SIRET (extension SIRENE) ══════════════
+async function sireneGetEtablissements(siren){
+  if(!siren||siren.length<9)return[];
+  try{
+    const r=await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(siren)}&page=1&per_page=1`);
+    if(!r.ok)return[];
+    const data=await r.json();
+    const ent=data.results?.[0];if(!ent)return[];
+    // Get establishments from matching_etablissements if available
+    const etabs=(ent.matching_etablissements||[ent.siege]).filter(Boolean);
+    return etabs.map(e=>({
+      siret:e.siret||'',
+      adresse:[e.numero_voie,e.type_voie,e.libelle_voie,e.code_postal,e.libelle_commune].filter(Boolean).join(' '),
+      ville:e.libelle_commune||'',
+      code_postal:e.code_postal||'',
+      est_siege:e.est_siege||false,
+    }));
+  }catch(e){return[];}
+}
+
+async function sireneShowEtablissements(siren){
+  const etabs=await sireneGetEtablissements(siren);
+  const container=document.getElementById('sirene-etabs');if(!container)return;
+  if(!etabs.length){container.innerHTML='<div style="font-size:12px;color:var(--tm)">Aucun établissement trouvé</div>';return;}
+  container.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--ts);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Sélectionner un établissement</div>`+
+    etabs.map((e,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--br);border-radius:7px;margin-bottom:5px;cursor:pointer;background:var(--card)" onclick="sirenePickEtab(${i})">
+      <div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(e.siret)} ${e.est_siege?'<span style="font-size:10px;background:var(--acc-light);color:var(--acc2);border-radius:4px;padding:1px 5px">Siège</span>':''}</div>
+      <div style="font-size:11px;color:var(--ts)">${esc(e.adresse)}</div></div>
+      <span style="color:var(--acc);font-size:11px">Choisir →</span>
+    </div>`).join('');
+  container._etabs=etabs;
+}
+
+function sirenePickEtab(idx){
+  const container=document.getElementById('sirene-etabs');if(!container||!container._etabs)return;
+  const e=container._etabs[idx];if(!e)return;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  set('f-siret',e.siret);
+  set('f-adresse_sirene',e.adresse);
+  const geoInp=document.getElementById('geo-cl-ville');if(geoInp&&e.ville){geoInp.value=e.ville;}
+  container.innerHTML=`<div style="font-size:12px;color:var(--green)">✓ Établissement sélectionné : ${esc(e.siret)} — ${esc(e.ville)}</div>`;
+  showToast('✓ Établissement sélectionné');
+}
+
+// Update sireneType to show étabs button after company select
+const _origSireneSelect=sireneSelect;
+function sireneSelect(idx){
+  _origSireneSelect(idx);
+  const drop=document.getElementById('sirene-drop');
+  const r=drop?._results?.[idx];
+  if(r?.siren){
+    const etabsContainer=document.getElementById('sirene-etabs');
+    if(etabsContainer){
+      etabsContainer.innerHTML=`<button class="btn btn-s btn-sm" onclick="sireneShowEtablissements('${r.siren}')">🏢 Voir les établissements (${r.siren})</button>`;
+    }
+  }
+}
+
+// ══ DICTÉE VOCALE ═══════════════════════════════════════
+let _voiceActive=null;let _voiceRec=null;
+function voiceBtn(targetId){
+  return `<button type="button" class="voice-btn" id="vbtn-${targetId}" onclick="toggleVoice('${targetId}')" title="Dictée vocale">🎤</button>`;
+}
+function toggleVoice(targetId){
+  if(_voiceActive===targetId){stopVoice();return;}
+  if(_voiceActive)stopVoice();
+  startVoice(targetId);
+}
+function startVoice(targetId){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('La dictée vocale nécessite Chrome ou Edge.');return;}
+  const btn=document.getElementById('vbtn-'+targetId);
+  const target=document.getElementById(targetId);if(!target)return;
+  _voiceRec=new SR();
+  _voiceRec.lang='fr-FR';_voiceRec.continuous=true;_voiceRec.interimResults=true;
+  let interim='';
+  const baseVal=target.value;
+  _voiceRec.onresult=e=>{
+    interim='';let final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)final+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    if(final){target.value=baseVal+(target.value.slice(baseVal.length).replace(interim,''))+final;}
+    else{target.value=baseVal+(target.value.slice(baseVal.length))+interim;}
+  };
+  _voiceRec.onerror=e=>{
+    if(e.error==='not-allowed')alert('Accès au micro refusé. Autorisez le micro dans les paramètres de votre navigateur.');
+    stopVoice();
+  };
+  _voiceRec.onend=()=>{if(_voiceActive===targetId)stopVoice();};
+  try{_voiceRec.start();}catch(e){alert('Erreur micro : '+e.message);return;}
+  _voiceActive=targetId;
+  if(btn){btn.textContent='⏹';btn.style.background='#fef2f2';btn.style.color='var(--red)';btn.title='Arrêter la dictée';}
+}
+function stopVoice(){
+  if(_voiceRec)try{_voiceRec.stop();}catch(e){}
+  const btn=document.getElementById('vbtn-'+_voiceActive);
+  if(btn){btn.textContent='🎤';btn.style.background='';btn.style.color='';btn.title='Dictée vocale';}
+  _voiceActive=null;_voiceRec=null;
+}
+
+// ══ DÉTECTION DE DOUBLONS ════════════════════════════════
+function normPhone(p){return (p||'').replace(/[\s\-\.\(\)]/g,'');}
+function normEmail(e){return (e||'').toLowerCase().trim();}
+function normSiret(s){return (s||'').replace(/\s/g,'');}
+function normNom(n){return (n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+
+function findDuplicatesCand(prenom,nom,email,phone,linkedin,excludeId){
+  const ep=normEmail(email),ph=normPhone(phone),li=(linkedin||'').trim(),fn=normNom(prenom+' '+nom);
+  return DB.candidats.filter(c=>{
+    if(c.id===excludeId)return false;
+    if(ep&&normEmail(c.email)===ep)return true;
+    if(ph&&ph.length>6&&normPhone(c.phone)===ph)return true;
+    if(li&&li===(c.linkedin||'').trim())return true;
+    if(fn.length>3&&normNom((c.prenom||'')+' '+(c.nom||''))===fn)return true;
+    return false;
+  });
+}
+function findDuplicatesClient(nom,siren,siret,excludeId){
+  const ns=normNom(nom),si=normSiret(siren),sit=normSiret(siret);
+  return DB.clients.filter(c=>{
+    if(c.id===excludeId)return false;
+    if(sit&&sit.length>10&&normSiret(c.siret)===sit)return true;
+    if(si&&si.length>8&&normSiret(c.siren)===si)return true;
+    if(ns.length>3&&normNom(c.nom)===ns)return true;
+    return false;
+  });
+}
+function findDuplicatesContact(prenom,nom,email,phone,excludeId){
+  const ep=normEmail(email),ph=normPhone(phone),fn=normNom(prenom+' '+nom);
+  return DB.contacts.filter(c=>{
+    if(c.id===excludeId)return false;
+    if(ep&&normEmail(c.email)===ep)return true;
+    if(ph&&ph.length>6&&normPhone(c.phone)===ph)return true;
+    if(fn.length>3&&normNom((c.prenom||'')+' '+(c.nom||''))===fn)return true;
+    return false;
+  });
+}
+function showDuplicatesAlert(dupes,type,onContinue){
+  if(!dupes.length){onContinue();return;}
+  const rows=dupes.slice(0,3).map(d=>{
+    const nm=d.prenom?`${esc(d.prenom)} ${esc(d.nom)}`:esc(d.nom);
+    const info=d.email?esc(d.email):d.siret?esc(d.siret):'';
+    return `<div style="background:var(--bg);border-radius:7px;padding:9px 12px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:13px;font-weight:600">${nm}</div><div style="font-size:11px;color:var(--tm)">${info}${d.cons?' · '+esc(d.cons):''}</div></div>
+      <button class="btn btn-s btn-sm" onclick="CM()">Voir</button>
+    </div>`;
+  }).join('');
+  OM('⚠️ Doublon potentiel détecté',`
+    <div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:9px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--amber)">
+      Une fiche similaire existe déjà. Vérifiez avant de créer.
+    </div>
+    <div style="margin-bottom:14px">${rows}</div>
+    <div class="fa">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-d" onclick="CM();(${onContinue.toString()})()">Créer quand même</button>
+    </div>`,'n');
+}
+
+// ══ CONTACT DEPUIS FICHE CLIENT ══════════════════════════
+function openAddContactFromClient(clientId){
+  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  OM('+ Ajouter un contact',`
+    <div style="font-size:12px;color:var(--acc2);background:var(--acc-light);border-radius:7px;padding:8px 12px;margin-bottom:14px">Sera automatiquement rattaché à cette entreprise</div>
+    <div class="fr"><div class="fld"><label>Prénom</label><input id="qc-prenom" placeholder="Prénom"></div><div class="fld"><label>Nom</label><input id="qc-nom" placeholder="Nom"></div></div>
+    <div class="fld"><label>Fonction</label><input id="qc-fonction" placeholder="ex: Directeur travaux, RH..."></div>
+    <div class="fr"><div class="fld"><label>Téléphone</label><input id="qc-phone" type="tel" placeholder="+33..."></div><div class="fld"><label>Email</label><input id="qc-email" type="email" placeholder="email@..."></div></div>
+    <div class="fld"><label>Consultant référent</label><select id="qc-cons">${cOpts}</select></div>
+    <div class="fld"><label>Commentaire</label><textarea id="qc-comment" style="min-height:60px"></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveContactFromClient('${clientId}')">Créer le contact</button></div>`,'n');
+}
+function saveContactFromClient(clientId){
+  const g=id=>document.getElementById(id)?.value?.trim()||'';
+  const prenom=g('qc-prenom'),nom=g('qc-nom'),email=g('qc-email'),phone=g('qc-phone');
+  if(!prenom||!nom){alert('Prénom et nom sont obligatoires.');return;}
+  const dupes=findDuplicatesContact(prenom,nom,email,phone,null);
+  const doSave=()=>{
+    const ct={id:genId(),prenom,nom,fonction:g('qc-fonction'),phone,email,cons:g('qc-cons'),comment:g('qc-comment'),client_id:clientId,created_at:TODAY};
+    DB.contacts.push(ct);save();CM();
+    // Refresh contacts section in client detail if open
+    const ctList=document.querySelector('.client-contacts-list');
+    if(ctList){const cts=DB.contacts.filter(x=>x.client_id===clientId);ctList.innerHTML=buildClientContactsHtml(clientId,cts);}
+    showToast('✓ Contact créé et rattaché au client');
+  };
+  if(dupes.length){showDuplicatesAlert(dupes,'contact',doSave);}else{doSave();}
+}
+function buildClientContactsHtml(clientId,cts){
+  if(!cts.length)return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:10px 0">Aucun contact rattaché à cette entreprise</div>';
+  return cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer" onclick="openContactDetail('${ct.id}')">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:3px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:6px">${esc(ct.fonction||'—')}</div>
+        <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:2px">
+          ${ct.phone?`<div>📞 ${esc(ct.phone)}</div>`:''}
+          ${ct.email?`<div>✉️ ${esc(ct.email)}</div>`:''}
+        </div>
+      </div>
+      <button class="ic-btn" onclick="event.stopPropagation();openContactForm('${ct.id}')">✏️</button>
+    </div>
+  </div>`).join('');
+}
+
+// ══ API SIRENE — ÉTABLISSEMENTS ══════════════════════════
+async function sireneGetEtabs(siren){
+  try{
+    const r=await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(siren)}&page=1&per_page=1`);
+    if(!r.ok)return[];
+    const data=await r.json();
+    const etabs=(data.results?.[0]?.matching_etablissements||[]);
+    return etabs.map(e=>({
+      siret:e.siret||'',
+      adresse:[e.numero_voie,e.type_voie,e.libelle_voie,e.code_postal,e.libelle_commune].filter(Boolean).join(' '),
+      ville:e.libelle_commune||'',
+      est_siege:e.etablissement_siege,
+    }));
+  }catch(e){return[];}
+}
+function openEtabPicker(siren,onSelect){
+  OM('Sélectionner un établissement',`<div style="padding:20px;text-align:center;color:var(--tm)">⏳ Chargement des établissements...</div>`,'n');
+  sireneGetEtabs(siren).then(etabs=>{
+    const mbody=document.getElementById('mbody');if(!mbody)return;
+    if(!etabs.length){mbody.innerHTML='<div style="padding:20px;text-align:center;color:var(--tm)">Aucun établissement trouvé pour ce SIREN.</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>';return;}
+    mbody.innerHTML=`<div style="margin-bottom:10px;font-size:13px;color:var(--ts)">${etabs.length} établissement${etabs.length>1?'s':''} trouvé${etabs.length>1?'s':''}</div>`+
+      etabs.map((e,i)=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:7px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="CM();(${onSelect.toString()})(${JSON.stringify(e)})">
+        <div>
+          <div style="font-size:13px;font-weight:600">${esc(e.siret)}${e.est_siege?' <span style="font-size:10px;color:var(--acc2);background:var(--acc-light);border-radius:4px;padding:1px 5px">Siège</span>':''}</div>
+          <div style="font-size:12px;color:var(--ts)">${esc(e.adresse)}</div>
+        </div>
+        <button class="btn btn-p btn-sm">Sélectionner</button>
+      </div>`).join('')+
+      `<div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`;
+  });
+}
+
+// ══ LOGO UPSEARCH ════════════════════════════════════════
+// Configurable via variable LOGO_URL (peut être une data URL ou URL externe)
+const UPSEARCH_LOGO=window.UPSEARCH_LOGO||null;
 
 async function init(){
   try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();G('dash');}else{showLogin();}}
