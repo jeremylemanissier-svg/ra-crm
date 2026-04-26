@@ -2055,16 +2055,16 @@ function openCmdDetail(id){
         e.id==='prop'&&extra.salaire?`<div style="font-size:10px;color:${e.color};font-weight:500;margin-top:4px">💰 ${esc(extra.salaire)} ${esc(extra.periodicite||'')}</div>`:
         (e.id==='refc'||e.id==='refcl')&&extra.motif?`<div style="font-size:10px;color:${e.color};font-weight:500;margin-top:4px">⚠️ ${esc(extra.motif)}</div>`:'';
       return `<div class="kcard" draggable="true" data-id="${cc.candidat_id}" data-type="cmd_cand" data-cmd="${id}"
-        ondragstart="cmdKDragStart(event)" style="border-left-color:${e.color}">
-        <div style="cursor:pointer" onclick="openCandDetail('${cc.candidat_id}')">
+        onclick="openCandDetail('${cc.candidat_id}')" ondragstart="cmdKDragStart(event)" style="border-left-color:${e.color};cursor:pointer">
+        <div>
           <div style="font-size:12px;font-weight:600;margin-bottom:2px">${esc(cand.prenom)} ${esc(cand.nom)}</div>
           <div style="font-size:11px;color:var(--ts)">${esc(cand.poste||(cand.metier1_id?refLbl('metiers',cand.metier1_id):'')||'—')}</div>
           ${cand.phone?`<div style="font-size:10px;color:var(--tm)">📞 ${esc(formatPhone(cand.phone))}</div>`:''}
           ${infoTag}
         </div>
-        <div style="display:flex;gap:4px;margin-top:6px">
-          <button style="font-size:10px;color:var(--acc);background:transparent;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px 6px;font-family:inherit" onclick="openEtapeInfo('${id}','${cc.candidat_id}','${e.id}')">Détails</button>
-          <button style="font-size:10px;color:var(--red);background:transparent;border:none;cursor:pointer;font-family:inherit;margin-left:auto" onclick="rmCand('${id}','${cc.candidat_id}')">✕ Retirer</button>
+        <div style="display:flex;gap:4px;margin-top:6px" onclick="event.stopPropagation()">
+          <button style="font-size:10px;color:var(--acc);background:transparent;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px 6px;font-family:inherit" onclick="event.stopPropagation();openEtapeInfo('${id}','${cc.candidat_id}','${e.id}')">Détails</button>
+          <button style="font-size:10px;color:var(--red);background:transparent;border:none;cursor:pointer;font-family:inherit;margin-left:auto" onclick="event.stopPropagation();rmCand('${id}','${cc.candidat_id}')">✕ Retirer</button>
         </div>
       </div>`;
     }).join('');
