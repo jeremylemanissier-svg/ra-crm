@@ -1001,12 +1001,12 @@ function rContacts(){
   let res=DB.contacts;
   if(s)res=res.filter(c=>{const cl=getClient(c.client_id);return [c.prenom,c.nom,c.fonction,c.email,cl?.nom||''].join(' ').toLowerCase().includes(s);});
   if(!res.length){document.getElementById('body-contacts').innerHTML='<div class="empty">Aucun contact</div>';return;}
-  let h='<table><thead><tr><th>Nom</th><th>Fonction</th><th>Entreprise</th><th>Email</th><th>Téléphone</th><th></th></tr></thead><tbody>';
+  let h='<div style="overflow-y:auto;max-height:calc(100vh - 160px)"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Entreprise</th><th>Email</th><th>Téléphone</th><th></th></tr></thead><tbody>';
   res.forEach(ct=>{
     const cl=getClient(ct.client_id);
     h+=`<tr><td style="font-weight:500">${esc(ct.prenom)} ${esc(ct.nom)}</td><td style="color:var(--ts)">${esc(ct.fonction||'—')}</td><td>${cl?`<span style="font-size:12px;background:${cl.type==='Client'?'#ecfdf5':'var(--acc-light)'};color:${cl.type==='Client'?'#065f46':'var(--acc2)'};border-radius:5px;padding:2px 8px">${esc(cl.nom)}</span>`:'—'}</td><td style="color:var(--ts);font-size:12px">${esc(ct.email||'—')}</td><td style="color:var(--ts);font-size:12px">${esc(ct.phone||'—')}</td><td><div style="display:flex;gap:4px"><button class="ic-btn" onclick="openContactForm('${ct.id}')">✏️</button><button class="ic-btn" onclick="delContact('${ct.id}')">🗑</button></div></td></tr>`;
   });
-  document.getElementById('body-contacts').innerHTML=h+'</tbody></table>';
+  document.getElementById('body-contacts').innerHTML=h+'</tbody></table></div>';
 }
 
 function toggleDone(){showDone=!showDone;const b=document.getElementById('btn-done');b.classList.toggle('on',showDone);b.textContent=showDone?'Masquer les faites':'Voir les faites';rAgenda();}
@@ -1190,9 +1190,22 @@ async function processBulkImport(files){
   if(closeBtn)closeBtn.disabled=false;
   updBadges();
 }
-function previewPhoto(candId){
+// Ouvre une fiche candidat depuis le kanban d'une commande — le bouton X rouvre la commande
+function openCandDetailFromCmd(candId, cmdId){
+  openCandDetail(candId);
+  setTimeout(()=>{
+    const mhx=document.querySelector('.mhx');
+    if(mhx){
+      const newBtn=mhx.cloneNode(true);
+      mhx.parentNode.replaceChild(newBtn,mhx);
+      newBtn.onclick=()=>{activeCmdTab[cmdId]='cands';CM();openCmdDetail(cmdId);};
+    }
+  },0);
+}
+
+function previewCandPhoto(candId){
   const c=getCand(candId);if(!c?.photo)return;
-  OM('Photo du candidat',`<div style="text-align:center;padding:10px"><img src="${c.photo}" style="max-width:100%;max-height:70vh;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+  OM('',`<div style="text-align:center;padding:10px"><img src="${c.photo}" style="max-width:100%;max-height:70vh;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
 }
 function confirmDeletePhoto(){
   if(confirm('Supprimer la photo de ce candidat ?'))clearFile('photo');
@@ -1456,18 +1469,25 @@ function openCandDetail(id){
     <div id="cv-wrap" style="display:none;border:1px solid var(--br);border-radius:9px;overflow:hidden"><iframe id="cv-frame" src="about:blank" width="100%" height="560" style="display:block;border:none"></iframe></div></div>`:'';
   const notesH=(c.notes||[]).length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune note</div>':[...(c.notes||[])].reverse().map(n=>`<div class="note-item"><div class="note-meta">📝 <b>${esc(n.cons)}</b> · ${n.date}</div><div class="note-content">${esc(n.content)}</div></div>`).join('');
 
+  const [avBg,avTxt]=AV_COLORS[0];
+  const avIni=(c.prenom+' '+c.nom).split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const photoEl=c.photo
+    ?`<div style="width:70px;height:70px;border-radius:50%;overflow:hidden;flex-shrink:0;cursor:zoom-in" onclick="previewCandPhoto('${id}')"><img src="${c.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+    :`<div style="width:70px;height:70px;border-radius:50%;background:${avBg};color:${avTxt};display:flex;align-items:center;justify-content:center;font-size:25px;font-weight:700;flex-shrink:0">${avIni}</div>`;
+
   const html=`
-    <div style="display:flex;gap:16px;align-items:center;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
-      ${av(c.prenom+' '+c.nom,c.photo,0,58,true)}
-      <div style="flex:1">
-        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px">
-          <div style="font-size:19px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div>
+    <div style="display:flex;gap:18px;align-items:flex-start;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br);position:relative">
+      ${photoEl}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:5px">
+          <div style="font-size:20px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div>
           <span style="${statutStyle};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(c.statut_cand||'Candidat')}</span>
           ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé · ${esc(c.archive_motif||'')}</span>`:''}
         </div>
-        <div style="font-size:13px;color:var(--ts)">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div>
+        <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div>
+        <button class="btn btn-p btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
       </div>
-      <button class="btn btn-p" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
+      <button onclick="CM()" style="position:absolute;top:0;right:0;background:none;border:none;cursor:pointer;font-size:22px;color:var(--tm);line-height:1;padding:0" title="Fermer">×</button>
     </div>
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab(this,'tab-infos')">Infos</button>
@@ -2056,7 +2076,7 @@ function openCmdDetail(id){
         (e.id==='refc'||e.id==='refcl')&&extra.motif?`<div style="font-size:10px;color:${e.color};font-weight:500;margin-top:4px">⚠️ ${esc(extra.motif)}</div>`:'';
       return `<div class="kcard" draggable="true" data-id="${cc.candidat_id}" data-type="cmd_cand" data-cmd="${id}"
         ondragstart="cmdKDragStart(event)" style="border-left-color:${e.color}">
-        <div style="cursor:pointer" onclick="openCandDetail('${cc.candidat_id}')">
+        <div style="cursor:pointer" onclick="openCandDetailFromCmd('${cc.candidat_id}','${id}')">
           <div style="font-size:12px;font-weight:600;margin-bottom:2px">${esc(cand.prenom)} ${esc(cand.nom)}</div>
           <div style="font-size:11px;color:var(--ts)">${esc(cand.poste||(cand.metier1_id?refLbl('metiers',cand.metier1_id):'')||'—')}</div>
           ${cand.phone?`<div style="font-size:10px;color:var(--tm)">📞 ${esc(formatPhone(cand.phone))}</div>`:''}
@@ -2309,7 +2329,7 @@ function openClientDetail(id){
   const cmdsH=cmds.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune commande</div>':cmds.map(cmd=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="CM();openCmdDetail('${cmd.id}')"><div style="flex:1;font-weight:500;color:var(--tp)">${esc(cmd.titre)}</div><span style="background:${cmd.statut==='Active'?'#ecfdf5':'var(--acc-light)'};color:${cmd.statut==='Active'?'#065f46':'var(--acc2)'};border-radius:20px;padding:1px 8px;font-size:11px">${esc(cmd.statut)}</span></div>`).join('');
   const ctsH=buildClientContacts(id,cts);
   const html=`
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br);position:relative">
       ${c.logo?`<img src="${c.logo}" style="width:50px;height:50px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);flex-shrink:0" alt="${esc(c.nom)}">`:`<div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>`}
       <div style="flex:1"><div style="font-size:17px;font-weight:700">${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts)">${esc(c.secteur||'—')} · ${esc(c.ville||c.loc||'—')}${c.departement?' ('+esc(c.departement)+')':''}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
@@ -2317,6 +2337,7 @@ function openClientDetail(id){
         ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé</span>`:''}
         <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
       </div>
+      <button onclick="CM()" style="position:absolute;top:0;right:0;background:none;border:none;cursor:pointer;font-size:22px;color:var(--tm);line-height:1;padding:0" title="Fermer">×</button>
     </div>
     <div class="dg2" style="margin-bottom:14px">
       <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${esc(c.cons||'—')}</div></div>
@@ -2337,7 +2358,7 @@ function openClientDetail(id){
         <div style="font-size:13px;font-weight:600">Contacts (${cts.length})</div>
         <button class="btn btn-p btn-sm" onclick="openAddContactFromClient('${id}')">+ Ajouter un contact</button>
       </div>
-      <div class="client-contacts-list">${ctsH}</div>
+      <div class="client-contacts-list" style="max-height:280px;overflow-y:auto">${ctsH}</div>
     </div>
     <div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Commandes (${cmds.length})</div>${cmdsH}</div>
     <div style="margin-bottom:14px">
@@ -3411,9 +3432,11 @@ function openEtapeInfo(cmdId,candId,etape){
   OM(`${etapeLabel} — ${esc(cand?.prenom||'')} ${esc(cand?.nom||'')}`,`
     ${fields}
     <div class="fa">
-      <button class="btn btn-s" onclick="CM();activeCmdTab['${cmdId}']='cands';openCmdDetail('${cmdId}')">Ignorer</button>
+      <button class="btn btn-s" onclick="activeCmdTab['${cmdId}']='cands';CM();openCmdDetail('${cmdId}')">Fermer sans enregistrer</button>
       <button class="btn btn-p" onclick="saveEtapeInfo('${cmdId}','${candId}','${etape}')">Enregistrer</button>
     </div>`,'w');
+  // Override the modal X button to reopen the command (variables not in template literal here)
+  setTimeout(()=>{const x=document.querySelector('.mhx');if(x){const oldX=x.cloneNode(true);x.parentNode.replaceChild(oldX,x);oldX.onclick=()=>{activeCmdTab[cmdId]='cands';CM();openCmdDetail(cmdId);};}},0);
 }
 
 function saveEtapeInfo(cmdId,candId,etape){
@@ -3500,16 +3523,24 @@ function saveQuickRef(fieldId,arr,parentId){
 function openLogoAdmin(){
   if(currentUser?.role!=='admin'){alert('Accès réservé aux administrateurs.');return;}
   const s=DB._settings||{};
-  OM('⚙ Paramètres de marque',`
-    <div class="section-title">Logo principal</div>
-    <div style="margin-bottom:12px">
-      ${s.logoUrl?`<img src="${s.logoUrl}" style="height:${s.logoH||34}px;max-width:200px;object-fit:contain;background:var(--sb);padding:6px;border-radius:6px;display:block;margin-bottom:8px">`:'<div style="font-size:12px;color:var(--tm);margin-bottom:8px">Aucun logo personnalisé</div>'}
+  OM('⚙ Paramètres du logo',`
+    <div class="section-title">Logo actuel</div>
+    <div style="margin-bottom:12px;background:var(--sb);padding:10px;border-radius:8px;min-height:50px;display:flex;align-items:center">
+      ${s.logoUrl
+        ?`<img src="${s.logoUrl}" style="height:${s.logoH||34}px;max-width:${s.logoMaxW||150}px;object-fit:contain;margin-left:${s.logoML||0}px;margin-top:${s.logoMT||0}px">`
+        :'<div style="font-size:12px;color:var(--sbt)">Logo par défaut (/logo.png)</div>'}
     </div>
-    <div class="fld"><label>Remplacer le logo (PNG, SVG, JPG)</label><input type="file" accept=".png,.jpg,.svg,.webp" onchange="previewLogoAdmin(this)"></div>
+    <div class="fld"><label>Nouveau logo (PNG, JPG)</label><input type="file" accept=".png,.jpg,.jpeg,.webp" onchange="previewLogoAdmin(this)"></div>
     <div id="logo-admin-preview"></div>
+    <div class="section-title">Taille</div>
     <div class="fr">
-      <div class="fld"><label>Hauteur (px)</label><input id="la-h" type="number" value="${s.logoH||34}" min="20" max="80"></div>
-      <div class="fld"><label>Largeur max (px)</label><input id="la-w" type="number" value="${s.logoMaxW||150}" min="60" max="300"></div>
+      <div class="fld"><label>Hauteur (px)</label><input id="la-h" type="number" value="${s.logoH||34}" min="16" max="80" placeholder="34"></div>
+      <div class="fld"><label>Largeur max (px)</label><input id="la-w" type="number" value="${s.logoMaxW||150}" min="40" max="300" placeholder="150"></div>
+    </div>
+    <div class="section-title">Position</div>
+    <div class="fr">
+      <div class="fld"><label>Marge gauche (px)</label><input id="la-ml" type="number" value="${s.logoML||0}" min="-20" max="50" placeholder="0"></div>
+      <div class="fld"><label>Marge top (px)</label><input id="la-mt" type="number" value="${s.logoMT||0}" min="-20" max="30" placeholder="0"></div>
     </div>
     <div class="fa">
       <button class="btn btn-d btn-sm" onclick="resetLogoAdmin()">Réinitialiser</button>
@@ -3529,20 +3560,27 @@ function previewLogoAdmin(inp){
 function saveLogoAdmin(){
   const h=parseInt(document.getElementById('la-h')?.value)||34;
   const w=parseInt(document.getElementById('la-w')?.value)||150;
+  const ml=parseInt(document.getElementById('la-ml')?.value)||0;
+  const mt=parseInt(document.getElementById('la-mt')?.value)||0;
   if(!DB._settings)DB._settings={};
   if(window._pendingLogoAdmin)DB._settings.logoUrl=window._pendingLogoAdmin;
-  DB._settings.logoH=h;DB._settings.logoMaxW=w;
+  DB._settings.logoH=h;DB._settings.logoMaxW=w;DB._settings.logoML=ml;DB._settings.logoMT=mt;
   save();applyLogoSettings();CM();showToast('✓ Logo mis à jour');window._pendingLogoAdmin=null;
 }
 function resetLogoAdmin(){
   if(!confirm('Réinitialiser le logo aux paramètres par défaut ?'))return;
-  if(DB._settings){delete DB._settings.logoUrl;DB._settings.logoH=34;DB._settings.logoMaxW=150;}
+  if(DB._settings){delete DB._settings.logoUrl;DB._settings.logoH=34;DB._settings.logoMaxW=150;DB._settings.logoML=0;DB._settings.logoMT=0;}
   save();applyLogoSettings();CM();showToast('✓ Logo réinitialisé');
 }
 function applyLogoSettings(){
   const s=DB._settings||{};
   const img=document.querySelector('.sb-logo img');
-  if(img){if(s.logoUrl)img.src=s.logoUrl;if(s.logoH)img.style.height=s.logoH+'px';if(s.logoMaxW)img.style.maxWidth=s.logoMaxW+'px';}
+  if(!img)return;
+  if(s.logoUrl){img.src=s.logoUrl;document.getElementById('sb-logo-fallback').style.display='none';img.style.display='';}
+  if(s.logoH)img.style.height=s.logoH+'px';
+  if(s.logoMaxW)img.style.maxWidth=s.logoMaxW+'px';
+  img.style.marginLeft=(s.logoML||0)+'px';
+  img.style.marginTop=(s.logoMT||0)+'px';
 }
 
 // ══ CV EXTRACTION MANUELLE ════════════════════════════════
