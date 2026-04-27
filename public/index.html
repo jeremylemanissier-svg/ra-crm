@@ -1298,7 +1298,7 @@ function bGrp(pA,cA,pId,sel,ph){let h=`<option value="">${ph}</option>`;(REF[pA]
 // Indexed items cache for searchSel (avoids HTML encoding bugs with apostrophes & special chars)
 const _ssItems={};
 function searchSel(id,items,selVal,placeholder){
-  const filtered=(items||[]).filter(x=>x.actif!==false);
+  const filtered=alphaSort((items||[]).filter(x=>x.actif!==false));
   _ssItems[id]=filtered; // Store for click handler
   const selLabel=filtered.find(x=>x.id===selVal)?.label||'';
   return `<div class="search-sel-wrap" style="position:relative">
@@ -2357,11 +2357,15 @@ function openClientDetail(id){
         <div id="tarif-list-${id}">${buildCondTarifHtml(id,c.conditions_tarif||[])}</div>
       </div>
     </div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600">Actions commerciales (${allActs.length})</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-s btn-sm" onclick="openActionForm('${id}')">+ Action</button>
-          <button class="btn btn-p btn-sm" onclick="CM();G('dashboard-crm')">📊 Voir le dashboard</button>
+          <button class="btn btn-p btn-sm" onclick="CM();G('dashboard-crm')">📊 Dashboard</button>
         </div>
-      </div>${actsH}
+      </div>
+      ${actsH}
     </div>
     <div class="dact">
       ${c.archived
@@ -3439,17 +3443,12 @@ const SOURCES_CANAL=['LinkedIn','Indeed','Hellowork','France Travail','APEC','Si
 
 // ══ ALPHA SORT ════════════════════════════════════════════
 function alphaSort(items){
-  return [...items].sort((a,b)=>{
+  return [...(items||[])].sort((a,b)=>{
     const la=(a.label||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const lb=(b.label||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     if(la==='autre')return 1;if(lb==='autre')return -1;
     return la.localeCompare(lb);
   });
-}
-// Override searchSel to always sort alphabetically
-const _origSearchSel=searchSel;
-function searchSel(id,items,selVal,placeholder){
-  return _origSearchSel(id,alphaSort(items||[]),selVal,placeholder);
 }
 
 // ══ CRÉATION RAPIDE RÉFÉRENTIEL ══════════════════════════
