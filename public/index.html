@@ -271,7 +271,7 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 .geo-wrap{position:relative;}
 .geo-input{width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit;}
 .geo-input:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:var(--acc);}
-.geo-drop{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--br);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.12);z-index:500;max-height:220px;overflow-y:auto;margin-top:3px;display:none;}
+.geo-drop{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--br);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:9000;max-height:220px;overflow-y:auto;margin-top:3px;display:none;}
 .geo-drop.open{display:block;}
 .geo-opt{padding:8px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .geo-opt:hover{background:var(--bg);}
@@ -841,44 +841,97 @@ function rDash(){
 }
 
 function rVivier(){rVivierSidebar();applyVivierF();}
+let _vivierDebTimer=null;
+function vivierDebounce(){clearTimeout(_vivierDebTimer);_vivierDebTimer=setTimeout(applyVivierF,350);}
+
 function rVivierSidebar(){
   const f=vivierF;
-  // Nouveaux référentiels pour les filtres
-  const famOpts=`<option value="">Toutes familles</option>`+(REF.familles_metier||[]).filter(x=>x.actif!==false).map(x=>`<option value="${x.id}"${f.famille_metier_id===x.id?' selected':''}>${esc(x.label)}</option>`).join('');
+  const famOpts=`<option value="">Toutes familles</option>`+alphaSort((REF.familles_metier||[]).filter(x=>x.actif!==false)).map(x=>`<option value="${x.id}"${f.famille_metier_id===x.id?' selected':''}>${esc(x.label)}</option>`).join('');
   const metiersList=f.famille_metier_id?(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===f.famille_metier_id):(REF.metiers||[]).filter(m=>m.actif!==false);
-  const metOpts=`<option value="">Tous métiers</option>`+metiersList.map(m=>`<option value="${m.id}"${f.metier_id===m.id?' selected':''}>${esc(m.label)}</option>`).join('');
-  const saOpts=`<option value="">Tous secteurs</option>`+(REF.secteurs_act||[]).filter(x=>x.actif!==false).map(x=>`<option value="${x.id}"${f.secteur_act_new_id===x.id?' selected':''}>${esc(x.label)}</option>`).join('');
+  const metOpts=`<option value="">Tous métiers</option>`+alphaSort(metiersList).map(m=>`<option value="${m.id}"${f.metier_id===m.id?' selected':''}>${esc(m.label)}</option>`).join('');
+  const saOpts=`<option value="">Tous secteurs</option>`+alphaSort((REF.secteurs_act||[]).filter(x=>x.actif!==false)).map(x=>`<option value="${x.id}"${f.secteur_act_new_id===x.id?' selected':''}>${esc(x.label)}</option>`).join('');
   const ssList=f.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===f.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
-  const ssOpts=`<option value="">Tous sous-secteurs</option>`+ssList.map(s=>`<option value="${s.id}"${f.sous_secteur_id===s.id?' selected':''}>${esc(s.label)}</option>`).join('');
-  document.getElementById('vivier-sidebar').innerHTML=`
+  const ssOpts=`<option value="">Tous sous-secteurs</option>`+alphaSort(ssList).map(s=>`<option value="${s.id}"${f.sous_secteur_id===s.id?' selected':''}>${esc(s.label)}</option>`).join('');
+
+  // Ne reconstruire la sidebar QUE si elle n'existe pas encore → préserve le focus des inputs texte
+  const sb=document.getElementById('vivier-sidebar');
+  if(sb.dataset.built==='1'){
+    // Mise à jour partielle : juste les selects dépendants
+    const sel_fm=document.getElementById('vs-sel-fm');if(sel_fm)sel_fm.innerHTML=famOpts;
+    const sel_mt=document.getElementById('vs-sel-mt');if(sel_mt)sel_mt.innerHTML=metOpts;
+    const sel_sa=document.getElementById('vs-sel-sa');if(sel_sa)sel_sa.innerHTML=saOpts;
+    const sel_ss=document.getElementById('vs-sel-ss');if(sel_ss)sel_ss.innerHTML=ssOpts;
+    return;
+  }
+  sb.dataset.built='1';
+  sb.innerHTML=`
     <div class="vs-title">Filtres de recherche</div>
     <div class="vs-sect">Vue</div>
     <div class="vs-field" style="display:flex;gap:5px">
-      <button class="fb${!vivierF.showArchived?' on':''}" onclick="vivierF.showArchived=false;applyVivierF()">Actifs</button>
-      <button class="fb${vivierF.showArchived?' on':''}" onclick="vivierF.showArchived=true;applyVivierF()">📦 Archivés</button>
+      <button class="fb${!f.showArchived?' on':''}" id="vs-btn-actif" onclick="vivierF.showArchived=false;document.getElementById('vs-btn-actif').classList.add('on');document.getElementById('vs-btn-arch').classList.remove('on');applyVivierF()">Actifs</button>
+      <button class="fb${f.showArchived?' on':''}" id="vs-btn-arch" onclick="vivierF.showArchived=true;document.getElementById('vs-btn-arch').classList.add('on');document.getElementById('vs-btn-actif').classList.remove('on');applyVivierF()">📦 Archivés</button>
     </div>
-    <div class="vs-sect">Recherche avancée</div>
-    <div class="vs-field"><label>Recherche booléenne</label>
-      <input id="vivier-bool-search" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder='ex: "chef chantier" AND VRD' oninput="applyVivierF()">
+    <div class="vs-sect">Recherche booléenne</div>
+    <div class="vs-field">
+      <input id="vivier-bool-search" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder='ex: "chef chantier" AND VRD' oninput="vivierDebounce()">
       <div style="font-size:10px;color:var(--tm);margin-top:3px">AND · OR · NOT · "expression exacte"</div>
     </div>
     <div class="vs-sect">Identité</div>
-    <div class="vs-field"><label>Prénom</label><input value="${esc(f.prenom)}" oninput="vf('prenom',this.value)" placeholder="Rechercher..."></div>
-    <div class="vs-field"><label>Nom</label><input value="${esc(f.nom)}" oninput="vf('nom',this.value)" placeholder="Rechercher..."></div>
+    <div class="vs-field"><label>Prénom</label><input id="vs-inp-prenom" value="${esc(f.prenom)}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Rechercher..." oninput="vivierF.prenom=this.value;vivierDebounce()"></div>
+    <div class="vs-field"><label>Nom</label><input id="vs-inp-nom" value="${esc(f.nom)}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Rechercher..." oninput="vivierF.nom=this.value;vivierDebounce()"></div>
     <div class="vs-sect">Métier</div>
-    <div class="vs-field"><label>Famille métier</label><select onchange="vf('famille_metier_id',this.value)">${famOpts}</select></div>
-    <div class="vs-field"><label>Métier</label><select onchange="vf('metier_id',this.value)">${metOpts}</select></div>
+    <div class="vs-field"><label>Famille métier</label><select id="vs-sel-fm" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.famille_metier_id=this.value;vivierF.metier_id='';rVivierSidebar();applyVivierF()">${famOpts}</select></div>
+    <div class="vs-field"><label>Métier</label><select id="vs-sel-mt" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.metier_id=this.value;applyVivierF()">${metOpts}</select></div>
     <div class="vs-sect">Localisation</div>
-    <div class="vs-field"><label>Ville</label><input value="${esc(f.ville||'')}" oninput="vf('ville',this.value)" placeholder="ex: Rouen..."></div>
-    <div class="vs-field"><label>Département</label><input value="${esc(f.departement||'')}" oninput="vf('departement',this.value)" placeholder="ex: Seine-Maritime..."></div>
-    <div class="vs-field"><label>Région</label><input value="${esc(f.region||'')}" oninput="vf('region',this.value)" placeholder="ex: Normandie..."></div>
+    <div class="vs-field"><label>Ville</label>
+      <div style="position:relative">
+        <input id="vs-inp-ville" value="${esc(f.ville||'')}" autocomplete="off" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Taper une ville..." oninput="vivierGeoType(this.value)" onblur="setTimeout(()=>{const d=document.getElementById('vs-geo-drop');if(d)d.style.display='none';},200)">
+        <div id="vs-geo-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--br);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:9000;max-height:200px;overflow-y:auto;margin-top:2px"></div>
+      </div>
+    </div>
+    <div class="vs-field"><label>Département</label><input id="vs-inp-dept" value="${esc(f.departement||'')}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="ex: Seine-Maritime" oninput="vivierF.departement=this.value;vivierDebounce()"></div>
+    <div class="vs-field"><label>Région</label><input id="vs-inp-region" value="${esc(f.region||'')}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="ex: Normandie" oninput="vivierF.region=this.value;vivierDebounce()"></div>
     <div class="vs-sect">Secteur</div>
-    <div class="vs-field"><label>Secteur d'activité</label><select onchange="vf('secteur_act_new_id',this.value)">${saOpts}</select></div>
-    <div class="vs-field"><label>Sous-secteur</label><select onchange="vf('sous_secteur_id',this.value)">${ssOpts}</select></div>
-    <button class="vs-reset" onclick="resetVivierF()">↺ Réinitialiser</button>`;
+    <div class="vs-field"><label>Secteur d'activité</label><select id="vs-sel-sa" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.secteur_act_new_id=this.value;vivierF.sous_secteur_id='';rVivierSidebar();applyVivierF()">${saOpts}</select></div>
+    <div class="vs-field"><label>Sous-secteur</label><select id="vs-sel-ss" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.sous_secteur_id=this.value;applyVivierF()">${ssOpts}</select></div>
+    <div style="display:flex;gap:6px;margin-top:12px">
+      <button class="vs-reset" style="flex:1" onclick="resetVivierF()">↺ Réinitialiser</button>
+      <button class="btn btn-p btn-sm" style="flex:1" onclick="applyVivierF()">🔍 Rechercher</button>
+    </div>`;
 }
+
+// Autocomplete géo pour le vivier sidebar
+let _vsGeoTimer=null;
+async function vivierGeoType(q){
+  vivierF.ville=q;
+  clearTimeout(_vsGeoTimer);
+  const drop=document.getElementById('vs-geo-drop');if(!drop)return;
+  if(!q||q.length<2){drop.style.display='none';vivierDebounce();return;}
+  _vsGeoTimer=setTimeout(async()=>{
+    const results=await geoSearch(q);
+    if(!results.length){drop.style.display='none';vivierDebounce();return;}
+    drop.innerHTML=results.map((r,i)=>`<div style="padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bg)" onmousedown="event.preventDefault()" onclick="vivierGeoSelect(${i})">
+      <span style="font-weight:500">${esc(r.nom)}</span>
+      <span style="color:var(--tm);margin-left:6px;font-size:11px">${esc(r.departement)} · ${esc(r.region)}</span>
+    </div>`).join('');
+    drop._results=results;
+    drop.style.display='block';
+    vivierDebounce();
+  },300);
+}
+function vivierGeoSelect(idx){
+  const drop=document.getElementById('vs-geo-drop');if(!drop||!drop._results)return;
+  const r=drop._results[idx];if(!r)return;
+  vivierF.ville=r.nom;vivierF.departement=r.departement;vivierF.region=r.region;
+  const vi=document.getElementById('vs-inp-ville');if(vi)vi.value=r.nom;
+  const di=document.getElementById('vs-inp-dept');if(di)di.value=r.departement;
+  const ri=document.getElementById('vs-inp-region');if(ri)ri.value=r.region;
+  drop.style.display='none';
+  applyVivierF();
+}
+
 function vf(k,v){vivierF[k]=v;if(k==='famille_metier_id')vivierF.metier_id='';if(k==='secteur_act_new_id')vivierF.sous_secteur_id='';rVivierSidebar();applyVivierF();}
-function resetVivierF(){vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:''};rVivier();}
+function resetVivierF(){vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:'',showArchived:false};const sb=document.getElementById('vivier-sidebar');if(sb)sb.dataset.built='';rVivier();}
 function applyVivierF(){
   const f=vivierF;let res=DB.candidats;
   // Archive filter: by default only show active
@@ -892,6 +945,7 @@ function applyVivierF(){
   if(f.famille_metier_id)res=res.filter(c=>c.famille_metier_id===f.famille_metier_id);
   if(f.metier_id)res=res.filter(c=>c.metier1_id===f.metier_id||c.metier2_id===f.metier_id||c.metier3_id===f.metier_id);
   if(f.secteur_act_new_id)res=res.filter(c=>c.secteur_act_new_id===f.secteur_act_new_id||c.secteur_act_id===f.secteur_act_new_id);
+  if(f.sous_secteur_id)res=res.filter(c=>c.sous_secteur_id===f.sous_secteur_id);
   let h=`<div style="font-size:12px;color:var(--ts);margin-bottom:14px">${res.length} profil${res.length!==1?'s':''} trouvé${res.length!==1?'s':''}</div>`;
   // Boolean search
   const boolQ=(document.getElementById('vivier-bool-search')?.value||'').trim();
@@ -1410,14 +1464,16 @@ function openCandForm(id){
 function saveCand(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const geo=geoGetVal('geo-c');
-  let photo=EID?getCand(EID)?.photo||null:null;if(window._pPhoto)photo=window._pPhoto;window._pPhoto=null;
-  let cv=EID?getCand(EID)?.cv||null:null;if(window._pCV)cv=window._pCV;window._pCV=null;
   const existing=EID?getCand(EID):{};
   const prenom=g('prenom'),nom=g('nom'),email=g('email'),phone=g('phone'),linkedin=g('linkedin');
   const source_type=g('source_type'),source_canal=g('source_canal');
-  // Validate source on creation
+  // Validation AVANT de toucher _pCV/_pPhoto (sinon lost on retry)
   if(!EID&&(!source_type||!source_canal)){alert('Merci de renseigner la source du candidat (type et canal).');return;}
+  // Capture photo + CV après validation
+  let photo=EID?existing.photo||null:null;if(window._pPhoto)photo=window._pPhoto;
+  let cv=EID?existing.cv||null:null;if(window._pCV)cv=window._pCV;
   const doSave=()=>{
+    window._pPhoto=null;window._pCV=null; // effacés seulement après save réussi
     const form={
       prenom,nom,email,phone:formatPhone(phone),
       poste:g('poste'),statut_cand:g('statut_cand')||'Candidat',
@@ -1440,7 +1496,6 @@ function saveCand(){
     EID?DB.candidats=DB.candidats.map(c=>c.id===EID?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
     save();CM();R(CV);
   };
-  // Duplicate check only on creation
   if(!EID){
     const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
     if(dupes.length){showDuplicatesAlert(dupes,'cand',doSave);return;}
