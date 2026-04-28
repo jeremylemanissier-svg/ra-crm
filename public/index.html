@@ -1646,8 +1646,21 @@ function openCandDetail(id){
       <button class="btn btn-d btn-sm" onclick="delCand('${id}')">🗑 Supprimer</button>
       <button class="btn btn-s" onclick="CM()">Fermer</button>
     </div>`;
-  OM('',html,'xl');
-  if(isPDF)setTimeout(()=>toggleCV(id),50);
+
+  // Si CV présent : affichage split (infos gauche, CV droite) — même logique que le mode modification
+  const cvViewPanel=isPDF?`
+    <div class="split-right">
+      <div class="split-right-title">📄 CV — ${esc(c.cv?.name||'')}</div>
+      <iframe src="data:application/pdf;base64,${c.cv?.data}" width="100%" height="700" style="border:1px solid var(--br);border-radius:8px;display:block"></iframe>
+    </div>`:
+    c.cv?`
+    <div class="split-right">
+      <div class="split-right-title">📄 CV — ${esc(c.cv?.name||'')}</div>
+      <div style="text-align:center;padding:20px"><img src="data:${c.cv?.type};base64,${c.cv?.data}" style="max-width:100%;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.1)"></div>
+    </div>`:'';
+
+  const finalHtml=c.cv?`<div class="split-panel"><div class="split-left">${html}</div>${cvViewPanel}</div>`:html;
+  OM('',finalHtml,c.cv?'xxl':'xl');
 }
 
 function switchTab(btn,panelId){
