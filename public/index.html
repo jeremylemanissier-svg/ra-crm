@@ -723,8 +723,8 @@ async function api(method,url,data){
     const j=await r.json();if(!r.ok)throw new Error(j.error||'Erreur');return j;
   }catch(e){if(e.message!=='Session invalide')console.error(e);return null;}
 }
-async function saveKey(k){const v=k==='refs'?REF:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
-function save(){['candidats','clients','contacts','commandes','relances','actions'].forEach(k=>saveKey(k));saveKey('refs');}
+async function saveKey(k){const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
+function save(){['candidats','clients','contacts','commandes','relances','actions'].forEach(k=>saveKey(k));saveKey('refs');saveKey('settings');}
 
 function showLogin(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.remove('visible');}
 function showApp(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.add('hidden');document.getElementById('app').classList.add('visible');}
@@ -744,7 +744,7 @@ function setupUI(){
   const an=document.getElementById('admin-nav');if(an)an.style.display=currentUser.role==='admin'?'block':'none';
 }
 async function loadData(){
-  const [ca,cl,co,cm,re,rf,ac]=await Promise.all(['candidats','clients','contacts','commandes','relances','refs','actions'].map(k=>api('GET',`/api/data/${k}`)));
+  const [ca,cl,co,cm,re,rf,ac,st]=await Promise.all(['candidats','clients','contacts','commandes','relances','refs','actions','settings'].map(k=>api('GET',`/api/data/${k}`)));
   DB.candidats=Array.isArray(ca)?ca:[];DB.clients=Array.isArray(cl)?cl:[];DB.contacts=Array.isArray(co)?co:[];DB.commandes=Array.isArray(cm)?cm:[];DB.relances=Array.isArray(re)?re:[];DB.actions=Array.isArray(ac)?ac:[];
   REF=(rf&&typeof rf==='object'&&!Array.isArray(rf))?rf:JSON.parse(JSON.stringify(DEFAULT_REFS));
   if(!REF.regions)REF.regions=DEFAULT_REFS.regions;if(!REF.villes)REF.villes=DEFAULT_REFS.villes;
@@ -762,7 +762,7 @@ async function loadData(){
   const oldFM=REF.familles_metier&&REF.familles_metier.length>0&&(REF.familles_metier[0]?.label||'').includes('Gros Œuvre');
   if(oldFM){REF.familles_metier=DEFAULT_REFS.familles_metier;REF.metiers=DEFAULT_REFS.metiers;}
   DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.entretiens)c.entretiens=[];if(!c.controles_ref)c.controles_ref=[];if(!c.mots_cles)c.mots_cles=[];if(!c.pieces_jointes)c.pieces_jointes=[];});
-  if(!DB._settings)DB._settings={};
+  DB._settings=(st&&typeof st==='object'&&!Array.isArray(st))?st:{};
   applyLogoSettings();
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
