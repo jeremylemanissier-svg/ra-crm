@@ -1594,6 +1594,7 @@ function openCandDetail(id){
         </div>
         ${notesH}
       </div>
+      ${buildCandCmdsSection(id)}
     </div>
 
     <!-- TAB: PRÉQUALIFICATION -->
@@ -1982,6 +1983,69 @@ function savePrequalif(candId){
   DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,prequalif:pq}:c);
   save();
   const msg=document.createElement('div');msg.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';msg.textContent='✓ Préqualification enregistrée';document.body.appendChild(msg);setTimeout(()=>msg.remove(),2500);
+}
+function buildCandCmdsSection(candId){
+  // Toutes les commandes où ce candidat apparaît
+  const entries=[];
+  DB.commandes.forEach(cmd=>{
+    (cmd.candidats||[]).forEach(cc=>{
+      if(cc.candidat_id===candId)entries.push({cmd,cc});
+    });
+  });
+
+  const ETAPE_LABELS={
+    envc:'Envoyé au client',
+    entr_cl:'Entretien client',
+    prop:'Proposition envoyée',
+    refc:'Refus candidat',
+    refcl:'Refus client',
+    emb:'Embauché',
+    preq:'Préqualification',
+    entr:'Entretien cabinet',
+    recr:'Recruté',
+    nrc:'Non retenu cabinet',
+  };
+  const ETAPE_COLORS={
+    envc:'background:#e8f4f8;color:#1e6080',
+    entr_cl:'background:#f5f3ff;color:#7c3aed',
+    prop:'background:#fffbeb;color:#d97706',
+    refc:'background:#fef2f2;color:#dc2626',
+    refcl:'background:#fff1f2;color:#b91c1c',
+    emb:'background:#ecfdf5;color:#065f46',
+    preq:'background:#e8f4f8;color:#165068',
+    entr:'background:#ddeef5;color:#165068',
+    recr:'background:#ecfdf5;color:#16a34a',
+    nrc:'background:#f8fafc;color:#475569',
+  };
+
+  if(!entries.length){
+    return `<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br)">
+      <div class="dl" style="margin-bottom:6px">Commandes</div>
+      <div style="font-size:13px;color:var(--tm);font-style:italic">Ce candidat n'est rattaché à aucune commande</div>
+    </div>`;
+  }
+
+  const rows=entries.map(({cmd,cc})=>{
+    const cl=getClient(cmd.client_id);
+    const etapeLabel=ETAPE_LABELS[cc.etape]||cc.etape||'—';
+    const etapeStyle=ETAPE_COLORS[cc.etape]||'background:var(--bg);color:var(--ts)';
+    const infoTag=cc.etape_info?.date?`<span style="font-size:11px;color:var(--tm)">📅 ${esc(cc.etape_info.date)}</span>`:
+      cc.etape_info?.salaire?`<span style="font-size:11px;color:var(--tm)">💰 ${esc(cc.etape_info.salaire)}</span>`:
+      cc.etape_info?.motif?`<span style="font-size:11px;color:var(--red)">⚠️ ${esc(cc.etape_info.motif)}</span>`:'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bg)">
+      <div style="flex:1;min-width:0">
+        <a href="#" onclick="event.preventDefault();CM();openCmdDetail('${cmd.id}')" style="font-size:13px;font-weight:600;color:var(--acc);text-decoration:none">${esc(cmd.titre)}</a>
+        <div style="font-size:12px;color:var(--ts);margin-top:2px">🏢 ${esc(cl?.nom||'—')} · 👤 ${esc(cmd.cons)}</div>
+        ${infoTag?`<div style="margin-top:3px">${infoTag}</div>`:''}
+      </div>
+      <span style="${etapeStyle};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:500;flex-shrink:0">${esc(etapeLabel)}</span>
+    </div>`;
+  }).join('');
+
+  return `<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br)">
+    <div class="dl" style="margin-bottom:8px">Commandes (${entries.length})</div>
+    ${rows}
+  </div>`;
 }
 function openAddNote(candId){
   const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
