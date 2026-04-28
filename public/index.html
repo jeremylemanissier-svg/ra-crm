@@ -714,6 +714,8 @@ let DB={candidats:[],clients:[],contacts:[],commandes:[],relances:[],actions:[]}
 let currentUser=null,EID=null,showDone=false,clFilter='Tous',cmdFilter='Toutes';
 let vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:'',showArchived:false};
 let _vivierNav=[]; // IDs des candidats dans l'ordre de la liste filtrée active
+let _clientsNav=[]; // IDs des clients dans l'ordre de la liste filtrée active
+let _cmdsNav=[]; // IDs des commandes dans l'ordre de la liste filtrée active
 let dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};
 const genId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 
@@ -999,7 +1001,9 @@ function rCommandes(){
   const sc={Active:'background:#ecfdf5;color:#065f46',Suspendue:'background:var(--amber-bg);color:var(--amber)',Pourvue:'background:var(--acc-light);color:var(--acc2)'};
   let h='';
   if(!res.length){h='<div class="empty">Aucune commande</div>';}
-  else res.forEach(cmd=>{
+  else{
+    _cmdsNav=res.map(c=>c.id);
+    res.forEach(cmd=>{
     const cl=getClient(cmd.client_id),ct=getContact(cmd.contact_id),nc=cmd.candidats?.length||0;
     h+=`<div class="cmd-row" style="cursor:pointer" onclick="openCmdDetail('${cmd.id}')"><div style="flex:1;min-width:0">
       <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center"><span style="font-size:14px;font-weight:600">${esc(cmd.titre)}</span><span style="${sc[cmd.statut]||sc.Active};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(cmd.statut)}</span></div>
@@ -1011,7 +1015,8 @@ function rCommandes(){
       <span style="font-size:11px;color:var(--tm)">${nc} candidat${nc!==1?'s':''}</span>
       <div style="display:flex;gap:4px"><button class="ic-btn" onclick="openCmdForm('${cmd.id}')">✏️</button><button class="ic-btn" onclick="delCmd('${cmd.id}')">🗑</button></div>
     </div></div>`;
-  });
+    });
+  }
   document.getElementById('body-cmds').innerHTML=h;
 }
 
@@ -1036,6 +1041,7 @@ function rClients(){
   if(clientsView==='kanban'){document.getElementById('body-clients').innerHTML=totalTxt+rClientsKanban(res);return;}
   let h=totalTxt+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">';
   if(!res.length){document.getElementById('body-clients').innerHTML=totalTxt+'<div class="empty">Aucun client / prospect</div>';return;}
+  _clientsNav=res.map(c=>c.id);
   res.forEach((c,i)=>{
     const [bg,txt]=AV_COLORS[i%AV_COLORS.length];
     const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
@@ -1551,7 +1557,7 @@ function openCandDetail(id){
         <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div>
         <button class="btn btn-p btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
       </div>
-      ${buildNavArrows(id)}
+      ${buildNavArrows(id,_vivierNav,'candNav')}
       <button onclick="CM()" style="position:absolute;top:0;right:0;background:none;border:none;cursor:pointer;font-size:22px;color:var(--tm);line-height:1;padding:0" title="Fermer">×</button>
     </div>
     <div class="tabs">
@@ -2001,15 +2007,30 @@ function candNav(currentId,dir){
   if(nextIdx<0||nextIdx>=_vivierNav.length)return;
   openCandDetail(_vivierNav[nextIdx]);
 }
+function clientNav(currentId,dir){
+  const idx=_clientsNav.indexOf(currentId);
+  if(idx===-1)return;
+  const ni=idx+dir;
+  if(ni<0||ni>=_clientsNav.length)return;
+  openClientDetail(_clientsNav[ni]);
+}
+function cmdNav(currentId,dir){
+  const idx=_cmdsNav.indexOf(currentId);
+  if(idx===-1)return;
+  const ni=idx+dir;
+  if(ni<0||ni>=_cmdsNav.length)return;
+  openCmdDetail(_cmdsNav[ni]);
+}
 
-function buildNavArrows(id){
-  const idx=_vivierNav.indexOf(id);
-  if(idx===-1||_vivierNav.length<=1)return '';
-  const hasPrev=idx>0,hasNext=idx<_vivierNav.length-1;
+function buildNavArrows(id,nav,navFn){
+  const idx=nav.indexOf(id);
+  if(idx===-1||nav.length<=1)return '';
+  const hasPrev=idx>0,hasNext=idx<nav.length-1;
+  const btn=(active,dir,title)=>`<button ${active?`onclick="${navFn}('${id}',${dir})"`:'disabled'} style="width:30px;height:30px;border-radius:7px;border:1px solid var(--br);background:${active?'var(--card)':'var(--bg)'};color:${active?'var(--tp)':'var(--tm)'};cursor:${active?'pointer':'default'};font-size:18px;display:flex;align-items:center;justify-content:center" title="${title}">${dir<0?'‹':'›'}</button>`;
   return `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-    <button onclick="candNav('${id}',-1)" ${hasPrev?'':'disabled'} style="width:30px;height:30px;border-radius:7px;border:1px solid var(--br);background:${hasPrev?'var(--card)':'var(--bg)'};color:${hasPrev?'var(--tp)':'var(--tm)'};cursor:${hasPrev?'pointer':'default'};font-size:16px;display:flex;align-items:center;justify-content:center" title="Candidat précédent">‹</button>
-    <span style="font-size:11px;color:var(--tm);white-space:nowrap">${idx+1}/${_vivierNav.length}</span>
-    <button onclick="candNav('${id}',1)" ${hasNext?'':'disabled'} style="width:30px;height:30px;border-radius:7px;border:1px solid var(--br);background:${hasNext?'var(--card)':'var(--bg)'};color:${hasNext?'var(--tp)':'var(--tm)'};cursor:${hasNext?'pointer':'default'};font-size:16px;display:flex;align-items:center;justify-content:center" title="Candidat suivant">›</button>
+    ${btn(hasPrev,-1,'Précédent')}
+    <span style="font-size:11px;color:var(--tm);white-space:nowrap">${idx+1}/${nav.length}</span>
+    ${btn(hasNext,1,'Suivant')}
   </div>`;
 }
 function buildCandCmdsSection(candId){
@@ -2267,6 +2288,7 @@ function openCmdDetail(id){
         <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · 📋 ${esc(cmd.cons)} · 📅 ${cmd.date_cmd||cmd.date||'—'}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+        ${buildNavArrows(id,_cmdsNav,'cmdNav')}
         <span style="${sc[cmd.statut]||sc.Active};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(cmd.statut)}</span>
         <button class="btn btn-s btn-sm" onclick="CM();openCmdForm('${id}')">✏️</button>
       </div>
@@ -2493,6 +2515,7 @@ function openClientDetail(id){
         ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé</span>`:''}
         <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
       </div>
+      ${buildNavArrows(id,_clientsNav,'clientNav')}
       <button onclick="CM()" style="position:absolute;top:0;right:0;background:none;border:none;cursor:pointer;font-size:22px;color:var(--tm);line-height:1;padding:0" title="Fermer">×</button>
     </div>
     <div class="dg2" style="margin-bottom:14px">
