@@ -2514,13 +2514,10 @@ function openClientDetail(id){
   const ctsH=buildClientContacts(id,cts);
   const leftHtml=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br);position:relative">
-      <div style="position:relative;flex-shrink:0;cursor:pointer" title="${c.logo?'Changer le logo':'Ajouter un logo'}" onclick="document.getElementById('logo-upload-${id}').click()">
+      <div style="flex-shrink:0">
         ${c.logo
           ?`<img src="${c.logo}" style="width:62px;height:62px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`
           :`<div style="width:62px;height:62px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;">${ini}</div>`}
-        <div style="position:absolute;inset:0;border-radius:12px;background:rgba(0,0,0,0);display:flex;align-items:center;justify-content:center;transition:background .15s;font-size:18px;opacity:0" onmouseover="this.style.background='rgba(0,0,0,0.35)';this.style.opacity='1'" onmouseout="this.style.background='rgba(0,0,0,0)';this.style.opacity='0'">📷</div>
-        <input type="file" id="logo-upload-${id}" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="uploadClientLogo(this,'${id}')">
-        ${c.logo?`<button onclick="event.stopPropagation();if(confirm('Supprimer le logo ?')){DB.clients=DB.clients.map(x=>x.id==='${id}'?{...x,logo:null}:x);save();openClientDetail('${id}');}" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0" title="Supprimer le logo">✕</button>`:''}
       </div>
       <div style="flex:1"><div style="font-size:17px;font-weight:700">${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts)">${esc(c.secteur||'—')} · ${esc(c.ville||c.loc||'—')}${c.departement?' ('+esc(c.departement)+')':''}</div></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -2534,7 +2531,6 @@ function openClientDetail(id){
     <div class="dg2" style="margin-bottom:14px">
       <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${esc(c.cons||'—')}</div></div>
         <div class="dg"><div class="dl">Localisation</div><div class="dv">${[c.ville,c.departement?`(${c.departement_code}) ${c.departement}`:'',c.region].filter(Boolean).join(' · ')||'—'}</div></div>
-        <div class="dg"><div class="dl">Email</div><div class="dv">${esc(c.email||'—')}</div></div>
         <div class="dg"><div class="dl">Téléphone</div><div class="dv">${esc(c.phone||'—')}</div></div>
         ${c.site_web?`<div class="dg"><div class="dl">Site web</div><div class="dv"><a href="${esc(c.site_web)}" target="_blank" style="color:var(--acc);font-size:13px">${esc(c.site_web)}</a></div></div>`:''}
       </div>
@@ -2548,7 +2544,10 @@ function openClientDetail(id){
     <div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div style="font-size:13px;font-weight:600">Contacts (${cts.length})</div>
-        <button class="btn btn-p btn-sm" onclick="openAddContactFromClient('${id}')">+ Ajouter un contact</button>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-s btn-sm" onclick="openLinkContactToClient('${id}')">🔗 Rattacher</button>
+          <button class="btn btn-p btn-sm" onclick="openAddContactFromClient('${id}')">+ Nouveau</button>
+        </div>
       </div>
       <div class="client-contacts-list" style="max-height:220px;overflow-y:auto">${ctsH}</div>
     </div>
@@ -3538,17 +3537,20 @@ function saveContactForClient(clientId){
 }
 function buildClientContacts(clientId,cts){
   if(!cts.length)return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:10px 0">Aucun contact rattaché à cette entreprise</div>';
-  return cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer" onclick="openContactDetail('${ct.id}')">
+  return cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
-      <div>
-        <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:3px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
-        <div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:6px">${esc(ct.fonction||'—')}</div>
-        <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:2px">
-          ${ct.phone?`<div>📞 ${esc(ct.phone)}</div>`:''}
-          ${ct.email?`<div>✉️ ${esc(ct.email)}</div>`:''}
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="openContactDetail('${ct.id}')">
+        <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:2px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+        ${ct.fonction?`<div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:5px">${esc(ct.fonction)}</div>`:''}
+        <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:3px">
+          ${ct.phone?`<div>📞 <a href="tel:${esc(ct.phone)}" onclick="event.stopPropagation()" style="color:var(--ts);text-decoration:none">${esc(formatPhone(ct.phone))}</a></div>`:''}
+          ${ct.email?`<div>✉️ <a href="mailto:${esc(ct.email)}" onclick="event.stopPropagation()" style="color:var(--acc);text-decoration:none">${esc(ct.email)}</a></div>`:''}
         </div>
       </div>
-      <button class="ic-btn" onclick="event.stopPropagation();openContactForm('${ct.id}')">✏️</button>
+      <div style="display:flex;gap:4px;flex-shrink:0;margin-left:8px">
+        <button class="ic-btn" onclick="openContactForm('${ct.id}')" title="Modifier">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="unlinkContactFromClient('${ct.id}','${clientId}')" title="Dissocier">✕</button>
+      </div>
     </div>
   </div>`).join('');
 }
@@ -3899,6 +3901,50 @@ function showDuplicatesAlert(dupes,type,onContinue){
 }
 
 // ══ CONTACT DEPUIS FICHE CLIENT ══════════════════════════
+function openLinkContactToClient(clientId){
+  // Contacts non encore liés à ce client
+  const already=new Set(DB.contacts.filter(ct=>ct.client_id===clientId).map(ct=>ct.id));
+  const avail=DB.contacts.filter(ct=>ct.id&&!already.has(ct.id));
+  if(!avail.length){alert('Tous les contacts existants sont déjà rattachés à ce client, ou aucun contact n\'existe encore. Utilisez "Nouveau" pour en créer un.');return;}
+  OM('Rattacher un contact existant',`
+    <div class="fld"><label>Rechercher un contact</label>
+      <input id="link-ct-search" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Nom, prénom, fonction..." oninput="filterLinkContacts('${clientId}')">
+    </div>
+    <div id="link-ct-list" style="max-height:300px;overflow-y:auto;margin-top:8px">
+      ${avail.map(ct=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--br);border-radius:7px;margin-bottom:5px;cursor:pointer;background:var(--bg)" onclick="doLinkContact('${ct.id}','${clientId}')">
+        <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(ct.prenom)} ${esc(ct.nom)}</div><div style="font-size:11px;color:var(--ts)">${esc(ct.fonction||'')}${ct.email?' · '+esc(ct.email):''}</div></div>
+        <button class="btn btn-p btn-sm">Rattacher</button>
+      </div>`).join('')}
+    </div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'w');
+  // Store available list for filtering
+  document.getElementById('link-ct-list')._avail=avail;
+}
+function filterLinkContacts(clientId){
+  const q=(document.getElementById('link-ct-search')?.value||'').toLowerCase();
+  const list=document.getElementById('link-ct-list');
+  if(!list||!list._avail)return;
+  list.innerHTML=list._avail.filter(ct=>[ct.prenom,ct.nom,ct.fonction,ct.email].join(' ').toLowerCase().includes(q)).map(ct=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--br);border-radius:7px;margin-bottom:5px;cursor:pointer;background:var(--bg)" onclick="doLinkContact('${ct.id}','${clientId}')">
+    <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(ct.prenom)} ${esc(ct.nom)}</div><div style="font-size:11px;color:var(--ts)">${esc(ct.fonction||'')}${ct.email?' · '+esc(ct.email):''}</div></div>
+    <button class="btn btn-p btn-sm">Rattacher</button>
+  </div>`).join('');
+  list._avail=list._avail; // keep ref
+}
+function doLinkContact(contactId,clientId){
+  DB.contacts=DB.contacts.map(ct=>ct.id===contactId?{...ct,client_id:clientId}:ct);
+  save();CM();
+  const panel=document.querySelector('.client-contacts-list');
+  if(panel){const cts=DB.contacts.filter(ct=>ct.client_id===clientId);panel.innerHTML=buildClientContacts(clientId,cts);}
+  showToast('✓ Contact rattaché');
+}
+function unlinkContactFromClient(contactId,clientId){
+  if(!confirm('Dissocier ce contact de cette fiche ? (Le contact reste dans la base)'))return;
+  DB.contacts=DB.contacts.map(ct=>ct.id===contactId?{...ct,client_id:''}:ct);
+  save();
+  const panel=document.querySelector('.client-contacts-list');
+  if(panel){const cts=DB.contacts.filter(ct=>ct.client_id===clientId);panel.innerHTML=buildClientContacts(clientId,cts);}
+  showToast('✓ Contact dissocié');
+}
 function openAddContactFromClient(clientId){
   const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
   OM('+ Ajouter un contact',`
