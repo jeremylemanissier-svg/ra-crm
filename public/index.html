@@ -734,7 +734,10 @@ async function doLogin(){
   if(!username||!password){err.textContent='Remplis les deux champs.';return;}
   const user=await api('POST','/api/auth/login',{username,password});
   if(!user){err.textContent='Identifiant ou mot de passe incorrect.';return;}
-  currentUser=user;await loadData();setupUI();showApp();G('dash');
+  currentUser=user;await loadData();setupUI();showApp();
+  const lastView=localStorage.getItem('upsearch_last_view')||'dash';
+  const validViews=['dash','vivier','commandes','clients','contacts','dashboard-crm','agenda'];
+  G(validViews.includes(lastView)?lastView:'dash');
 }
 async function doLogout(){await api('POST','/api/auth/logout');currentUser=null;showLogin();}
 function setupUI(){
@@ -774,7 +777,9 @@ function G(name){
   document.querySelectorAll('.sb-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   const nb=document.getElementById('nav-'+name);if(nb)nb.classList.add('active');
-  document.getElementById('vtitle').textContent=VTITLES[name];CV=name;R(name);
+  document.getElementById('vtitle').textContent=VTITLES[name];CV=name;
+  try{localStorage.setItem('upsearch_last_view',name);}catch(e){}
+  R(name);
 }
 function R(n){
   switch(n){
@@ -2433,8 +2438,10 @@ function saveClient(){
     logo:EID?existing.logo||null:(window._pClientLogo||null),
   };
   window._pClientLogo=null;
+  const savedId=EID;
   EID?DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c):DB.clients.push({...form,id:genId(),actions:[]});
   save();CM();R(CV);
+  if(savedId)setTimeout(()=>openClientDetail(savedId),50);
 }
 function delClient(id){if(!confirm('Supprimer ?'))return;DB.clients=DB.clients.filter(c=>c.id!==id);save();R(CV);}
 function openClientDetail(id){
@@ -3281,6 +3288,7 @@ function openClientStatutPicker(id){
 function setClientStatut(id,statut){
   DB.clients=DB.clients.map(c=>c.id===id?{...c,statut_commercial:statut}:c);
   save();CM();rClients();
+  setTimeout(()=>openClientDetail(id),50);
 }
 
 // ══ DICTÉE VOCALE ═══════════════════════════════════════
@@ -4045,7 +4053,7 @@ function createCandFromLinkedIn(){
 }
 
 async function init(){
-  try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();G('dash');}else{showLogin();}}
+  try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();const lv=localStorage.getItem('upsearch_last_view')||'dash';const vv=['dash','vivier','commandes','clients','contacts','dashboard-crm','agenda'];G(vv.includes(lv)?lv:'dash');}else{showLogin();}}
   catch(e){showLogin();}
 }
 init();
