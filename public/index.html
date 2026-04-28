@@ -713,6 +713,7 @@ const DEFAULT_REFS={
 let DB={candidats:[],clients:[],contacts:[],commandes:[],relances:[],actions:[]},REF={};
 let currentUser=null,EID=null,showDone=false,clFilter='Tous',cmdFilter='Toutes';
 let vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:'',showArchived:false};
+let _vivierNav=[]; // IDs des candidats dans l'ordre de la liste filtrée active
 let dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};
 const genId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 
@@ -956,7 +957,9 @@ function applyVivierF(){
   const boolQ=(document.getElementById('vivier-bool-search')?.value||'').trim();
   if(boolQ)res=vivierBoolSearch(boolQ,res);
   if(!res.length){h+='<div class="empty">Aucun candidat correspondant aux filtres</div>';}
-  else res.forEach((c,i)=>{
+  else{
+    _vivierNav=res.map(c=>c.id); // Stocker les IDs pour navigation ← →
+    res.forEach((c,i)=>{
     const locTag=c.ville?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">📍 ${esc(c.ville)}${c.departement_code?' ('+esc(c.departement_code)+')':''}</span>`:'';
     const sectTag=c.secteur_act_new_id?refLbl('secteurs_act',c.secteur_act_new_id):(refLbl('secteurs',c.secteur_act_id)||'');
     const metierTag=c.metier1_id?refLbl('metiers',c.metier1_id):(c.poste_ref_id?refLbl('postes',c.poste_ref_id):'');
@@ -982,7 +985,8 @@ function applyVivierF(){
         </div>
       </div>
     </div>`;
-  });
+    });
+  }
   document.getElementById('vivier-list').innerHTML=h;
 }
 
@@ -1547,6 +1551,7 @@ function openCandDetail(id){
         <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div>
         <button class="btn btn-p btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
       </div>
+      ${buildNavArrows(id)}
       <button onclick="CM()" style="position:absolute;top:0;right:0;background:none;border:none;cursor:pointer;font-size:22px;color:var(--tm);line-height:1;padding:0" title="Fermer">×</button>
     </div>
     <div class="tabs">
@@ -1988,6 +1993,24 @@ function savePrequalif(candId){
   DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,prequalif:pq}:c);
   save();
   const msg=document.createElement('div');msg.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';msg.textContent='✓ Préqualification enregistrée';document.body.appendChild(msg);setTimeout(()=>msg.remove(),2500);
+}
+function candNav(currentId,dir){
+  const idx=_vivierNav.indexOf(currentId);
+  if(idx===-1)return;
+  const nextIdx=idx+dir;
+  if(nextIdx<0||nextIdx>=_vivierNav.length)return;
+  openCandDetail(_vivierNav[nextIdx]);
+}
+
+function buildNavArrows(id){
+  const idx=_vivierNav.indexOf(id);
+  if(idx===-1||_vivierNav.length<=1)return '';
+  const hasPrev=idx>0,hasNext=idx<_vivierNav.length-1;
+  return `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+    <button onclick="candNav('${id}',-1)" ${hasPrev?'':'disabled'} style="width:30px;height:30px;border-radius:7px;border:1px solid var(--br);background:${hasPrev?'var(--card)':'var(--bg)'};color:${hasPrev?'var(--tp)':'var(--tm)'};cursor:${hasPrev?'pointer':'default'};font-size:16px;display:flex;align-items:center;justify-content:center" title="Candidat précédent">‹</button>
+    <span style="font-size:11px;color:var(--tm);white-space:nowrap">${idx+1}/${_vivierNav.length}</span>
+    <button onclick="candNav('${id}',1)" ${hasNext?'':'disabled'} style="width:30px;height:30px;border-radius:7px;border:1px solid var(--br);background:${hasNext?'var(--card)':'var(--bg)'};color:${hasNext?'var(--tp)':'var(--tm)'};cursor:${hasNext?'pointer':'default'};font-size:16px;display:flex;align-items:center;justify-content:center" title="Candidat suivant">›</button>
+  </div>`;
 }
 function buildCandCmdsSection(candId){
   // Toutes les commandes où ce candidat apparaît
