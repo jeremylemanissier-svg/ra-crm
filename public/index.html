@@ -2456,7 +2456,14 @@ function openClientDetail(id){
   const ctsH=buildClientContacts(id,cts);
   const html=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br);position:relative">
-      ${c.logo?`<img src="${c.logo}" style="width:50px;height:50px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);flex-shrink:0" alt="${esc(c.nom)}">`:`<div style="width:50px;height:50px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex-shrink:0">${ini}</div>`}
+      <div style="position:relative;flex-shrink:0;cursor:pointer" title="${c.logo?'Changer le logo':'Ajouter un logo'}" onclick="document.getElementById('logo-upload-${id}').click()">
+        ${c.logo
+          ?`<img src="${c.logo}" style="width:62px;height:62px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`
+          :`<div style="width:62px;height:62px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;">${ini}</div>`}
+        <div style="position:absolute;inset:0;border-radius:12px;background:rgba(0,0,0,0);display:flex;align-items:center;justify-content:center;transition:background .15s;font-size:18px;opacity:0" onmouseover="this.style.background='rgba(0,0,0,0.35)';this.style.opacity='1'" onmouseout="this.style.background='rgba(0,0,0,0)';this.style.opacity='0'">📷</div>
+        <input type="file" id="logo-upload-${id}" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="uploadClientLogo(this,'${id}')">
+        ${c.logo?`<button onclick="event.stopPropagation();if(confirm('Supprimer le logo ?')){DB.clients=DB.clients.map(x=>x.id==='${id}'?{...x,logo:null}:x);save();openClientDetail('${id}');}" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0" title="Supprimer le logo">✕</button>`:''}
+      </div>
       <div style="flex:1"><div style="font-size:17px;font-weight:700">${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts)">${esc(c.secteur||'—')} · ${esc(c.ville||c.loc||'—')}${c.departement?' ('+esc(c.departement)+')':''}</div></div>
       <div style="display:flex;gap:6px;align-items:center">
         <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
