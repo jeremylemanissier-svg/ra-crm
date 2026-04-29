@@ -958,6 +958,7 @@ function applyVivierF(){
   // Boolean search
   const boolQ=(document.getElementById('vivier-bool-search')?.value||'').trim();
   if(boolQ)res=vivierBoolSearch(boolQ,res);
+  res.sort((a,b)=>{const na=(a.nom+a.prenom).toLowerCase(),nb=(b.nom+b.prenom).toLowerCase();return na.localeCompare(nb,'fr');});
   if(!res.length){h+='<div class="empty">Aucun candidat correspondant aux filtres</div>';}
   else{
     _vivierNav=res.map(c=>c.id); // Stocker les IDs pour navigation ← →
@@ -998,6 +999,7 @@ function rCommandes(){
   document.getElementById('cmd-filters').innerHTML=fltrs.map(f=>`<button class="fb${cmdFilter===f?' on':''}" onclick="cmdFilter='${f}';rCommandes()">${f}</button>`).join('');
   let res=DB.commandes;if(cmdFilter!=='Toutes')res=res.filter(c=>c.statut===cmdFilter);
   if(s)res=res.filter(c=>{const cl=getClient(c.client_id);return [c.titre,cl?.nom||''].join(' ').toLowerCase().includes(s);});
+  res.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const sc={Active:'background:#ecfdf5;color:#065f46',Suspendue:'background:var(--amber-bg);color:var(--amber)',Pourvue:'background:var(--acc-light);color:var(--acc2)'};
   let h='';
   if(!res.length){h='<div class="empty">Aucune commande</div>';}
@@ -1037,6 +1039,7 @@ function rClients(){
   if(consF)res=res.filter(c=>c.cons===consF);
   if(sectF)res=res.filter(c=>c.secteur_act_new_id===sectF||c.secteur_ref_id===sectF);
   if(s)res=res.filter(c=>[c.nom,c.secteur,c.ville||c.loc,c.departement,c.region,c.cons].join(' ').toLowerCase().includes(s));
+  res.sort((a,b)=>esc(a.nom||'').toLowerCase().localeCompare(esc(b.nom||'').toLowerCase(),'fr'));
   const totalTxt=`<div style="font-size:12px;color:var(--ts);margin-bottom:14px">${res.length} résultat${res.length!==1?'s':''}</div>`;
   if(clientsView==='kanban'){document.getElementById('body-clients').innerHTML=totalTxt+rClientsKanban(res);return;}
   let h=totalTxt+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">';
@@ -2246,20 +2249,27 @@ function delCand(id){if(!confirm('Supprimer ce candidat ?'))return;DB.candidats=
 
 function openCmdForm(id){
   EID=id||null;const cmd=id?DB.commandes.find(x=>x.id===id):{};const v=f=>esc(cmd[f]||'');
-  const clOpts=`<option value="">— Sélectionner —</option>`+DB.clients.map(c=>`<option value="${c.id}"${cmd.client_id===c.id?' selected':''}>${esc(c.nom)}</option>`).join('');
-  const ctOpts=`<option value="">— Sélectionner —</option>`+DB.contacts.map(c=>{const cl=getClient(c.client_id);return `<option value="${c.id}"${cmd.contact_id===c.id?' selected':''}>${esc(c.prenom)} ${esc(c.nom)}${cl?' ('+esc(cl.nom)+')':''}</option>`;}).join('');
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${(cmd.cons||currentUser?.display_name)===cn?' selected':''}>${cn}</option>`).join('');
+  const clItems=alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
+  const ctItems=alphaSort(DB.contacts.map(c=>{const cl=getClient(c.client_id);return {id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}`};}));
+  const consItems=CONS.map(cn=>({id:cn,label:cn}));
   const sOpts=['Active','Suspendue','Pourvue'].map(s=>`<option value="${s}"${(cmd.statut||'Active')===s?' selected':''}>${s}</option>`).join('');
   OM(id?'Modifier la commande':'Nouvelle commande',`
     <div class="fld"><label>Titre du poste</label><input id="f-titre" value="${v('titre')}"></div>
-    <div class="fr"><div class="fld"><label>Client</label><select id="f-client_id">${clOpts}</select></div><div class="fld"><label>Contact</label><select id="f-contact_id">${ctOpts}</select></div></div>
-    <div class="fr3"><div class="fld"><label>Consultant</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Statut</label><select id="f-statut">${sOpts}</select></div><div class="fld"><label>Date de la commande</label><input type="date" id="f-date_cmd" value="${v('date_cmd')||TODAY}"></div></div>
+    <div class="fr">
+      <div class="fld"><label>Client</label>${searchSel('f-client_id',clItems,cmd.client_id||'','— Rechercher un client —')}</div>
+      <div class="fld"><label>Contact</label>${searchSel('f-contact_id',ctItems,cmd.contact_id||'','— Rechercher un contact —')}</div>
+    </div>
+    <div class="fr3">
+      <div class="fld"><label>Consultant</label>${searchSel('f-cons',consItems,cmd.cons||currentUser?.display_name||'','— Consultant —')}</div>
+      <div class="fld"><label>Statut</label><select id="f-statut">${sOpts}</select></div>
+      <div class="fld"><label>Date de la commande</label><input type="date" id="f-date_cmd" value="${v('date_cmd')||TODAY}"></div>
+    </div>
     <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
 }
 function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
-  const form={titre:g('titre'),client_id:g('client_id'),contact_id:g('contact_id'),cons:g('cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
+  const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
   const savedId=EID;
   if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
   else{const existing={id:genId(),date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
@@ -2496,19 +2506,111 @@ function saveCmdAnnonce(cmdId){
   save();showToast('✓ Annonce enregistrée');
 }
 
+let _briefImportData=null;
+
 async function importBriefPDF(inp,cmdId){
   const file=inp.files[0];if(!file)return;
-  const banner=document.createElement('div');banner.style.cssText='position:fixed;bottom:20px;right:20px;background:var(--acc-light);color:var(--acc2);border:1px solid var(--br2);border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999';banner.textContent='⏳ Analyse du brief en cours...';document.body.appendChild(banner);
+  inp.value='';
+  if(file.size>5*1024*1024){alert('Fichier trop lourd (max 5Mo)');return;}
+  const banner=document.createElement('div');
+  banner.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:9999';
+  banner.innerHTML='<div style="background:var(--card);border-radius:14px;padding:28px 36px;text-align:center;font-size:14px;font-weight:500;color:var(--tp)">⏳ Analyse du brief en cours...</div>';
+  document.body.appendChild(banner);
   try{
     const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
-    const result=await api('POST','/api/parse-cv',{name:file.name,type:file.type,data:base64,prompt:'brief'});
-    if(result?.parsed){
-      const p=result.parsed;
-      Object.entries(p).forEach(([k,v])=>{const el=document.getElementById('b-'+k);if(el&&v)el.value=v;});
-      banner.textContent='✓ Brief analysé — vérifiez et complétez les champs';banner.style.background='#ecfdf5';banner.style.color='#065f46';
-    }else{banner.textContent='⚠ Extraction partielle — complétez manuellement';banner.style.background='var(--amber-bg)';banner.style.color='var(--amber)';}
-  }catch(e){banner.textContent='✗ Erreur lors de l\'analyse';banner.style.background='var(--red-bg)';banner.style.color='var(--red)';}
-  setTimeout(()=>banner.remove(),4000);
+    const result=await api('POST','/api/parse-brief',{name:file.name,type:file.type,data:base64});
+    banner.remove();
+    if(result?.error){alert('⚠️ '+result.error);return;}
+    showBriefReview(cmdId,result?.parsed||{});
+  }catch(e){
+    banner.remove();
+    alert('Erreur lors de l\'analyse : '+e.message);
+  }
+}
+
+function showBriefReview(cmdId,parsed){
+  const cmd=DB.commandes.find(x=>x.id===cmdId);
+  const brief=cmd?.brief||{};
+  const LABELS={
+    interlocuteur:'Interlocuteur & fonction',coords_interlo:'Coordonnées interlocuteur',
+    activite_ent:'Activité de l\'entreprise',effectif_ent:'Effectif entreprise/agence',
+    concurrents:'Concurrents',habitudes_recru:'Habitudes recrutement',
+    ouvert_depuis:'Recrutement ouvert depuis',contexte:'Contexte recrutement',
+    intitule_poste:'Intitulé du poste',rattachement:'Rattachement hiérarchique',
+    urgence_date:'Urgence & date idéale',passation:'Période passation/intégration',
+    qui_travaille:'Qui travaille sur le besoin',process_recru:'Process recrutement',
+    no_approche:'Entreprises à ne pas approcher',recru_echoue:'Recrutement échoué',
+    missions_princ:'Missions principales',missions_sec:'Missions secondaires',
+    journee_type:'Journée type',defis:'Défis majeurs',
+    objectifs:'Objectifs CT/MT/LT',diplomes:'Diplômes & expérience',
+    compe_tech:'Compétences techniques',savoir_etre:'Savoir-être',
+    logiciels:'Logiciels / certifications',localisation:'Localisation du poste',
+    deplacements:'Déplacements',horaires:'Horaires',teletravail:'Télétravail',
+    equipe:'Composition équipe',contrat:'Type contrat',statut_contrat:'Statut',
+    remuneration:'Rémunération',avantages:'Avantages',
+    must_have:'Must Have',should_have:'Should Have',nice_have:'Nice Have',
+    commentaires:'Commentaires'
+  };
+
+  const hasData=Object.values(parsed).some(v=>v&&v!=='');
+  if(!hasData){
+    OM('Import brief',`<div style="padding:20px;text-align:center;color:var(--tm)">⚠️ Aucune information extraite du document.<br>Vérifiez que le brief est bien rempli.</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+    return;
+  }
+
+  _briefImportData={cmdId,parsed};
+
+  const rows=Object.entries(LABELS).map(([k,lbl])=>{
+    const newVal=parsed[k];
+    const curVal=brief[k];
+    const hasNew=newVal!==undefined&&newVal!==''&&newVal!==null;
+    if(!hasNew)return '';
+    const hasCur=curVal!==undefined&&curVal!==''&&curVal!==null;
+    const conflict=hasCur&&String(curVal)!==String(newVal);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:10px">
+      <input type="checkbox" id="bri-${k}" ${!conflict?'checked':''} style="margin-top:3px;accent-color:var(--acc);width:16px;height:16px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.04em">${lbl}</div>
+        <div style="font-size:13px;color:var(--tp);margin-top:2px;white-space:pre-wrap">${esc(String(newVal))}</div>
+        ${conflict?`<div style="font-size:11px;color:var(--amber);margin-top:2px">⚠️ Valeur actuelle : ${esc(String(curVal).slice(0,80))}...</div>`:''}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  OM('Vérification — Brief importé',`
+    <div style="background:var(--acc-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--acc2)">
+      ✅ Données extraites du brief. Cochez les champs à importer, décochez ceux à ignorer.
+      Les champs avec ⚠️ contiennent déjà une valeur différente.
+    </div>
+    <div style="max-height:450px;overflow-y:auto;padding-right:4px">${rows}</div>
+    <div class="fa" style="margin-top:14px">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="applyBriefImport()">✅ Appliquer les champs cochés</button>
+    </div>`,'w');
+}
+
+function applyBriefImport(){
+  if(!_briefImportData)return;
+  const {cmdId,parsed}=_briefImportData;
+  const KEYS=['interlocuteur','coords_interlo','activite_ent','effectif_ent','concurrents',
+    'habitudes_recru','ouvert_depuis','contexte','intitule_poste','rattachement',
+    'urgence_date','passation','qui_travaille','process_recru','no_approche','recru_echoue',
+    'missions_princ','missions_sec','journee_type','defis','objectifs',
+    'diplomes','compe_tech','savoir_etre','logiciels','localisation',
+    'deplacements','horaires','teletravail','equipe','contrat','statut_contrat',
+    'remuneration','avantages','must_have','should_have','nice_have','commentaires'];
+  const toApply={};
+  KEYS.forEach(k=>{
+    const cb=document.getElementById('bri-'+k);
+    if(cb&&cb.checked&&parsed[k]!==undefined&&parsed[k]!=='')toApply[k]=parsed[k];
+  });
+  const cmd=DB.commandes.find(x=>x.id===cmdId);if(!cmd)return;
+  const newBrief={...(cmd.brief||{}),...toApply,_saved_by:currentUser?.display_name||'—',_saved_at:TODAY};
+  DB.commandes=DB.commandes.map(x=>x.id===cmdId?{...x,brief:newBrief}:x);
+  save();_briefImportData=null;CM();
+  showToast('✓ '+Object.keys(toApply).length+' champ(s) importé(s) dans le brief');
+  activeCmdTab[cmdId]='brief';
+  setTimeout(()=>openCmdDetail(cmdId),30);
 }
 
 // Commande Kanban drag & drop
