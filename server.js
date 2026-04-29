@@ -204,4 +204,37 @@ app.delete('/api/users/:id', admin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/parse-brief', auth, async (req, res) => {
+  if (!ANTHROPIC_API_KEY) return res.json({ error: 'Clé API non configurée.', parsed: null });
+  const { data, type, name } = req.body;
+  if (!data) return res.status(400).json({ error: 'Fichier manquant', parsed: null });
+  const isPDF = type === 'application/pdf' || (name || '').toLowerCase().endsWith('.pdf');
+  if (!isPDF) return res.json({ error: 'PDF uniquement supporté', parsed: null });
+  try {
+    const prompt = `Tu analyses un brief de poste de recrutement déjà rempli. Extrais les informations saisies et retourne UNIQUEMENT un objet JSON valide, sans texte avant ou après, avec exactement ces clés (valeur "" si non trouvée) :
+{"interlocuteur":"","coords_interlo":"","activite_ent":"","effectif_ent":"","concurrents":"","habitudes_recru":"","ouvert_depuis":"","contexte":"","intitule_poste":"","rattachement":"","urgence_date":"","passation":"","qui_travaille":"","process_recru":"","no_approche":"","recru_echoue":"","missions_princ":"","missions_sec":"","journee_type":"","defis":"","objectifs":"","diplomes":"","compe_tech":"","savoir_etre":"","logiciels":"","localisation":"","deplacements":"","horaires":"","teletravail":"","equipe":"","contrat":"","statut_contrat":"","remuneration":"","avantages":"","must_have":"","should_have":"","nice_have":"","commentaires":""}
+Retourne UNIQUEMENT le JSON.`;
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5', max_tokens: 3000,
+        messages: [{ role: 'user', content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
+          { type: 'text', text: prompt }
+        ]}]
+      })
+    });
+    if (!response.ok) return res.json({ error: 'Erreur API: ' + response.status, parsed: null });
+    const result = await response.json();
+    const text = result.content?.[0]?.text || '';
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return res.json({ error: 'Réponse inattendue', parsed: null });
+    res.json({ parsed: JSON.parse(m[0]) });
+  } catch(e) {
+    console.error('Parse brief error:', e);
+    res.json({ error: 'Erreur: ' + e.message, parsed: null });
+  }
+});
+
 app.listen(PORT, () => console.log(`🚀 UpSearch CRM démarré sur le port ${PORT}`));
