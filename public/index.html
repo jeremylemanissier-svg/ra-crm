@@ -173,8 +173,8 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 #mb.xxl .split-panel{height:78vh;}
 .mh{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 0;}
 .mh h3{font-size:16px;font-weight:600;color:var(--tp);}
-.mhx{background:none;border:none;cursor:pointer;color:var(--tm);font-size:22px;line-height:1;padding:0;transition:color .15s;}
-.mhx:hover{color:var(--tp);}
+.mhx{background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:#dc2626;font-size:20px;font-weight:700;line-height:1;padding:0;width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.mhx:hover{background:#fee2e2;color:#b91c1c;}
 .mbody{padding:16px 24px 22px;}
 
 /* ══ TABS ══ */
@@ -2970,14 +2970,17 @@ function saveAction(){
   const cl=getClient(client_id);const ct=getContact(contact_id);
   const action={id:genId(),type,date,cons,client_id,contact_id,client_nom:cl?.nom||'',contact_nom:ct?`${ct.prenom} ${ct.nom}`:'',commentaire,created_at:TODAY};
   DB.actions.push(action);save();CM();
-  // If triggered from detail panel, refresh panel inline
   const refId=window._actionRefreshClientId||client_id;
   window._actionRefreshClientId=null;
+  // Refresh panel inline if visible, otherwise reopen client detail
   const panel=document.getElementById('acts-panel-'+refId);
   if(panel){
     const allActs=DB.actions.filter(a=>a.client_id===refId).sort((a,b)=>b.date>a.date?1:-1);
     panel.innerHTML=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${esc(a.cons)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><button class="ic-btn" onclick="delAction('${a.id}')" style="flex-shrink:0">🗑</button></div>`;}).join('');
-  }else{R(CV);}
+  }else{
+    // Toujours rouvrir la fiche client, jamais renvoyer au listing
+    setTimeout(()=>openClientDetail(refId),30);
+  }
 }
 function openActionForm(prefClientId){
   EID=null;
