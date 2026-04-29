@@ -1511,8 +1511,8 @@ function saveCand(){
     };
     const savedId=EID;
     EID?DB.candidats=DB.candidats.map(c=>c.id===savedId?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
-    save();CM();
-    if(savedId){openCandDetail(savedId);}else{R(CV);}
+    save();CM();R(CV);
+    if(savedId){setTimeout(()=>openCandDetail(savedId),30);}
   };
   if(!EID){
     const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
