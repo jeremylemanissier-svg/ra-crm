@@ -1620,6 +1620,13 @@ function openCandDetail(id){
     <!-- TAB: PRÉQUALIFICATION -->
     <div id="tab-preq" class="tab-panel">
       ${c.prequalif?._saved_by?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--ts)"><svg width="13" height="13" fill="none" stroke="var(--acc)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Dernière saisie par <b style="color:var(--tp)">${esc(c.prequalif._saved_by)}</b> le ${esc(c.prequalif._saved_at)}</div>`:''}
+      <div style="padding:10px 14px;background:var(--acc-light);border:1px solid var(--br2);border-radius:9px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+        <div style="flex:1;font-size:13px;color:var(--acc2)">📎 Importez une trame de préqualification remplie pour remplir automatiquement les champs ci-dessous.</div>
+        <label class="btn btn-p btn-sm" style="cursor:pointer;flex-shrink:0">
+          📥 Importer la fiche
+          <input type="file" style="display:none" accept=".pdf,.doc,.docx" onchange="importPrequalifDoc(this,'${id}')">
+        </label>
+      </div>
       ${buildPrequalifForm(id,c.prequalif||{})}
     </div>
 
@@ -1923,6 +1930,138 @@ function delControle(candId,idx){
   if(!confirm('Supprimer ce contrôle ?'))return;
   DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,controles_ref:(c.controles_ref||[]).filter((_,i)=>i!==idx)}:c);
   save();openCandDetail(candId);
+}
+
+// ══ IMPORT PRÉQUALIFICATION ══════════════════════════════
+async function importPrequalifDoc(inp,candId){
+  const file=inp.files[0];if(!file)return;
+  inp.value=''; // reset so same file can be re-imported
+  if(file.size>5*1024*1024){alert('Fichier trop lourd (max 5Mo)');return;}
+  const banner=document.createElement('div');
+  banner.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:9999';
+  banner.innerHTML='<div style="background:var(--card);border-radius:14px;padding:28px 36px;text-align:center;font-size:14px;font-weight:500;color:var(--tp)">⏳ Analyse de la trame en cours...</div>';
+  document.body.appendChild(banner);
+  try{
+    const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+    const prompt=`Tu analyses une trame de préqualification de recrutement. Extrais les informations renseignées et retourne UNIQUEMENT un objet JSON avec ces clés (laisser vide "" si non trouvé) :
+{
+  "en_poste": true/false,
+  "preavis": "",
+  "disponible": true/false,
+  "raisons_dispo": "",
+  "raisons_ecoute": "",
+  "type_poste": "",
+  "rem_actuelle": "",
+  "rem_souhaitee": "",
+  "refus_secteurs": "",
+  "souhaits": "",
+  "processus_en_cours": "",
+  "motivation_note": 0,
+  "motivation_comment": "",
+  "exp1_entreprise": "", "exp1_poste": "", "exp1_duree": "", "exp1_depart": "", "exp1_missions": "",
+  "exp2_entreprise": "", "exp2_poste": "", "exp2_duree": "", "exp2_depart": "", "exp2_missions": "",
+  "exp3_entreprise": "", "exp3_poste": "", "exp3_duree": "", "exp3_depart": "", "exp3_missions": "",
+  "logiciels": "",
+  "dispo_format": "physique",
+  "dispo_date": "",
+  "dispo_heure": "",
+  "ressenti": ""
+}
+Retourne UNIQUEMENT le JSON, sans texte avant ou après.`;
+    const result=await api('POST','/api/parse-cv',{name:file.name,type:file.type,data:base64,prompt});
+    banner.remove();
+    let parsed={};
+    try{
+      const txt=result?.parsed?._raw||result?.raw||JSON.stringify(result?.parsed||{});
+      // Try to extract JSON from response
+      const match=txt.match(/\{[\s\S]*\}/);
+      if(match)parsed=JSON.parse(match[0]);
+      else if(result?.parsed)parsed=result.parsed;
+    }catch(e){parsed=result?.parsed||{};}
+    showPrequalifReview(candId,parsed);
+  }catch(e){
+    banner.remove();
+    alert('Erreur lors de l\'analyse : '+e.message+'\nVérifiez que votre clé API est configurée dans Railway.');
+  }
+}
+
+function showPrequalifReview(candId,parsed){
+  const c=getCand(candId);
+  const pq=c?.prequalif||{};
+  const LABELS={
+    en_poste:'En poste',preavis:'Préavis',disponible:'Disponible',raisons_dispo:'Raisons disponibilité',
+    raisons_ecoute:'Raisons d\'écoute',type_poste:'Type de poste recherché',
+    rem_actuelle:'Rémunération actuelle',rem_souhaitee:'Rémunération souhaitée',
+    refus_secteurs:'Secteurs à éviter',souhaits:'Secteurs souhaités',
+    processus_en_cours:'Processus en cours',motivation_note:'Motivation (1-5)',motivation_comment:'Commentaire motivation',
+    exp1_entreprise:'Exp.1 Entreprise',exp1_poste:'Exp.1 Poste',exp1_duree:'Exp.1 Durée',exp1_depart:'Exp.1 Départ',exp1_missions:'Exp.1 Missions',
+    exp2_entreprise:'Exp.2 Entreprise',exp2_poste:'Exp.2 Poste',exp2_duree:'Exp.2 Durée',exp2_depart:'Exp.2 Départ',exp2_missions:'Exp.2 Missions',
+    exp3_entreprise:'Exp.3 Entreprise',exp3_poste:'Exp.3 Poste',exp3_duree:'Exp.3 Durée',exp3_depart:'Exp.3 Départ',exp3_missions:'Exp.3 Missions',
+    logiciels:'Logiciels',dispo_format:'Format entretien',dispo_date:'Date entretien',dispo_heure:'Heure entretien',ressenti:'Ressenti recruteur'
+  };
+
+  // Only show fields where something was extracted
+  const hasData=Object.entries(parsed).some(([k,v])=>v!==''&&v!==0&&v!==false&&v!==null);
+  if(!hasData){
+    OM('Import préqualification',`<div style="padding:20px;text-align:center;color:var(--tm)">⚠️ Aucune information n'a pu être extraite du document.<br><br>Vérifiez que le document est bien rempli et lisible.</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+    return;
+  }
+
+  const rows=Object.entries(LABELS).map(([k,lbl])=>{
+    const newVal=parsed[k];
+    const curVal=pq[k];
+    const hasNew=newVal!==undefined&&newVal!==''&&newVal!==0&&newVal!==false&&newVal!==null;
+    if(!hasNew)return '';
+    const hasCur=curVal!==undefined&&curVal!==''&&curVal!==0&&curVal!==false&&curVal!==null;
+    const conflict=hasCur&&String(curVal)!==String(newVal);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:10px">
+      <input type="checkbox" id="pqi-${k}" ${!conflict?'checked':''} style="margin-top:3px;accent-color:var(--acc);width:16px;height:16px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.04em">${lbl}</div>
+        <div style="font-size:13px;color:var(--tp);margin-top:2px">${esc(String(newVal))}</div>
+        ${conflict?`<div style="font-size:11px;color:var(--amber);margin-top:2px">⚠️ Valeur actuelle : ${esc(String(curVal))}</div>`:''}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  OM('Vérification — Données importées',`
+    <div style="background:var(--acc-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--acc2)">
+      ✅ Données extraites de la trame. Cochez les champs à importer, décochez ceux à ignorer.
+      Les champs avec ⚠️ contiennent déjà une valeur différente.
+    </div>
+    <div style="max-height:450px;overflow-y:auto;padding-right:4px">${rows}</div>
+    <div class="fa" style="margin-top:14px">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="applyPrequalifImport('${candId}',${JSON.stringify(parsed).replace(/'/g,"&#39;")})">✅ Appliquer les champs cochés</button>
+    </div>`,'w');
+}
+
+function applyPrequalifImport(candId,parsed){
+  const LABELS=['en_poste','preavis','disponible','raisons_dispo','raisons_ecoute','type_poste',
+    'rem_actuelle','rem_souhaitee','refus_secteurs','souhaits','processus_en_cours',
+    'motivation_note','motivation_comment',
+    'exp1_entreprise','exp1_poste','exp1_duree','exp1_depart','exp1_missions',
+    'exp2_entreprise','exp2_poste','exp2_duree','exp2_depart','exp2_missions',
+    'exp3_entreprise','exp3_poste','exp3_duree','exp3_depart','exp3_missions',
+    'logiciels','dispo_format','dispo_date','dispo_heure','ressenti'];
+  const toApply={};
+  LABELS.forEach(k=>{
+    const cb=document.getElementById('pqi-'+k);
+    if(cb&&cb.checked&&parsed[k]!==undefined&&parsed[k]!==''&&parsed[k]!==null)toApply[k]=parsed[k];
+  });
+  const c=getCand(candId);if(!c)return;
+  const newPq={...(c.prequalif||{}),...toApply};
+  DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,prequalif:newPq}:x);
+  save();CM();
+  showToast('✓ '+Object.keys(toApply).length+' champ(s) importé(s)');
+  // Reopen candidat detail on prequalif tab
+  setTimeout(()=>{
+    openCandDetail(candId);
+    setTimeout(()=>{
+      const btn=document.querySelector('[onclick*="tab-preq"]');
+      if(btn)btn.click();
+    },100);
+  },30);
 }
 
 function buildPrequalifForm(candId,pq){
