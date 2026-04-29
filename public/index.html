@@ -1508,8 +1508,10 @@ function saveCand(){
       notes:existing.notes||[],prequalif:existing.prequalif||{},entretien:existing.entretien||{},
       entretiens:existing.entretiens||[],controles_ref:existing.controles_ref||[]
     };
-    EID?DB.candidats=DB.candidats.map(c=>c.id===EID?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
-    save();CM();R(CV);
+    const savedId=EID;
+    EID?DB.candidats=DB.candidats.map(c=>c.id===savedId?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
+    save();CM();
+    if(savedId){openCandDetail(savedId);}else{R(CV);}
   };
   if(!EID){
     const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
@@ -3335,11 +3337,11 @@ async function generateAnonPDF(candId){
     const c=getCand(candId);
     const anonCv={name:`CV_anonymise_${esc(c.prenom)}_${esc(c.nom)}.pdf`,type:'application/pdf',size:Math.round(pdfB64.length*0.75),data:pdfB64,cons:currentUser?.display_name||'—',date:TODAY,original_name:c.cv?.name||''};
     DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,cv_anonymise:anonCv}:x);
-    save();CM();openCandDetail(candId);
-    setTimeout(()=>{
-      const el=document.createElement('div');el.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';
-      el.textContent='✓ CV anonymisé enregistré';document.body.appendChild(el);setTimeout(()=>el.remove(),3000);
-    },100);
+    save();
+    if(btn){btn.textContent='✅ Générer le CV anonymisé';btn.disabled=false;}
+    anonState.rects=[];// reset zones for next use
+    CM();openCandDetail(candId);
+    showToast('✓ CV anonymisé enregistré');
   }catch(e){
     alert('Erreur lors de la génération : '+e.message);
     if(btn){btn.textContent='✅ Générer le CV anonymisé';btn.disabled=false;}
