@@ -119,6 +119,65 @@ app.post('/api/parse-cv', auth, async (req, res) => {
   }
 });
 
+app.post('/api/parse-prequalif', auth, async (req, res) => {
+  if (!ANTHROPIC_API_KEY) return res.json({ error: 'Clé API non configurée.', parsed: null });
+  const { data, type, name } = req.body;
+  if (!data) return res.status(400).json({ error: 'Fichier manquant', parsed: null });
+  const isPDF = type === 'application/pdf' || (name || '').toLowerCase().endsWith('.pdf');
+  if (!isPDF) return res.json({ error: 'PDF uniquement supporté', parsed: null });
+  try {
+    const prompt = `Tu analyses une trame de préqualification de recrutement déjà remplie. Extrais les informations saisies par le recruteur et retourne UNIQUEMENT un objet JSON valide, sans texte avant ou après, avec exactement ces clés (valeur "" si non trouvée ou vide) :
+{
+  "en_poste": false,
+  "preavis": "",
+  "disponible": false,
+  "raisons_dispo": "",
+  "raisons_ecoute": "",
+  "type_poste": "",
+  "rem_actuelle": "",
+  "rem_souhaitee": "",
+  "refus_secteurs": "",
+  "souhaits": "",
+  "processus_en_cours": "",
+  "motivation_note": 0,
+  "motivation_comment": "",
+  "exp1_entreprise": "", "exp1_poste": "", "exp1_duree": "", "exp1_depart": "", "exp1_missions": "",
+  "exp2_entreprise": "", "exp2_poste": "", "exp2_duree": "", "exp2_depart": "", "exp2_missions": "",
+  "exp3_entreprise": "", "exp3_poste": "", "exp3_duree": "", "exp3_depart": "", "exp3_missions": "",
+  "logiciels": "",
+  "dispo_format": "",
+  "dispo_date": "",
+  "dispo_heure": "",
+  "ressenti": ""
+}
+Pour en_poste et disponible: utilise true/false. Pour motivation_note: utilise un entier entre 0 et 5. Retourne UNIQUEMENT le JSON.`;
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5', max_tokens: 2000,
+        messages: [{ role: 'user', content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
+          { type: 'text', text: prompt }
+        ]}]
+      })
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      return res.json({ error: 'Erreur API: ' + response.status, parsed: null });
+    }
+    const result = await response.json();
+    const text = result.content?.[0]?.text || '';
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return res.json({ error: 'Réponse inattendue', parsed: null });
+    const parsed = JSON.parse(m[0]);
+    res.json({ parsed });
+  } catch(e) {
+    console.error('Parse prequalif error:', e);
+    res.json({ error: 'Erreur: ' + e.message, parsed: null });
+  }
+});
+
 // ── Users (admin) ─────────────────────────────────────
 app.get('/api/users', admin, (req, res) => res.json(readJSON('users.json', []).map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, created_at: u.created_at }))));
 app.post('/api/users', admin, (req, res) => {
