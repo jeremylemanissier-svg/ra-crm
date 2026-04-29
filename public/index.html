@@ -1985,6 +1985,8 @@ Retourne UNIQUEMENT le JSON, sans texte avant ou après.`;
   }
 }
 
+let _prequalifImportData=null; // stockage temporaire des données extraites
+
 function showPrequalifReview(candId,parsed){
   const c=getCand(candId);
   const pq=c?.prequalif||{};
@@ -2000,12 +2002,14 @@ function showPrequalifReview(candId,parsed){
     logiciels:'Logiciels',dispo_format:'Format entretien',dispo_date:'Date entretien',dispo_heure:'Heure entretien',ressenti:'Ressenti recruteur'
   };
 
-  // Only show fields where something was extracted
-  const hasData=Object.entries(parsed).some(([k,v])=>v!==''&&v!==0&&v!==false&&v!==null);
+  const hasData=Object.entries(parsed).some(([k,v])=>v!==''&&v!==0&&v!==false&&v!==null&&v!==undefined);
   if(!hasData){
     OM('Import préqualification',`<div style="padding:20px;text-align:center;color:var(--tm)">⚠️ Aucune information n'a pu être extraite du document.<br><br>Vérifiez que le document est bien rempli et lisible.</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
     return;
   }
+
+  // Stocker dans variable globale pour éviter les problèmes d'échappement dans onclick
+  _prequalifImportData={candId,parsed};
 
   const rows=Object.entries(LABELS).map(([k,lbl])=>{
     const newVal=parsed[k];
@@ -2032,12 +2036,14 @@ function showPrequalifReview(candId,parsed){
     <div style="max-height:450px;overflow-y:auto;padding-right:4px">${rows}</div>
     <div class="fa" style="margin-top:14px">
       <button class="btn btn-s" onclick="CM()">Annuler</button>
-      <button class="btn btn-p" onclick="applyPrequalifImport('${candId}',${JSON.stringify(parsed).replace(/'/g,"&#39;")})">✅ Appliquer les champs cochés</button>
+      <button class="btn btn-p" onclick="applyPrequalifImport()">✅ Appliquer les champs cochés</button>
     </div>`,'w');
 }
 
-function applyPrequalifImport(candId,parsed){
-  const LABELS=['en_poste','preavis','disponible','raisons_dispo','raisons_ecoute','type_poste',
+function applyPrequalifImport(){
+  if(!_prequalifImportData)return;
+  const {candId,parsed}=_prequalifImportData;
+  const KEYS=['en_poste','preavis','disponible','raisons_dispo','raisons_ecoute','type_poste',
     'rem_actuelle','rem_souhaitee','refus_secteurs','souhaits','processus_en_cours',
     'motivation_note','motivation_comment',
     'exp1_entreprise','exp1_poste','exp1_duree','exp1_depart','exp1_missions',
@@ -2045,22 +2051,21 @@ function applyPrequalifImport(candId,parsed){
     'exp3_entreprise','exp3_poste','exp3_duree','exp3_depart','exp3_missions',
     'logiciels','dispo_format','dispo_date','dispo_heure','ressenti'];
   const toApply={};
-  LABELS.forEach(k=>{
+  KEYS.forEach(k=>{
     const cb=document.getElementById('pqi-'+k);
     if(cb&&cb.checked&&parsed[k]!==undefined&&parsed[k]!==''&&parsed[k]!==null)toApply[k]=parsed[k];
   });
   const c=getCand(candId);if(!c)return;
   const newPq={...(c.prequalif||{}),...toApply};
   DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,prequalif:newPq}:x);
-  save();CM();
+  save();_prequalifImportData=null;CM();
   showToast('✓ '+Object.keys(toApply).length+' champ(s) importé(s)');
-  // Reopen candidat detail on prequalif tab
   setTimeout(()=>{
     openCandDetail(candId);
     setTimeout(()=>{
       const btn=document.querySelector('[onclick*="tab-preq"]');
       if(btn)btn.click();
-    },100);
+    },150);
   },30);
 }
 
