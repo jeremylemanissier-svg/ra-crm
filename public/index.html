@@ -1472,10 +1472,11 @@ function openCandForm(id){
       <div class="fld"><label>Source ${!EID?'<span style="color:var(--red)">*</span>':''}</label><select id="f-source_type"><option value="">— Type de source —</option>${SOURCES_TYPE.map(s=>`<option value="${s}"${c.source_type===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="fld"><label>Canal ${!EID?'<span style="color:var(--red)">*</span>':''}</label><select id="f-source_canal"><option value="">— Canal / Plateforme —</option>${SOURCES_CANAL.map(s=>`<option value="${s}"${c.source_canal===s?' selected':''}>${s}</option>`).join('')}</select></div>
     </div>
-    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveCand()">Enregistrer</button></div>`;
+    <div class="fa"><button class="btn btn-s" onclick="candFormCancel('${id||''}')">Annuler</button><button class="btn btn-p" onclick="saveCand()">Enregistrer</button></div>`;
   const html=c.cv?`<div class="split-panel"><div class="split-left">${formHtml}</div>${cvPanelHtml}</div>`:formHtml;
   OM(id?'Modifier le candidat':'Nouveau candidat',html,c.cv?'xxl':'w');
 }
+function candFormCancel(candId){CM();if(candId)openCandDetail(candId);}
 function saveCand(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const geo=geoGetVal('geo-c');
@@ -1548,7 +1549,7 @@ function openCandDetail(id){
     :`<div style="width:70px;height:70px;border-radius:50%;background:${avBg};color:${avTxt};display:flex;align-items:center;justify-content:center;font-size:25px;font-weight:700;flex-shrink:0">${avIni}</div>`;
 
   const html=`
-    <div style="display:flex;gap:18px;align-items:flex-start;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br);position:relative">
+    <div style="display:flex;gap:18px;align-items:flex-start;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
       ${photoEl}
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:5px">
@@ -1557,10 +1558,12 @@ function openCandDetail(id){
           ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé · ${esc(c.archive_motif||'')}</span>`:''}
         </div>
         <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div>
-        <button class="btn btn-p btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-p btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
+          ${buildNavArrows(id,_vivierNav,'candNav')}
+        </div>
       </div>
-      ${buildNavArrows(id,_vivierNav,'candNav')}
-      <button onclick="CM()" style="position:absolute;top:0;right:0;background:none;border:none;cursor:pointer;font-size:22px;color:var(--tm);line-height:1;padding:0" title="Fermer">×</button>
+      <button onclick="CM()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
     </div>
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab(this,'tab-infos')">Infos</button>
@@ -3193,7 +3196,7 @@ let anonState={rects:[],pageNum:1,numPages:0,pdfDoc:null,scale:1.5,currentCandId
 
 async function openAnonymize(candId){
   const c=getCand(candId);if(!c?.cv)return;
-  anonState={rects:[],pageNum:1,numPages:0,pdfDoc:null,scale:1.5,currentCandId:candId,drawing:false,startX:0,startY:0,currentRect:null};
+  anonState={rects:[],pageNum:1,numPages:0,pdfDoc:null,scale:1.2,currentCandId:candId,drawing:false,startX:0,startY:0,currentRect:null};
 
   OM(`Anonymiser le CV — ${esc(c.prenom)} ${esc(c.nom)}`,`
     <div class="anon-toolbar">
@@ -3202,31 +3205,33 @@ async function openAnonymize(candId){
         <span id="anon-page-info">Page 1/1</span>
         <button class="btn btn-s btn-sm" onclick="anonNextPage()">▶</button>
       </div>
-      <button class="btn btn-s btn-sm" onclick="anonClearRects()">🗑 Effacer les zones</button>
-      <span style="color:var(--sbt);font-size:12px">Cliquez-glissez pour masquer des zones</span>
-      <button class="btn btn-p" style="margin-left:auto" onclick="generateAnonPDF('${candId}')">✅ Générer le CV anonymisé</button>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-s btn-sm" onclick="anonZoom(-0.2)" title="Zoom arrière">−</button>
+        <span id="anon-zoom-lbl" style="color:white;font-size:12px;min-width:36px;text-align:center;padding-top:5px">120%</span>
+        <button class="btn btn-s btn-sm" onclick="anonZoom(0.2)" title="Zoom avant">+</button>
+        <button class="btn btn-s btn-sm" onclick="anonFitWidth()" title="Ajuster à la largeur">⬌</button>
+      </div>
+      <button class="btn btn-s btn-sm" onclick="anonClearRects()">🗑 Effacer zones</button>
+      <span style="color:var(--sbt);font-size:11px">Cliquez-glissez pour masquer</span>
+      <button class="btn btn-p" style="margin-left:auto" onclick="generateAnonPDF('${candId}')">✅ Générer</button>
     </div>
-    <div style="overflow:auto;background:#555;padding:16px;display:flex;justify-content:center;" id="anon-scroll">
-      <div class="anon-canvas-wrap" id="anon-canvas-wrap" style="position:relative;display:inline-block">
+    <div style="overflow:auto;background:#444;padding:12px;display:flex;justify-content:center;max-height:72vh;" id="anon-scroll">
+      <div class="anon-canvas-wrap" id="anon-canvas-wrap" style="position:relative;display:inline-block;flex-shrink:0">
         <canvas id="anon-pdf-canvas"></canvas>
         <div id="anon-rects-layer" style="position:absolute;top:0;left:0;pointer-events:none;"></div>
       </div>
     </div>
-    <div style="padding:10px 16px;font-size:12px;color:var(--ts)">
-      💡 <b>Conseil :</b> tracez des rectangles sur les zones à masquer (nom, prénom, photo, téléphone, email...). 
-      Les rectangles sont numérotés — cliquez sur ✕ pour en supprimer un.
+    <div style="padding:8px 16px;font-size:11px;color:var(--ts)">
+      💡 Tracez des rectangles sur les zones à masquer. Cliquez ✕ sur un rectangle pour le supprimer.
     </div>`,'xl');
 
-  // Setup canvas interaction
   const wrap=document.getElementById('anon-canvas-wrap');
   const canvas=document.getElementById('anon-pdf-canvas');
   if(!wrap||!canvas)return;
-
   canvas.addEventListener('mousedown',anonMouseDown);
   canvas.addEventListener('mousemove',anonMouseMove);
   canvas.addEventListener('mouseup',anonMouseUp);
 
-  // Load PDF
   try{
     if(!window.pdfjsLib){alert('PDF.js non chargé.');return;}
     pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -3235,8 +3240,28 @@ async function openAnonymize(candId){
     for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
     anonState.pdfDoc=await pdfjsLib.getDocument({data:arr}).promise;
     anonState.numPages=anonState.pdfDoc.numPages;
-    anonRenderPage(1);
+    // Auto fit-to-width on first load
+    await anonFitWidth();
   }catch(e){alert('Impossible de charger le PDF: '+e.message);}
+}
+
+async function anonFitWidth(){
+  if(!anonState.pdfDoc)return;
+  const page=await anonState.pdfDoc.getPage(anonState.pageNum);
+  const vpNatural=page.getViewport({scale:1});
+  const scrollEl=document.getElementById('anon-scroll');
+  const availW=scrollEl?(scrollEl.clientWidth-40):600;
+  anonState.scale=Math.max(0.5,Math.min(2.5,availW/vpNatural.width));
+  const lbl=document.getElementById('anon-zoom-lbl');
+  if(lbl)lbl.textContent=Math.round(anonState.scale*100)+'%';
+  anonRenderPage(anonState.pageNum);
+}
+
+async function anonZoom(delta){
+  anonState.scale=Math.max(0.4,Math.min(3,anonState.scale+delta));
+  const lbl=document.getElementById('anon-zoom-lbl');
+  if(lbl)lbl.textContent=Math.round(anonState.scale*100)+'%';
+  anonRenderPage(anonState.pageNum);
 }
 
 async function anonRenderPage(num){
