@@ -2277,6 +2277,114 @@ function saveCmd(){
   if(savedId)setTimeout(()=>openCmdDetail(savedId),30);
 }
 function delCmd(id){if(!confirm('Supprimer ?'))return;DB.commandes=DB.commandes.filter(c=>c.id!==id);save();R(CV);}
+// ══ SCORING PRIORITÉ COMMANDE ════════════════════════════
+const PRIORITY_CRITERIA=[
+  {id:'engagement', label:'Engagement & réactivité client', coef:2,
+   opts:['Ne répond pas, aucun retour','Réponses très tardives, flou','Réactif irrégulier','Réactif, échanges clairs','Très réactif, proactif']},
+  {id:'brief_clarte', label:'Clarté du brief', coef:1,
+   opts:['Aucun brief, incohérent','Brief incomplet, flou','Besoin compris mais imprécis','Brief incomplet mais fiche de poste','Brief complété entièrement']},
+  {id:'faisabilite', label:'Faisabilité', coef:1,
+   opts:['Infaisable','Très difficile','Faisable avec effort','Faisable','Très facile à closer']},
+  {id:'rapidite_process', label:'Rapidité du processus', coef:2,
+   opts:['Process très long, incertain','Process lent, +1 mois sans avancée','Délais corrects mais variables','Process fluide et structuré','Décision rapide, cycle court']},
+  {id:'urgence', label:'Urgence', coef:1.5,
+   opts:['Aucun besoin réel','Besoin faible ou confort','Besoin existant sans pression','Besoin important identifié','Poste critique, urgence forte']},
+  {id:'vivier', label:'Disponibilité candidats dans le vivier', coef:1,
+   opts:['Aucun candidat identifié','Très peu de profils','Quelques profils exploitables','Vivier existant','Plusieurs candidats immédiatement activables']},
+  {id:'sourcing', label:'Temps estimé de sourcing', coef:1,
+   opts:['Plus de 2 mois','Plus d\'1 mois','Plus de 3 semaines','Moins de 2 semaines','Moins d\'1 semaine']},
+  {id:'anciennete', label:'Ancienneté de la commande', coef:1,
+   opts:['Plus de 6 mois sans avancée','3 à 6 mois','1 à 3 mois','Moins d\'1 mois','Moins de 2 semaines']},
+  {id:'rentabilite', label:'Rentabilité', coef:1.5,
+   opts:['Faible marge / facturation divisée','Peu rentable (<15%)','Correcte (15-18%)','Bonne (≥18%)','Très forte (≥20%) / récurrence']},
+];
+const PRIORITY_COLORS={1:'background:#fef2f2;color:#dc2626',2:'background:#fff7ed;color:#ea580c',3:'background:#fefce8;color:#ca8a04',4:'background:#f0fdf4;color:#16a34a',5:'background:#ecfdf5;color:#059669'};
+const PRIORITY_LABELS={1:'Faible',2:'Basse',3:'Moyenne',4:'Forte',5:'Très forte'};
+
+function calcPriority(scores){
+  if(!scores||!Object.keys(scores).length)return null;
+  let sumW=0,sumCoef=0;
+  PRIORITY_CRITERIA.forEach(c=>{const n=parseInt(scores[c.id])||0;if(n>0){sumW+=n*c.coef;sumCoef+=c.coef;}});
+  if(!sumCoef)return null;
+  const avg=sumW/sumCoef;
+  return Math.min(5,Math.max(1,Math.round(avg)));
+}
+
+function buildPriorityBadge(cmd){
+  const score=calcPriority(cmd.priority_scores);
+  const style=score?PRIORITY_COLORS[score]:'background:var(--bg);color:var(--tm)';
+  const label=score?`${score}/5 — ${PRIORITY_LABELS[score]}`:'Non évalué';
+  return `<button onclick="openPriorityScoring('${cmd.id}')" style="${style};border:none;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer">⭐ Priorité : ${label}</button>`;
+}
+
+function openPriorityScoring(cmdId){
+  const cmd=DB.commandes.find(x=>x.id===cmdId);if(!cmd)return;
+  const scores=cmd.priority_scores||{};
+  const currentScore=calcPriority(scores);
+  const rows=PRIORITY_CRITERIA.map(c=>{
+    const cur=parseInt(scores[c.id])||0;
+    const btns=[1,2,3,4,5].map(n=>`<button type="button" id="ps-${c.id}-${n}" onclick="psBtnClick('${c.id}',${n})" style="width:34px;height:34px;border-radius:7px;border:2px solid ${cur===n?'var(--acc)':'var(--br)'};background:${cur===n?'var(--acc)':'var(--bg)'};color:${cur===n?'white':'var(--tp)'};cursor:pointer;font-size:13px;font-weight:600;transition:all .15s" title="${esc(c.opts[n-1])}">${n}</button>`).join('');
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--bg)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--tp)">${esc(c.label)}${c.coef>1?`<span style="font-size:11px;color:var(--acc2);margin-left:6px">×${c.coef}</span>`:''}</div>
+          ${cur?`<div style="font-size:11px;color:var(--ts);margin-top:2px">${esc(c.opts[cur-1])}</div>`:'<div style="font-size:11px;color:var(--tm);font-style:italic">Non évalué</div>'}
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">${btns}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  OM('⭐ Scoring de priorité',`
+    ${currentScore?`<div style="${PRIORITY_COLORS[currentScore]};border-radius:9px;padding:10px 14px;margin-bottom:14px;text-align:center;font-size:14px;font-weight:700">Priorité actuelle : ${currentScore}/5 — ${PRIORITY_LABELS[currentScore]}</div>`:''}
+    <div id="ps-preview" style="margin-bottom:12px;padding:8px 14px;background:var(--bg);border-radius:8px;text-align:center;font-size:13px;color:var(--ts)">Remplissez les critères pour calculer la priorité</div>
+    <div style="max-height:420px;overflow-y:auto;padding-right:4px">${rows}</div>
+    <div style="margin-top:14px;padding:10px 14px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--tm)">
+      ★ Certains critères ont plus de poids car ils impactent la probabilité de closing.<br>
+      <b>×2</b> : Engagement client, Rapidité process &nbsp;|&nbsp; <b>×1,5</b> : Urgence, Rentabilité &nbsp;|&nbsp; <b>×1</b> : autres
+    </div>
+    <div class="fa" style="margin-top:12px">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="savePriority('${cmdId}')">💾 Enregistrer la priorité</button>
+    </div>`,`w`);
+  // Store current scores in temp for live preview
+  window._psScores={...scores};
+  updatePsPreview();
+}
+
+function psBtnClick(critId,n){
+  window._psScores=window._psScores||{};
+  window._psScores[critId]=n;
+  // Update button styles
+  [1,2,3,4,5].forEach(i=>{
+    const b=document.getElementById(`ps-${critId}-${i}`);
+    if(b){b.style.border=i===n?'2px solid var(--acc)':'2px solid var(--br)';b.style.background=i===n?'var(--acc)':'var(--bg)';b.style.color=i===n?'white':'var(--tp)';}
+  });
+  // Update description text
+  const c=PRIORITY_CRITERIA.find(x=>x.id===critId);
+  if(c){
+    const row=document.getElementById(`ps-${critId}-1`)?.closest('[style*="padding:10px 0"]');
+    if(row){const desc=row.querySelector('div[style*="font-size:11px"]');if(desc)desc.textContent=c.opts[n-1];}
+  }
+  updatePsPreview();
+}
+
+function updatePsPreview(){
+  const score=calcPriority(window._psScores);
+  const el=document.getElementById('ps-preview');if(!el)return;
+  if(!score){el.textContent='Remplissez les critères pour calculer la priorité';el.style='margin-bottom:12px;padding:8px 14px;background:var(--bg);border-radius:8px;text-align:center;font-size:13px;color:var(--ts)';}
+  else{el.textContent=`→ Priorité calculée : ${score}/5 — ${PRIORITY_LABELS[score]}`;el.style=`margin-bottom:12px;padding:8px 14px;${PRIORITY_COLORS[score]};border-radius:8px;text-align:center;font-size:13px;font-weight:600`;}
+}
+
+function savePriority(cmdId){
+  if(!window._psScores)return;
+  const score=calcPriority(window._psScores);
+  DB.commandes=DB.commandes.map(x=>x.id===cmdId?{...x,priority_scores:{...window._psScores},priority:score}:x);
+  save();window._psScores=null;CM();
+  showToast('✓ Priorité enregistrée : '+(score||'—')+'/5');
+  setTimeout(()=>openCmdDetail(cmdId),30);
+}
+
 function openCmdDetail(id){
   const cmd=DB.commandes.find(x=>x.id===id);if(!cmd)return;
   const cl=getClient(cmd.client_id),ct=getContact(cmd.contact_id);
@@ -2434,6 +2542,7 @@ function openCmdDetail(id){
       <div>
         <div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div>
         <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · 📋 ${esc(cmd.cons)} · 📅 ${cmd.date_cmd||cmd.date||'—'}</div>
+        <div style="margin-top:8px">${buildPriorityBadge(cmd)}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
         ${buildNavArrows(id,_cmdsNav,'cmdNav')}
