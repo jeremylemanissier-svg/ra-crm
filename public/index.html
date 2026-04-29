@@ -1052,7 +1052,6 @@ function rClients(){
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">📦 Archivé</span>`:''}${c.effectif?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(c.effectif)}</span>`:''}<span style="font-size:11px;color:var(--tm)">${esc(c.cons||'')}</span></div>
       <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:3px">
         <div>📍 ${esc(c.ville||c.loc||'—')}${c.departement?' · '+esc(c.departement):''}</div>
-        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">✉️ ${esc(c.email||'—')}</div>
         <div>📞 ${esc(c.phone||'—')}</div>
         ${c.site_web?`<div><a href="${esc(c.site_web)}" target="_blank" style="color:var(--acc);text-decoration:none;font-size:11px" onclick="event.stopPropagation()">🌐 ${esc(c.site_web)}</a></div>`:''}
       </div>
