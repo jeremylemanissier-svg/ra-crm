@@ -2932,8 +2932,8 @@ function delRefItem(arr,id){
 }
 
 function addRefFlat(arr){const inp=document.getElementById('new-'+arr);const l=(inp?.value||'').trim();if(!l)return;if(!REF[arr])REF[arr]=[];REF[arr].push({id:genId(),label:l,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
-function addMetier(famId){const inp=document.getElementById('nm-'+famId);const l=(inp?.value||'').trim();if(!l)return;if(!REF.metiers)REF.metiers=[];REF.metiers.push({id:genId(),label:l,famille_id:famId,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
-function addSousSecteur(sectId){const inp=document.getElementById('nss-'+sectId);const l=(inp?.value||'').trim();if(!l)return;if(!REF.sous_secteurs)REF.sous_secteurs=[];REF.sous_secteurs.push({id:genId(),label:l,secteur_id:sectId,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
+function addMetier(famId){const inp=document.getElementById('nm-'+famId);const l=(inp?.value||'').trim();if(!l)return;if(!REF.metiers)REF.metiers=[];REF.metiers.push({id:genId(),label:l,famille_id:famId,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();toggleRefGroup('rfm-'+famId);}
+function addSousSecteur(sectId){const inp=document.getElementById('nss-'+sectId);const l=(inp?.value||'').trim();if(!l)return;if(!REF.sous_secteurs)REF.sous_secteurs=[];REF.sous_secteurs.push({id:genId(),label:l,secteur_id:sectId,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();toggleRefGroup('rsa-'+sectId);}
 function renRefItem(arr,id){const it=(REF[arr]||[]).find(x=>x.id===id);if(!it)return;const nl=prompt('Renommer :',it.label);if(!nl||nl.trim()===it.label)return;REF[arr]=REF[arr].map(x=>x.id===id?{...x,label:nl.trim()}:x);saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
 function toggleRefActif(arr,id){
   const it=(REF[arr]||[]).find(x=>x.id===id);if(!it)return;
@@ -2976,7 +2976,7 @@ function rRG(){
     <div class="radd"><input type="text" id="new-regions" placeholder="Nom de la région..."><button onclick="addRefFlat('regions')">+ Région</button></div>
   </div>`;
 }
-function addVille(rid){const inp=document.getElementById('nv-'+rid);const l=(inp?.value||'').trim();if(!l)return;if(!REF.villes)REF.villes=[];REF.villes.push({id:genId(),label:l,region_id:rid,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
+function addVille(rid){const inp=document.getElementById('nv-'+rid);const l=(inp?.value||'').trim();if(!l)return;if(!REF.villes)REF.villes=[];REF.villes.push({id:genId(),label:l,region_id:rid,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();toggleRefGroup('rreg-'+rid);}
 
 // ══ KANBAN ══════════════════════════════════════════════
 
