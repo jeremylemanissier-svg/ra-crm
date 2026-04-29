@@ -2853,34 +2853,82 @@ function rRC(){if(rtab==='secteurs')return rRSecteurs();if(rtab==='metiers')retu
 
 function rRMetiers(){
   let h='<div>';
-  (REF.familles_metier||[]).forEach(fam=>{
-    const ch=(REF.metiers||[]).filter(m=>m.famille_id===fam.id);
-    const famCls=fam.actif===false?'opacity:.4':'';
-    h+=`<div style="margin-bottom:10px;${famCls}"><div class="rpr">
-      <span style="flex:1;font-size:13px;font-weight:500">${fam.actif===false?'🚫 ':''} ${esc(fam.label)}</span>
-      <button class="ic-btn" onclick="renRefItem('familles_metier','${fam.id}')">✏️</button>
-      <button class="ic-btn" onclick="toggleRefActif('familles_metier','${fam.id}')" title="${fam.actif===false?'Réactiver':'Désactiver'}">${fam.actif===false?'✅':'⏸'}</button>
+  (REF.familles_metier||[]).filter(f=>f.actif!==false).forEach(fam=>{
+    const ch=(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===fam.id);
+    const uid='rfm-'+fam.id;
+    h+=`<div style="margin-bottom:6px">
+      <div class="rpr" style="cursor:pointer" onclick="toggleRefGroup('${uid}')">
+        <span style="flex:1;font-size:13px;font-weight:500">${esc(fam.label)}</span>
+        <span style="font-size:11px;color:var(--tm);margin-right:6px">${ch.length} métier${ch.length!==1?'s':''}</span>
+        <button class="ic-btn" onclick="event.stopPropagation();renRefItem('familles_metier','${fam.id}')">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="event.stopPropagation();delRefItem('familles_metier','${fam.id}')" title="Supprimer">🗑</button>
+        <span id="${uid}-arrow" style="font-size:12px;color:var(--tm);margin-left:4px">▶</span>
+      </div>
+      <div id="${uid}" style="display:none" class="rchildren">
+        ${ch.map(m=>`<div class="rcr"><span style="flex:1;font-size:12px">${esc(m.label)}</span>
+          <button class="ic-btn" onclick="renRefItem('metiers','${m.id}')">✏️</button>
+          <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('metiers','${m.id}')" title="Supprimer">🗑</button>
+        </div>`).join('')}
+        <div class="radd" style="margin-top:6px"><input type="text" id="nm-${fam.id}" placeholder="Nouveau métier..."><button onclick="addMetier('${fam.id}')">+ Ajouter</button></div>
+      </div>
     </div>`;
-    if(ch.length)h+=`<div class="rchildren">${ch.map(m=>`<div class="rcr" style="${m.actif===false?'opacity:.4':''}"><span style="flex:1;font-size:12px">${m.actif===false?'🚫 ':''} ${esc(m.label)}</span><button class="ic-btn" onclick="renRefItem('metiers','${m.id}')">✏️</button><button class="ic-btn" onclick="toggleRefActif('metiers','${m.id}')" title="${m.actif===false?'Réactiver':'Désactiver'}">${m.actif===false?'✅':'⏸'}</button></div>`).join('')}</div>`;
-    h+=`<div style="padding-left:16px;margin-top:5px"><div class="radd"><input type="text" id="nm-${fam.id}" placeholder="Nouveau métier..."><button onclick="addMetier('${fam.id}')">+ Métier</button></div></div></div>`;
   });
-  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px"><div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une famille métier</div><div class="radd"><input type="text" id="new-familles_metier" placeholder="Nom de la famille..."><button onclick="addRefFlat('familles_metier')">+ Famille</button></div></div>`;
+  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px">
+    <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une famille métier</div>
+    <div class="radd"><input type="text" id="new-familles_metier" placeholder="Nom de la famille..."><button onclick="addRefFlat('familles_metier')">+ Famille</button></div>
+  </div>`;
 }
 
 function rRSecteurs(){
   let h='<div>';
-  (REF.secteurs_act||[]).forEach(sect=>{
-    const ch=(REF.sous_secteurs||[]).filter(s=>s.secteur_id===sect.id);
-    const cls=sect.actif===false?'opacity:.4':'';
-    h+=`<div style="margin-bottom:10px;${cls}"><div class="rpr">
-      <span style="flex:1;font-size:13px;font-weight:500">${sect.actif===false?'🚫 ':''} ${esc(sect.label)}</span>
-      <button class="ic-btn" onclick="renRefItem('secteurs_act','${sect.id}')">✏️</button>
-      <button class="ic-btn" onclick="toggleRefActif('secteurs_act','${sect.id}')">${sect.actif===false?'✅':'⏸'}</button>
+  (REF.secteurs_act||[]).filter(s=>s.actif!==false).forEach(sect=>{
+    const ch=(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===sect.id);
+    const uid='rsa-'+sect.id;
+    h+=`<div style="margin-bottom:6px">
+      <div class="rpr" style="cursor:pointer" onclick="toggleRefGroup('${uid}')">
+        <span style="flex:1;font-size:13px;font-weight:500">${esc(sect.label)}</span>
+        <span style="font-size:11px;color:var(--tm);margin-right:6px">${ch.length} sous-secteur${ch.length!==1?'s':''}</span>
+        <button class="ic-btn" onclick="event.stopPropagation();renRefItem('secteurs_act','${sect.id}')">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="event.stopPropagation();delRefItem('secteurs_act','${sect.id}')" title="Supprimer">🗑</button>
+        <span id="${uid}-arrow" style="font-size:12px;color:var(--tm);margin-left:4px">▶</span>
+      </div>
+      <div id="${uid}" style="display:none" class="rchildren">
+        ${ch.map(s=>`<div class="rcr"><span style="flex:1;font-size:12px">${esc(s.label)}</span>
+          <button class="ic-btn" onclick="renRefItem('sous_secteurs','${s.id}')">✏️</button>
+          <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('sous_secteurs','${s.id}')" title="Supprimer">🗑</button>
+        </div>`).join('')}
+        <div class="radd" style="margin-top:6px"><input type="text" id="nss-${sect.id}" placeholder="Nouveau sous-secteur..."><button onclick="addSousSecteur('${sect.id}')">+ Ajouter</button></div>
+      </div>
     </div>`;
-    if(ch.length)h+=`<div class="rchildren">${ch.map(s=>`<div class="rcr" style="${s.actif===false?'opacity:.4':''}"><span style="flex:1;font-size:12px">${s.actif===false?'🚫 ':''} ${esc(s.label)}</span><button class="ic-btn" onclick="renRefItem('sous_secteurs','${s.id}')">✏️</button><button class="ic-btn" onclick="toggleRefActif('sous_secteurs','${s.id}')">${s.actif===false?'✅':'⏸'}</button></div>`).join('')}</div>`;
-    h+=`<div style="padding-left:16px;margin-top:5px"><div class="radd"><input type="text" id="nss-${sect.id}" placeholder="Nouveau sous-secteur..."><button onclick="addSousSecteur('${sect.id}')">+ Sous-secteur</button></div></div></div>`;
   });
-  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px"><div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter un secteur</div><div class="radd"><input type="text" id="new-secteurs_act" placeholder="Nom du secteur..."><button onclick="addRefFlat('secteurs_act')">+ Secteur</button></div></div>`;
+  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px">
+    <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter un secteur</div>
+    <div class="radd"><input type="text" id="new-secteurs_act" placeholder="Nom du secteur..."><button onclick="addRefFlat('secteurs_act')">+ Secteur</button></div>
+  </div>`;
+}
+
+function toggleRefGroup(uid){
+  const el=document.getElementById(uid);
+  const arrow=document.getElementById(uid+'-arrow');
+  if(!el)return;
+  const open=el.style.display==='block';
+  el.style.display=open?'none':'block';
+  if(arrow)arrow.textContent=open?'▶':'▼';
+}
+
+function delRefItem(arr,id){
+  const it=(REF[arr]||[]).find(x=>x.id===id);if(!it)return;
+  const used=checkRefUsed(arr,id);
+  if(used>0){
+    if(!confirm(`⚠️ "${esc(it.label)}" est utilisé dans ${used} fiche${used>1?'s':''}.\nSi vous supprimez, ces fiches perdront cette valeur. Continuer ?`))return;
+  }else{
+    if(!confirm(`Supprimer "${esc(it.label)}" ?`))return;
+  }
+  // Also delete children if parent
+  if(arr==='familles_metier')REF.metiers=(REF.metiers||[]).filter(m=>m.famille_id!==id);
+  if(arr==='secteurs_act')REF.sous_secteurs=(REF.sous_secteurs||[]).filter(s=>s.secteur_id!==id);
+  REF[arr]=(REF[arr]||[]).filter(x=>x.id!==id);
+  saveKey('refs');document.getElementById('rc').innerHTML=rRC();
 }
 
 function addRefFlat(arr){const inp=document.getElementById('new-'+arr);const l=(inp?.value||'').trim();if(!l)return;if(!REF[arr])REF[arr]=[];REF[arr].push({id:genId(),label:l,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
@@ -2901,7 +2949,33 @@ function checkRefUsed(arr,id){
   return 0;
 }
 function rRF(arr,lbl){return `<div>${(REF[arr]||[]).map(it=>`<div class="rpr"><span style="flex:1;font-size:13px">${esc(it.label)}</span><button class="ic-btn" onclick="renRefItem('${arr}','${it.id}')">✏️</button></div>`).join('')}</div><div class="radd"><input type="text" id="new-${arr}" placeholder="Nouveau..."><button onclick="addRefFlat('${arr}')">+ Ajouter</button></div>`;}
-function rRG(){let h='<div>';(REF.regions||[]).forEach(reg=>{const ch=(REF.villes||[]).filter(v=>v.region_id===reg.id);h+=`<div style="margin-bottom:10px"><div class="rpr"><span style="flex:1;font-size:13px;font-weight:500">🗺 ${esc(reg.label)}</span><button class="ic-btn" onclick="renRefItem('regions','${reg.id}')">✏️</button></div>`;if(ch.length)h+=`<div class="rchildren">${ch.map(v=>`<div class="rcr"><span style="flex:1;font-size:12px">📍 ${esc(v.label)}</span><button class="ic-btn" onclick="renRefItem('villes','${v.id}')">✏️</button></div>`).join('')}</div>`;h+=`<div style="padding-left:16px;margin-top:5px"><div class="radd"><input type="text" id="nv-${reg.id}" placeholder="Nouvelle ville..."><button onclick="addVille('${reg.id}')">+ Ville</button></div></div></div>`;});return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px"><div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une région</div><div class="radd"><input type="text" id="new-regions" placeholder="Nom de la région..."><button onclick="addRefFlat('regions')">+ Région</button></div></div>`;}
+function rRG(){
+  let h='<div>';
+  (REF.regions||[]).forEach(reg=>{
+    const ch=(REF.villes||[]).filter(v=>v.region_id===reg.id);
+    const uid='rreg-'+reg.id;
+    h+=`<div style="margin-bottom:6px">
+      <div class="rpr" style="cursor:pointer" onclick="toggleRefGroup('${uid}')">
+        <span style="flex:1;font-size:13px;font-weight:500">🗺 ${esc(reg.label)}</span>
+        <span style="font-size:11px;color:var(--tm);margin-right:6px">${ch.length} ville${ch.length!==1?'s':''}</span>
+        <button class="ic-btn" onclick="event.stopPropagation();renRefItem('regions','${reg.id}')">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="event.stopPropagation();delRefItem('regions','${reg.id}')" title="Supprimer">🗑</button>
+        <span id="${uid}-arrow" style="font-size:12px;color:var(--tm);margin-left:4px">▶</span>
+      </div>
+      <div id="${uid}" style="display:none" class="rchildren">
+        ${ch.map(v=>`<div class="rcr"><span style="flex:1;font-size:12px">📍 ${esc(v.label)}</span>
+          <button class="ic-btn" onclick="renRefItem('villes','${v.id}')">✏️</button>
+          <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('villes','${v.id}')" title="Supprimer">🗑</button>
+        </div>`).join('')}
+        <div class="radd" style="margin-top:6px"><input type="text" id="nv-${reg.id}" placeholder="Nouvelle ville..."><button onclick="addVille('${reg.id}')">+ Ville</button></div>
+      </div>
+    </div>`;
+  });
+  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px">
+    <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une région</div>
+    <div class="radd"><input type="text" id="new-regions" placeholder="Nom de la région..."><button onclick="addRefFlat('regions')">+ Région</button></div>
+  </div>`;
+}
 function addVille(rid){const inp=document.getElementById('nv-'+rid);const l=(inp?.value||'').trim();if(!l)return;if(!REF.villes)REF.villes=[];REF.villes.push({id:genId(),label:l,region_id:rid,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
 
 // ══ KANBAN ══════════════════════════════════════════════
