@@ -2483,7 +2483,7 @@ function openClientForm(id){
     <div class="fr"><div class="fld"><label>Statut INSEE</label><input id="f-statut_sirene" value="${v('statut_sirene')||'Active'}"></div><div class="fld"><label>Date de création</label><input id="f-date_creation_sirene" value="${v('date_creation_sirene')}"></div></div>
     <input type="hidden" id="f-source_sirene" value="${v('source_sirene')||'Manuel'}">
     <div class="section-title">Contact & Web</div>
-    <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div></div>
+    <div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div>
     <div class="fld"><label>Site internet</label><input id="f-site_web" value="${v('site_web')}" placeholder="https://..."></div>
     <div class="fld"><label>Contact principal</label><select id="f-contact_principal_id">${ctOpts}</select></div>
     <div class="fa">
