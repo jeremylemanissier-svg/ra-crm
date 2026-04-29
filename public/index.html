@@ -1943,41 +1943,12 @@ async function importPrequalifDoc(inp,candId){
   document.body.appendChild(banner);
   try{
     const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
-    const prompt=`Tu analyses une trame de préqualification de recrutement. Extrais les informations renseignées et retourne UNIQUEMENT un objet JSON avec ces clés (laisser vide "" si non trouvé) :
-{
-  "en_poste": true/false,
-  "preavis": "",
-  "disponible": true/false,
-  "raisons_dispo": "",
-  "raisons_ecoute": "",
-  "type_poste": "",
-  "rem_actuelle": "",
-  "rem_souhaitee": "",
-  "refus_secteurs": "",
-  "souhaits": "",
-  "processus_en_cours": "",
-  "motivation_note": 0,
-  "motivation_comment": "",
-  "exp1_entreprise": "", "exp1_poste": "", "exp1_duree": "", "exp1_depart": "", "exp1_missions": "",
-  "exp2_entreprise": "", "exp2_poste": "", "exp2_duree": "", "exp2_depart": "", "exp2_missions": "",
-  "exp3_entreprise": "", "exp3_poste": "", "exp3_duree": "", "exp3_depart": "", "exp3_missions": "",
-  "logiciels": "",
-  "dispo_format": "physique",
-  "dispo_date": "",
-  "dispo_heure": "",
-  "ressenti": ""
-}
-Retourne UNIQUEMENT le JSON, sans texte avant ou après.`;
-    const result=await api('POST','/api/parse-cv',{name:file.name,type:file.type,data:base64,prompt});
+    const result=await api('POST','/api/parse-prequalif',{name:file.name,type:file.type,data:base64});
     banner.remove();
-    let parsed={};
-    try{
-      const txt=result?.parsed?._raw||result?.raw||JSON.stringify(result?.parsed||{});
-      // Try to extract JSON from response
-      const match=txt.match(/\{[\s\S]*\}/);
-      if(match)parsed=JSON.parse(match[0]);
-      else if(result?.parsed)parsed=result.parsed;
-    }catch(e){parsed=result?.parsed||{};}
+    if(result?.error){
+      alert('⚠️ '+result.error);return;
+    }
+    const parsed=result?.parsed||{};
     showPrequalifReview(candId,parsed);
   }catch(e){
     banner.remove();
