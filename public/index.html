@@ -2444,28 +2444,39 @@ function openClientForm(id){
   const effOpts=`<option value="">— Effectif —</option>`+EFFECTIFS.map(e=>`<option value="${e}"${c.effectif===e?' selected':''}>${e}</option>`).join('');
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
-  const logoHtml=c.logo?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><img src="${c.logo}" style="width:50px;height:50px;border-radius:10px;object-fit:contain;background:white"><button class="btn btn-d btn-sm" type="button" onclick="DB.clients=DB.clients.map(x=>x.id==='${id}'?{...x,logo:null}:x);save();openClientForm('${id}')">✕ Supprimer</button></div>`:'';
-  window._pClientLogo=null; // Reset temp logo
+  const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length]||AV_COLORS[0];
+  const ini=(c.nom||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  window._pClientLogo=null;
   OM(id?'Modifier':'Nouveau client / prospect',`
-    <div style="padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br);margin-bottom:14px">
-      <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🔍 Recherche INSEE (auto-remplissage)</div>
+    <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
+      <div style="position:relative;flex-shrink:0;cursor:pointer" title="${c.logo?'Changer le logo':'Ajouter un logo'}" onclick="document.getElementById('logo-edit-inp').click()">
+        ${c.logo
+          ?`<img id="logo-edit-preview-img" src="${c.logo}" style="width:72px;height:72px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`
+          :`<div id="logo-edit-preview-img" style="width:72px;height:72px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;">${ini}</div>`}
+        <div style="position:absolute;inset:0;border-radius:12px;background:rgba(0,0,0,0);display:flex;align-items:center;justify-content:center;font-size:18px;opacity:0;transition:all .15s" onmouseover="this.style.background='rgba(0,0,0,0.35)';this.style.opacity='1'" onmouseout="this.style.background='rgba(0,0,0,0)';this.style.opacity='0'">📷</div>
+        <input type="file" id="logo-edit-inp" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="previewLogoEdit(this,'${id||''}')">
+        ${c.logo?`<button type="button" onclick="event.stopPropagation();window._pClientLogo='DELETE';document.getElementById('logo-edit-preview-img').outerHTML='<div id=\\'logo-edit-preview-img\\' style=\\'width:72px;height:72px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;\\'>${ini}</div>'" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0">✕</button>`:''}
+      </div>
+      <div style="flex:1">
+        <div class="fr"><div class="fld"><label>Nom entreprise</label><input id="f-nom" value="${v('nom')}"></div><div class="fld"><label>Type</label><select id="f-type">${tOpts}</select></div></div>
+        <div class="fr"><div class="fld"><label>Consultant</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Effectif</label><select id="f-effectif">${effOpts}</select></div></div>
+      </div>
+    </div>
+    <div style="padding:10px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br);margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;color:var(--ts);margin-bottom:6px">🔍 Recherche INSEE</div>
       <div class="geo-wrap">
-        <input class="geo-input" id="sirene-inp" placeholder="Tapez le nom, SIREN ou SIRET..." autocomplete="off"
-          oninput="sireneType(this.value)" onblur="setTimeout(()=>sireneDrop(''),250)" value="${v('nom')}">
+        <input class="geo-input" id="sirene-inp" placeholder="Tapez le nom, SIREN ou SIRET..." autocomplete="off" oninput="sireneType(this.value)" onblur="setTimeout(()=>sireneDrop(''),250)" value="${v('nom')}">
         <div class="geo-drop" id="sirene-drop" style="max-height:250px"></div>
       </div>
       <div id="sirene-etabs" style="margin-top:8px"></div>
-      <div style="font-size:11px;color:var(--tm);margin-top:4px">Source : ${c.source_sirene?`<b>${esc(c.source_sirene)}</b>`:'non renseignée'}</div>
     </div>
     <div id="doublon-client-alert"></div>
-    <div class="fr"><div class="fld"><label>Nom entreprise</label><input id="f-nom" value="${v('nom')}"></div><div class="fld"><label>Type</label><select id="f-type">${tOpts}</select></div></div>
-    <div class="fr"><div class="fld"><label>Consultant responsable</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Effectif</label><select id="f-effectif">${effOpts}</select></div></div>
     <div class="fr">
       <div class="fld"><label>Secteur d'activité</label>${searchSel('cl-sa',saItems,c.secteur_act_new_id||c.secteur_ref_id||'','— Secteur —')}</div>
       <div class="fld"><label>Sous-secteur</label><div id="cl-ss-wrap">${searchSel('cl-ss',ssItems,c.sous_secteur_id||'','— Sous-secteur —')}</div></div>
     </div>
     <div class="fld"><label>Localisation</label>${geoWidget('geo-cl',c.ville||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
-    <div class="section-title">Données officielles INSEE</div>
+    <div class="section-title">Données INSEE</div>
     <div class="fr"><div class="fld"><label>SIREN</label><input id="f-siren" value="${v('siren')}"></div><div class="fld"><label>SIRET</label><input id="f-siret" value="${v('siret')}"></div></div>
     <div class="fld"><label>Adresse officielle</label><input id="f-adresse_sirene" value="${v('adresse_sirene')}"></div>
     <div class="fr"><div class="fld"><label>Code APE / NAF</label><input id="f-naf" value="${v('naf')}"></div><div class="fld"><label>Libellé activité</label><input id="f-naf_label" value="${v('naf_label')}"></div></div>
@@ -2475,11 +2486,22 @@ function openClientForm(id){
     <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div></div>
     <div class="fld"><label>Site internet</label><input id="f-site_web" value="${v('site_web')}" placeholder="https://..."></div>
     <div class="fld"><label>Contact principal</label><select id="f-contact_principal_id">${ctOpts}</select></div>
-    <div class="section-title">Logo entreprise</div>
-    ${logoHtml}
-    <div id="client-logo-preview" style="display:flex;align-items:center;margin-bottom:8px"></div>
-    <label class="btn btn-s btn-sm" style="cursor:pointer;display:inline-flex">🖼 ${c.logo?'Remplacer':'Ajouter'} un logo<input type="file" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="uploadClientLogo(this,'${id||''}')"></label>
-    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveClient()">Enregistrer</button></div>`,'w');
+    <div class="fa">
+      <button class="btn btn-s" onclick="CM();${id?`openClientDetail('${id}')`:''}">Annuler</button>
+      <button class="btn btn-p" onclick="saveClient()">Enregistrer</button>
+    </div>`,'w');
+}
+
+function previewLogoEdit(inp,clientId){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>500*1024){alert('Image trop lourde (max 500Ko)');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    window._pClientLogo=e.target.result;
+    const el=document.getElementById('logo-edit-preview-img');
+    if(el)el.outerHTML=`<img id="logo-edit-preview-img" src="${e.target.result}" style="width:72px;height:72px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`;
+  };
+  r.readAsDataURL(file);
 }
 function saveClient(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
@@ -2487,24 +2509,27 @@ function saveClient(){
   const secteurLabel=refLbl('secteurs_act',secteur_act_new_id)||refLbl('secteurs',secteur_act_new_id)||'';
   const geo=geoGetVal('geo-cl');
   const existing=EID?getClient(EID):{};
+  // Logo: DELETE flag → remove, new upload → use it, otherwise keep existing
+  let logo=existing.logo||null;
+  if(window._pClientLogo==='DELETE')logo=null;
+  else if(window._pClientLogo)logo=window._pClientLogo;
+  window._pClientLogo=null;
   const form={
     nom:g('nom'),type:g('type'),cons:g('cons'),
     secteur:secteurLabel,secteur_act_new_id,sous_secteur_id:ssGet('cl-ss'),
     secteur_ref_id:existing.secteur_ref_id||'',
     ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,loc:geo.ville||'',
-    effectif:g('effectif'),
-    siren:g('siren'),siret:g('siret'),site_web:g('site_web'),
+    effectif:g('effectif'),siren:g('siren'),siret:g('siret'),site_web:g('site_web'),
     adresse_sirene:g('adresse_sirene'),naf:g('naf'),naf_label:g('naf_label'),
     statut_sirene:g('statut_sirene'),date_creation_sirene:g('date_creation_sirene'),
     source_sirene:g('source_sirene')||'Manuel',
     email:g('email'),phone:g('phone'),contact_principal_id:g('contact_principal_id'),
-    logo:EID?existing.logo||null:(window._pClientLogo||null),
+    logo,
   };
-  window._pClientLogo=null;
   const savedId=EID;
   EID?DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c):DB.clients.push({...form,id:genId(),actions:[]});
   save();CM();R(CV);
-  if(savedId)setTimeout(()=>openClientDetail(savedId),50);
+  if(savedId)setTimeout(()=>openClientDetail(savedId),30);
 }
 function delClient(id){if(!confirm('Supprimer ?'))return;DB.clients=DB.clients.filter(c=>c.id!==id);save();R(CV);}
 function openClientDetail(id){
@@ -2529,9 +2554,10 @@ function openClientDetail(id){
         <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
         ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé</span>`:''}
         <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
+        <button class="btn btn-p btn-sm" onclick="CM();openClientForm('${id}')">✏️ Modifier</button>
       </div>
       ${buildNavArrows(id,_clientsNav,'clientNav')}
-      <button onclick="CM()" style="position:absolute;top:0;right:0;background:none;border:none;cursor:pointer;font-size:22px;color:var(--tm);line-height:1;padding:0" title="Fermer">×</button>
+      <button onclick="CM()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
     </div>
     <div class="dg2" style="margin-bottom:14px">
       <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${esc(c.cons||'—')}</div></div>
@@ -2580,7 +2606,6 @@ function openClientDetail(id){
         :`<button class="btn btn-d btn-sm" onclick="archiveFiche('client','${id}')">📦 Archiver</button>`
       }
       <button class="btn btn-d btn-sm" onclick="delClient('${id}');CM()">🗑 Supprimer</button>
-      <div style="display:flex;gap:7px"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openClientForm('${id}')">✏️ Modifier</button></div>
     </div>`;
 
   const rightHtml=`
