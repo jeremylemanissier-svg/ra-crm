@@ -1756,12 +1756,16 @@ function confirmArchive(type,id){
   if(type==='cand')DB.candidats=DB.candidats.map(c=>c.id===id?{...c,...archiveData}:c);
   else DB.clients=DB.clients.map(c=>c.id===id?{...c,...archiveData}:c);
   save();CM();R(CV);showToast('✓ Fiche archivée');
+  if(type==='cand')setTimeout(()=>openCandDetail(id),30);
+  else setTimeout(()=>openClientDetail(id),30);
 }
 function unarchiveFiche(type,id){
   if(!confirm('Restaurer cette fiche ?'))return;
   if(type==='cand')DB.candidats=DB.candidats.map(c=>c.id===id?{...c,archived:false,archive_motif:'',archive_date:'',archive_by:''}:c);
   else DB.clients=DB.clients.map(c=>c.id===id?{...c,archived:false,archive_motif:'',archive_date:'',archive_by:''}:c);
   save();CM();R(CV);showToast('✓ Fiche restaurée');
+  if(type==='cand')setTimeout(()=>openCandDetail(id),30);
+  else setTimeout(()=>openClientDetail(id),30);
 }
 
 // ══ LOGO CLIENT ══════════════════════════════════════════
@@ -2141,9 +2145,11 @@ function openCmdForm(id){
 function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const form={titre:g('titre'),client_id:g('client_id'),contact_id:g('contact_id'),cons:g('cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
+  const savedId=EID;
   if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
   else{const existing={id:genId(),date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
   save();CM();R(CV);
+  if(savedId)setTimeout(()=>openCmdDetail(savedId),30);
 }
 function delCmd(id){if(!confirm('Supprimer ?'))return;DB.commandes=DB.commandes.filter(c=>c.id!==id);save();R(CV);}
 function openCmdDetail(id){
@@ -2683,8 +2689,10 @@ function openContactForm(id){
 function saveContact(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const form={prenom:g('prenom'),nom:g('nom'),fonction:g('fonction'),client_id:g('client_id'),email:g('email'),phone:g('phone')};
+  const savedId=EID;
   EID?DB.contacts=DB.contacts.map(c=>c.id===EID?{...c,...form}:c):DB.contacts.push({...form,id:genId()});
   save();CM();R(CV);
+  if(savedId)setTimeout(()=>openContactDetail(savedId),30);
 }
 function openContactDetail(id){
   const ct=getContact(id);if(!ct)return;
@@ -2928,10 +2936,13 @@ function delRefItem(arr,id){
   if(arr==='familles_metier')REF.metiers=(REF.metiers||[]).filter(m=>m.famille_id!==id);
   if(arr==='secteurs_act')REF.sous_secteurs=(REF.sous_secteurs||[]).filter(s=>s.secteur_id!==id);
   REF[arr]=(REF[arr]||[]).filter(x=>x.id!==id);
-  saveKey('refs');document.getElementById('rc').innerHTML=rRC();
+  saveKey('refs');
+  const openGroups=Array.from(document.querySelectorAll('[id^="rfm-"],[id^="rsa-"],[id^="rreg-"]')).filter(el=>!el.id.endsWith('-arrow')&&el.style.display==='block').map(el=>el.id);
+  document.getElementById('rc').innerHTML=rRC();
+  openGroups.forEach(uid=>toggleRefGroup(uid));
 }
 
-function addRefFlat(arr){const inp=document.getElementById('new-'+arr);const l=(inp?.value||'').trim();if(!l)return;if(!REF[arr])REF[arr]=[];REF[arr].push({id:genId(),label:l,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
+function addRefFlat(arr){const inp=document.getElementById('new-'+arr);const l=(inp?.value||'').trim();if(!l)return;if(!REF[arr])REF[arr]=[];REF[arr].push({id:genId(),label:l,actif:true});inp.value='';saveKey('refs');const og=Array.from(document.querySelectorAll('[id^="rfm-"],[id^="rsa-"],[id^="rreg-"]')).filter(el=>!el.id.endsWith('-arrow')&&el.style.display==='block').map(el=>el.id);document.getElementById('rc').innerHTML=rRC();og.forEach(uid=>toggleRefGroup(uid));}
 function addMetier(famId){const inp=document.getElementById('nm-'+famId);const l=(inp?.value||'').trim();if(!l)return;if(!REF.metiers)REF.metiers=[];REF.metiers.push({id:genId(),label:l,famille_id:famId,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();toggleRefGroup('rfm-'+famId);}
 function addSousSecteur(sectId){const inp=document.getElementById('nss-'+sectId);const l=(inp?.value||'').trim();if(!l)return;if(!REF.sous_secteurs)REF.sous_secteurs=[];REF.sous_secteurs.push({id:genId(),label:l,secteur_id:sectId,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();toggleRefGroup('rsa-'+sectId);}
 function renRefItem(arr,id){const it=(REF[arr]||[]).find(x=>x.id===id);if(!it)return;const nl=prompt('Renommer :',it.label);if(!nl||nl.trim()===it.label)return;REF[arr]=REF[arr].map(x=>x.id===id?{...x,label:nl.trim()}:x);saveKey('refs');document.getElementById('rc').innerHTML=rRC();}
