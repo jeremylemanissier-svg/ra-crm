@@ -179,20 +179,21 @@ Pour en_poste et disponible: utilise true/false. Pour motivation_note: utilise u
 });
 
 // ── Users (admin) ─────────────────────────────────────
-app.get('/api/users', admin, (req, res) => res.json(readJSON('users.json', []).map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, created_at: u.created_at }))));
+app.get('/api/users', admin, (req, res) => res.json(readJSON('users.json', []).map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, photo: u.photo||null, created_at: u.created_at }))));
 app.post('/api/users', admin, (req, res) => {
-  const { username, password, display_name, role } = req.body;
+  const { username, password, display_name, role, photo } = req.body;
   if (!username || !password || !display_name) return res.status(400).json({ error: 'Champs manquants' });
   users = readJSON('users.json', []);
   if (users.find(u => u.username === username.toLowerCase().trim())) return res.status(400).json({ error: 'Identifiant déjà utilisé' });
-  users.push({ id: genId(), username: username.toLowerCase().trim(), password_hash: bcrypt.hashSync(password, 10), display_name, role: role || 'user', created_at: new Date().toISOString() });
+  users.push({ id: genId(), username: username.toLowerCase().trim(), password_hash: bcrypt.hashSync(password, 10), display_name, role: role || 'user', photo: photo||null, created_at: new Date().toISOString() });
   writeJSON('users.json', users); res.json({ ok: true });
 });
 app.put('/api/users/:id', admin, (req, res) => {
-  const { display_name, role, password } = req.body;
+  const { display_name, role, password, photo } = req.body;
   users = readJSON('users.json', []).map(u => {
     if (u.id !== req.params.id) return u;
     const up = { ...u, display_name, role };
+    if (photo !== undefined) up.photo = photo;
     if (password && password.length >= 4) up.password_hash = bcrypt.hashSync(password, 10);
     return up;
   });
