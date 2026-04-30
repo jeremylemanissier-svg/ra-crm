@@ -179,6 +179,12 @@ Pour en_poste et disponible: utilise true/false. Pour motivation_note: utilise u
 });
 
 // ── Users (admin) ─────────────────────────────────────
+// Endpoint consultants accessible à tous les utilisateurs connectés (pas seulement admin)
+app.get('/api/consultants', auth, (req, res) => {
+  const users = readJSON('users.json', []);
+  res.json(users.map(u => ({ id: u.display_name, label: u.display_name, photo: u.photo||null })));
+});
+
 app.get('/api/users', admin, (req, res) => res.json(readJSON('users.json', []).map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, photo: u.photo||null, created_at: u.created_at }))));
 app.post('/api/users', admin, (req, res) => {
   const { username, password, display_name, role, photo } = req.body;
