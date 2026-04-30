@@ -779,11 +779,11 @@ async function loadData(){
   const oldFM=REF.familles_metier&&REF.familles_metier.length>0&&(REF.familles_metier[0]?.label||'').includes('Gros Œuvre');
   if(oldFM){REF.familles_metier=DEFAULT_REFS.familles_metier;REF.metiers=DEFAULT_REFS.metiers;}
   DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.entretiens)c.entretiens=[];if(!c.controles_ref)c.controles_ref=[];if(!c.mots_cles)c.mots_cles=[];if(!c.pieces_jointes)c.pieces_jointes=[];});
-  // Charger les utilisateurs pour les selects consultant
+  // Charger les consultants pour les selects (endpoint accessible à tous)
   try{
-    const usrs=await api('GET','/api/users');
-    if(usrs&&Array.isArray(usrs))_usersCache=usrs.map(u=>({id:u.display_name,label:u.display_name,photo:u.photo||null,userId:u.id}));
-  }catch(e){console.warn('Users non chargés',e);}
+    const usrs=await api('GET','/api/consultants');
+    if(usrs&&Array.isArray(usrs))_usersCache=usrs;
+  }catch(e){console.warn('Consultants non chargés',e);}
   DB._settings=(st&&typeof st==='object'&&!Array.isArray(st))?st:{};
   applyLogoSettings();
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
@@ -3218,8 +3218,8 @@ async function createUser(){
   const res=await api('POST','/api/users',{username:user,password:pass,display_name:name,role,photo});
   if(res?.ok){
     // Refresh users cache
-    const usrs=await api('GET','/api/users');
-    if(usrs)_usersCache=usrs.map(u=>({id:u.display_name,label:u.display_name,photo:u.photo||null,userId:u.id}));
+    const usrs=await api('GET','/api/consultants');
+    if(usrs&&Array.isArray(usrs))_usersCache=usrs;
     alert(`✅ Compte créé !\n${name} peut se connecter avec :\nIdentifiant : ${user}\nMot de passe : ${pass}`);
     openAdminPanel();
   }else alert('Erreur : cet identifiant est déjà utilisé.');
@@ -3258,8 +3258,8 @@ async function editUser(id){
   else if(photoInp?.files?.[0]){body.photo=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(photoInp.files[0]);});}
   const res=await api('PUT',`/api/users/${id}`,body);
   if(res?.ok){
-    const usrs=await api('GET','/api/users');
-    if(usrs)_usersCache=usrs.map(u=>({id:u.display_name,label:u.display_name,photo:u.photo||null,userId:u.id}));
+    const usrs=await api('GET','/api/consultants');
+    if(usrs&&Array.isArray(usrs))_usersCache=usrs;
     openAdminPanel();
   }
 }
