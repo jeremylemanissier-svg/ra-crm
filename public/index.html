@@ -522,7 +522,18 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 </div>
 
 <script>
-const CONS=['Jérémy','Simon','Antoine','Anne-Sophie','Shirley','Clémence','Hugo'];
+// CONS dynamique — chargé depuis les utilisateurs au démarrage
+let _usersCache=[];
+function getCONS(){return _usersCache.length?_usersCache:[{id:'Jérémy',label:'Jérémy',photo:null}];}
+// Mapping rétrocompatibilité anciens prénoms courts → display_name complet
+const CONS_COMPAT={'Jérémy':'Jérémy LEMANISSIER','Simon':'Simon DAVID','Antoine':'Antoine DUPONT','Shirley':'Shirley GOSSELIN','Anne-Sophie':'Anne-Sophie EYANGO','Hugo':'Hugo BOURBIER','Clémence':'Clémence'};
+function consLabel(name){return CONS_COMPAT[name]||name;}
+function consAvatar(name){
+  const u=_usersCache.find(x=>x.id===name||x.label===name);
+  if(u?.photo)return `<img src="${u.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:5px">`;
+  const ini=(name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle">${ini}</span>`;
+}
 const TODAY=new Date().toISOString().slice(0,10);
 const AV_COLORS=[['#e8f4f8','#1e6080'],['#ddeef5','#165068'],['#ecfdf5','#065f46'],['#fff7ed','#9a3412'],['#fef3c7','#92400e'],['#f0f4f8','#2c5282'],['#f0fdf4','#166534'],['#fef2f2','#991b1b']];
 const ACT_TYPES=['Appel','Rendez-vous','Email','Relance'];
@@ -768,6 +779,11 @@ async function loadData(){
   const oldFM=REF.familles_metier&&REF.familles_metier.length>0&&(REF.familles_metier[0]?.label||'').includes('Gros Œuvre');
   if(oldFM){REF.familles_metier=DEFAULT_REFS.familles_metier;REF.metiers=DEFAULT_REFS.metiers;}
   DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.entretiens)c.entretiens=[];if(!c.controles_ref)c.controles_ref=[];if(!c.mots_cles)c.mots_cles=[];if(!c.pieces_jointes)c.pieces_jointes=[];});
+  // Charger les utilisateurs pour les selects consultant
+  try{
+    const usrs=await api('GET','/api/users');
+    if(usrs&&Array.isArray(usrs))_usersCache=usrs.map(u=>({id:u.display_name,label:u.display_name,photo:u.photo||null,userId:u.id}));
+  }catch(e){console.warn('Users non chargés',e);}
   DB._settings=(st&&typeof st==='object'&&!Array.isArray(st))?st:{};
   applyLogoSettings();
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
@@ -1029,7 +1045,7 @@ function rClients(){
   const archF=document.getElementById('cl-arch-f')?.value||'active';
   const fltrs=['Tous','Client','Prospect'];
   document.getElementById('cl-filters').innerHTML=fltrs.map(f=>`<button class="fb${clFilter===f?' on':''}" onclick="clFilter='${f}';rClients()">${f}</button>`).join('')
-    +`<select id="cl-cons-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les consultants</option>${CONS.map(cn=>`<option value="${cn}"${consF===cn?' selected':''}>${cn}</option>`).join('')}</select>`
+    +`<select id="cl-cons-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les consultants</option>${getCONS().map(u=>`<option value="${u.id}"${consF===u.id?' selected':''}>${u.label}</option>`).join('')}</select>`
     +`<select id="cl-sect-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les secteurs</option>${(REF.secteurs_act||[]).filter(x=>x.actif!==false).map(s=>`<option value="${s.id}"${sectF===s.id?' selected':''}>${esc(s.label)}</option>`).join('')}</select>`
     +`<select id="cl-arch-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="active"${archF==='active'?' selected':''}>Actifs</option><option value="archived"${archF==='archived'?' selected':''}>📦 Archivés</option></select>`;
   let res=DB.clients;
@@ -1383,14 +1399,25 @@ function bGrp(pA,cA,pId,sel,ph){let h=`<option value="">${ph}</option>`;(REF[pA]
 const _ssItems={};
 function searchSel(id,items,selVal,placeholder){
   const filtered=alphaSort((items||[]).filter(x=>x.actif!==false));
-  _ssItems[id]=filtered; // Store for click handler
-  const selLabel=filtered.find(x=>x.id===selVal)?.label||'';
+  _ssItems[id]=filtered;
+  const selItem=filtered.find(x=>x.id===selVal);
+  const selLabel=selItem?.label||'';
+  const renderOpt=(x,i)=>{
+    const av=x.photo?`<img src="${x.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;margin-right:6px;flex-shrink:0">`
+      :'';
+    return `<div class="geo-opt" data-idx="${i}" data-ssid="${esc(id)}" onmousedown="event.preventDefault()" onclick="ssPickIdx('${id}',${i})" style="display:flex;align-items:center">
+      ${av}<span class="geo-opt-name">${esc(x.label)}</span>
+    </div>`;
+  };
+  const selAv=selItem?.photo?`<img src="${selItem.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:none" id="${id}-av">`:'<span id="${id}-av"></span>';
   return `<div class="search-sel-wrap" style="position:relative">
+    ${selAv}
     <input class="geo-input" id="${id}-inp" placeholder="${esc(placeholder)}" autocomplete="off" value="${esc(selLabel)}"
+      style="${selItem?.photo?'padding-left:36px':''}"
       oninput="ssFilter('${id}',this.value)" onfocus="ssOpen('${id}')" onblur="setTimeout(()=>ssClose('${id}'),200)">
     <input type="hidden" id="${id}-val" value="${esc(selVal||'')}">
-    <div class="geo-drop" id="${id}-drop" style="max-height:200px">
-      ${filtered.map((x,i)=>`<div class="geo-opt" data-idx="${i}" data-ssid="${esc(id)}" onmousedown="event.preventDefault()" onclick="ssPickIdx('${id}',${i})"><span class="geo-opt-name">${esc(x.label)}</span></div>`).join('')}
+    <div class="geo-drop" id="${id}-drop" style="max-height:220px">
+      ${filtered.map((x,i)=>renderOpt(x,i)).join('')}
     </div>
   </div>`;
 }
@@ -1413,7 +1440,14 @@ function ssOpen(id){
 function ssClose(id){const d=document.getElementById(id+'-drop');if(d)d.classList.remove('open');}
 function ssPick(id,val,label){
   const inp=document.getElementById(id+'-inp');const hidden=document.getElementById(id+'-val');
-  if(inp)inp.value=label||'';if(hidden)hidden.value=val||'';
+  if(inp){inp.value=label||'';}if(hidden)hidden.value=val||'';
+  // Update avatar preview if item has photo
+  const item=(_ssItems[id]||[]).find(x=>x.id===val);
+  const avEl=document.getElementById(id+'-av');
+  if(avEl){
+    if(item?.photo){avEl.outerHTML=`<img src="${item.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:none" id="${id}-av">`;if(inp)inp.style.paddingLeft='36px';}
+    else{avEl.outerHTML=`<span id="${id}-av"></span>`;if(inp)inp.style.paddingLeft='';}
+  }
   ssClose(id);
   if(id==='f-fm')refreshMetiersForm(val);
   if(id==='f-sa')refreshSousSectForm(val,'f-ss','cand');
@@ -1714,7 +1748,7 @@ function buildEntretiensView(candId, c){
 }
 
 function openAddEntretien(candId){
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
   const metierOpts=`<option value="">— Poste concerné —</option>`+(REF.metiers||[]).filter(m=>m.actif!==false).map(m=>`<option value="${m.id}">${esc(m.label)}</option>`).join('');
   OM('Ajouter un entretien',`
     <div class="fr"><div class="fld"><label>Date de l'entretien</label><input type="date" id="ei-date" value="${TODAY}"></div><div class="fld"><label>Consultant</label><select id="ei-cons">${cOpts}</select></div></div>
@@ -1909,7 +1943,7 @@ function buildControlesRefView(candId, controles){
     </div>`).join('');
 }
 function openAddControle(candId){
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
   OM('Nouveau contrôle de référence',`
     <div class="fr"><div class="fld"><label>Entreprise</label><input id="cr-ent" placeholder="Nom de l'entreprise"></div><div class="fld"><label>Interlocuteur</label><input id="cr-inter" placeholder="Prénom Nom, Fonction"></div></div>
     <div class="fld"><label>Coordonnées</label><input id="cr-coord" placeholder="Téléphone, email..."></div>
@@ -2236,7 +2270,7 @@ function buildCandCmdsSection(candId){
   </div>`;
 }
 function openAddNote(candId){
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
   OM('Ajouter une note',`<div class="fld"><label>Consultant</label><select id="nc">${cOpts}</select></div><div class="fld"><label>Note</label><textarea id="nn" style="min-height:100px" placeholder="Contenu de la note..."></textarea></div><div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNote('${candId}')">Ajouter</button></div>`,'n');
 }
 function saveNote(candId){
@@ -2251,7 +2285,7 @@ function openCmdForm(id){
   EID=id||null;const cmd=id?DB.commandes.find(x=>x.id===id):{};const v=f=>esc(cmd[f]||'');
   const clItems=alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
   const ctItems=alphaSort(DB.contacts.map(c=>{const cl=getClient(c.client_id);return {id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}`};}));
-  const consItems=CONS.map(cn=>({id:cn,label:cn}));
+  const consItems=getCONS();
   const sOpts=['Active','Suspendue','Pourvue'].map(s=>`<option value="${s}"${(cmd.statut||'Active')===s?' selected':''}>${s}</option>`).join('');
   OM(id?'Modifier la commande':'Nouvelle commande',`
     <div class="fld"><label>Titre du poste</label><input id="f-titre" value="${v('titre')}"></div>
@@ -2770,7 +2804,7 @@ function showToast(msg){const el=document.createElement('div');el.style.cssText=
 function openClientForm(id){
   EID=id||null;const c=id?getClient(id):{};const v=f=>esc(c[f]||'');
   const tOpts=['Client','Prospect'].map(t=>`<option value="${t}"${(c.type||'Prospect')===t?' selected':''}>${t}</option>`).join('');
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${(c.cons||currentUser?.display_name)===cn?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${(c.cons||currentUser?.display_name)===u.id?' selected':''}>${u.label}</option>`).join('');
   const ctOpts=`<option value="">— Aucun —</option>`+DB.contacts.filter(ct=>!id||ct.client_id===id||!ct.client_id).map(ct=>`<option value="${ct.id}"${c.contact_principal_id===ct.id?' selected':''}>${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
   const effOpts=`<option value="">— Effectif —</option>`+EFFECTIFS.map(e=>`<option value="${e}"${c.effectif===e?' selected':''}>${e}</option>`).join('');
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
@@ -2985,7 +3019,7 @@ function saveAction(){
 function openActionForm(prefClientId){
   EID=null;
   const tOpts=ACT_TYPES.map(t=>`<option value="${t}">${ACT_ICO[t]} ${t}</option>`).join('');
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
   const clOpts=`<option value="">— Entreprise (obligatoire) —</option>`+DB.clients.map(c=>`<option value="${c.id}"${c.id===prefClientId?' selected':''}>${esc(c.nom)}</option>`).join('');
   // Filter contacts by pre-selected company
   const filteredCts=prefClientId?DB.contacts.filter(ct=>ct.client_id===prefClientId||ct.client_ids?.includes(prefClientId)):DB.contacts;
@@ -3050,7 +3084,7 @@ function openAgendaForm(id){
   EID=id||null;const r=id?DB.relances.find(x=>x.id===id):{};const v=f=>esc(r[f]||'');
   const curT=r.type||'Candidat';
   const refs=curT==='Candidat'?DB.candidats.map(c=>`<option value="${c.id}"${r.ref===c.id?' selected':''}>${esc(c.prenom)} ${esc(c.nom)}</option>`):DB.clients.map(c=>`<option value="${c.id}"${r.ref===c.id?' selected':''}>${esc(c.nom)}</option>`);
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${(r.cons||currentUser?.display_name)===cn?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${(r.cons||currentUser?.display_name)===u.id?' selected':''}>${u.label}</option>`).join('');
   OM(id?'Modifier':'Nouvelle relance',`
     <div class="fr"><div class="fld"><label>Type</label><select id="rt" onchange="rfRels()"><option value="Candidat"${curT==='Candidat'?' selected':''}>Candidat</option><option value="Client"${curT==='Client'?' selected':''}>Client</option></select></div><div class="fld"><label>Référence</label><select id="rr"><option value="">— Sélectionner —</option>${refs.join('')}</select></div></div>
     <div class="fld"><label>Objet</label><input id="ro" value="${v('obj')}"></div>
@@ -3142,39 +3176,92 @@ function rDashCRM(){
 async function openAdminPanel(){
   OM('Gestion des utilisateurs','<div style="text-align:center;padding:20px;color:var(--tm)">Chargement...</div>','w');
   const users=await api('GET','/api/users');if(!users)return;
-  let h=`<div style="margin-bottom:18px">${users.map(u=>`<div class="admin-row">
-    <div style="width:36px;height:36px;border-radius:9px;background:rgba(30,96,128,.2);color:#7ec8e0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${(u.display_name||'?')[0].toUpperCase()}</div>
+  let h=`<div style="margin-bottom:18px">${users.map(u=>{
+    const av=u.photo?`<img src="${u.photo}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+      :`<div style="width:38px;height:38px;border-radius:50%;background:rgba(30,96,128,.2);color:#7ec8e0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${(u.display_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>`;
+    return `<div class="admin-row">
+    ${av}
     <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">${esc(u.display_name)}</div><div style="font-size:11px;color:var(--tm)">@${esc(u.username)} · ${u.role==='admin'?'<span style="color:var(--acc2)">Administrateur</span>':'Consultant'}</div></div>
-    <button class="btn btn-s btn-sm" onclick="openEditUser('${u.id}','${esc(u.display_name)}','${u.role}')">Modifier</button>
+    <button class="btn btn-s btn-sm" onclick="openEditUser('${u.id}','${esc(u.display_name)}','${u.role}','${u.photo||''}')">Modifier</button>
     <button class="btn btn-d btn-sm" onclick="deleteUser('${u.id}','${esc(u.display_name)}')">Suppr.</button>
-  </div>`).join('')}</div>
+  </div>`;}).join('')}</div>
   <div style="border-top:1px solid var(--br);padding-top:16px">
     <div style="font-size:13px;font-weight:600;margin-bottom:12px">Ajouter un collaborateur</div>
-    <div class="fr"><div class="fld"><label>Prénom / Nom</label><input id="new-name" placeholder="ex: Simon Lefebvre"></div><div class="fld"><label>Identifiant</label><input id="new-user" placeholder="ex: simon"></div></div>
-    <div class="fr"><div class="fld"><label>Mot de passe</label><input type="password" id="new-pass" placeholder="Min. 6 caractères"></div><div class="fld"><label>Rôle</label><select id="new-role"><option value="user">Consultant</option><option value="admin">Administrateur</option></select></div></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <div id="new-photo-preview" style="width:56px;height:56px;border-radius:50%;background:var(--bg);border:2px dashed var(--br);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;flex-shrink:0" onclick="document.getElementById('new-photo-inp').click()" title="Ajouter une photo">📷</div>
+      <input type="file" id="new-photo-inp" style="display:none" accept=".jpg,.jpeg,.png,.webp" onchange="previewNewUserPhoto(this)">
+      <div style="flex:1">
+        <div class="fr"><div class="fld"><label>Prénom / Nom</label><input id="new-name" placeholder="ex: Simon David"></div><div class="fld"><label>Identifiant</label><input id="new-user" placeholder="ex: simon"></div></div>
+        <div class="fr"><div class="fld"><label>Mot de passe</label><input type="password" id="new-pass" placeholder="Min. 6 caractères"></div><div class="fld"><label>Rôle</label><select id="new-role"><option value="user">Consultant</option><option value="admin">Administrateur</option></select></div></div>
+      </div>
+    </div>
     <div class="fa"><button class="btn btn-p" onclick="createUser()">Créer le compte</button></div>
   </div>`;
   document.getElementById('mbody').innerHTML=h;
+}
+function previewNewUserPhoto(inp){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>300*1024){alert('Photo trop lourde (max 300Ko)');return;}
+  const r=new FileReader();r.onload=e=>{
+    const prev=document.getElementById('new-photo-preview');
+    if(prev)prev.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  };r.readAsDataURL(file);
 }
 async function createUser(){
   const name=document.getElementById('new-name')?.value.trim(),user=document.getElementById('new-user')?.value.trim(),pass=document.getElementById('new-pass')?.value,role=document.getElementById('new-role')?.value;
   if(!name||!user||!pass){alert('Remplis tous les champs.');return;}
   if(pass.length<6){alert('Mot de passe trop court (min. 6 caractères).');return;}
-  const res=await api('POST','/api/users',{username:user,password:pass,display_name:name,role});
-  if(res?.ok){alert(`✅ Compte créé !\n${name} peut se connecter avec :\nIdentifiant : ${user}\nMot de passe : ${pass}`);openAdminPanel();}
-  else alert('Erreur : cet identifiant est déjà utilisé.');
+  // Get photo if uploaded
+  const photoInp=document.getElementById('new-photo-inp');
+  let photo=null;
+  if(photoInp?.files?.[0]){photo=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(photoInp.files[0]);});}
+  const res=await api('POST','/api/users',{username:user,password:pass,display_name:name,role,photo});
+  if(res?.ok){
+    // Refresh users cache
+    const usrs=await api('GET','/api/users');
+    if(usrs)_usersCache=usrs.map(u=>({id:u.display_name,label:u.display_name,photo:u.photo||null,userId:u.id}));
+    alert(`✅ Compte créé !\n${name} peut se connecter avec :\nIdentifiant : ${user}\nMot de passe : ${pass}`);
+    openAdminPanel();
+  }else alert('Erreur : cet identifiant est déjà utilisé.');
 }
-function openEditUser(id,name,role){
+function openEditUser(id,name,role,currentPhoto){
   OM("Modifier l'utilisateur",`
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+      <div id="eu-photo-preview" style="width:60px;height:60px;border-radius:50%;overflow:hidden;border:2px dashed var(--br);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" onclick="document.getElementById('eu-photo-inp').click()">
+        ${currentPhoto?`<img src="${currentPhoto}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:22px">📷</span>'}
+      </div>
+      <input type="file" id="eu-photo-inp" style="display:none" accept=".jpg,.jpeg,.png,.webp" onchange="previewEditUserPhoto(this)">
+      <div style="flex:1;font-size:12px;color:var(--ts)">Cliquer sur la photo pour la changer<br><button type="button" class="btn btn-d btn-sm" style="margin-top:5px" onclick="document.getElementById('eu-photo-del').value='1';document.getElementById('eu-photo-preview').innerHTML='<span style=\\'font-size:22px\\'>📷</span>'">✕ Supprimer la photo</button></div>
+      <input type="hidden" id="eu-photo-del" value="0">
+    </div>
     <div class="fld"><label>Prénom / Nom</label><input id="eu-name" value="${name}"></div>
     <div class="fld"><label>Rôle</label><select id="eu-role"><option value="user"${role==='user'?' selected':''}>Consultant</option><option value="admin"${role==='admin'?' selected':''}>Administrateur</option></select></div>
     <div class="fld"><label>Nouveau mot de passe (laisser vide pour ne pas changer)</label><input type="password" id="eu-pass" placeholder="Nouveau mot de passe..."></div>
     <div class="fa"><button class="btn btn-s" onclick="openAdminPanel()">Retour</button><button class="btn btn-p" onclick="editUser('${id}')">Enregistrer</button></div>`,'n');
 }
+function previewEditUserPhoto(inp){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>300*1024){alert('Photo trop lourde (max 300Ko)');return;}
+  document.getElementById('eu-photo-del').value='0';
+  const r=new FileReader();r.onload=e=>{
+    const prev=document.getElementById('eu-photo-preview');
+    if(prev)prev.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+  };r.readAsDataURL(file);
+}
 async function editUser(id){
   const name=document.getElementById('eu-name')?.value.trim(),role=document.getElementById('eu-role')?.value,pass=document.getElementById('eu-pass')?.value;
-  const body={display_name:name,role};if(pass&&pass.length>=4)body.password=pass;
-  const res=await api('PUT',`/api/users/${id}`,body);if(res?.ok)openAdminPanel();
+  const delPhoto=document.getElementById('eu-photo-del')?.value==='1';
+  const photoInp=document.getElementById('eu-photo-inp');
+  const body={display_name:name,role};
+  if(pass&&pass.length>=4)body.password=pass;
+  if(delPhoto){body.photo=null;}
+  else if(photoInp?.files?.[0]){body.photo=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(photoInp.files[0]);});}
+  const res=await api('PUT',`/api/users/${id}`,body);
+  if(res?.ok){
+    const usrs=await api('GET','/api/users');
+    if(usrs)_usersCache=usrs.map(u=>({id:u.display_name,label:u.display_name,photo:u.photo||null,userId:u.id}));
+    openAdminPanel();
+  }
 }
 async function deleteUser(id,name){
   if(!confirm(`Supprimer le compte de ${name} ?`))return;
@@ -4411,7 +4498,7 @@ function unlinkContactFromClient(contactId,clientId){
   showToast('✓ Contact dissocié');
 }
 function openAddContactFromClient(clientId){
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
   OM('+ Ajouter un contact',`
     <div style="font-size:12px;color:var(--acc2);background:var(--acc-light);border-radius:7px;padding:8px 12px;margin-bottom:14px">Sera automatiquement rattaché à cette entreprise</div>
     <div class="fr"><div class="fld"><label>Prénom</label><input id="qc-prenom" placeholder="Prénom"></div><div class="fld"><label>Nom</label><input id="qc-nom" placeholder="Nom"></div></div>
@@ -4559,7 +4646,7 @@ function delCondTarif(idx,clientId){if(!confirm('Supprimer cette condition ?'))r
 
 // ══ IMPORT LINKEDIN MANUEL ═══════════════════════════════
 function openLinkedInImport(){
-  const cOpts=CONS.map(cn=>`<option value="${cn}"${cn===currentUser?.display_name?' selected':''}>${cn}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
   OM('Import LinkedIn — saisie manuelle',`
     <div style="background:var(--acc-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--acc2)">
       📋 Ouvrez le profil LinkedIn, copiez les informations visibles (nom, poste, entreprise, résumé, expériences…) et collez-les ci-dessous.
