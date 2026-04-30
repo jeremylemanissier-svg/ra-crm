@@ -557,6 +557,7 @@ const DEFAULT_REFS={
   secteurs:[{id:'sec1',label:'BTP — Gros Œuvre'},{id:'sec2',label:'BTP — Second Œuvre'},{id:'sec3',label:'BTP — TCE / Tertiaire'},{id:'sec4',label:'BTP — Génie Civil'},{id:'sec5',label:'BTP — Industrie'},{id:'sec6',label:'Promotion immobilière'},{id:'sec7',label:"Bureau d'études structure"},{id:'sec8',label:"Bureau d'études fluides"},{id:'sec9',label:'Ingénierie & MOE'}],
   familles:[{id:'fam1',label:'Encadrement chantier'},{id:'fam2',label:'Conduite de travaux'},{id:'fam3',label:'Direction travaux'},{id:'fam4',label:"Bureau d'études"},{id:'fam5',label:'Commercial & Affaires'},{id:'fam6',label:"Maîtrise d'œuvre"}],
   postes:[{id:'p1',label:'Chef de chantier GO',famille_id:'fam1'},{id:'p2',label:'Chef de chantier TCE',famille_id:'fam1'},{id:'p3',label:'Chef de chantier GC',famille_id:'fam1'},{id:'p4',label:'Conducteur de travaux',famille_id:'fam2'},{id:'p5',label:'CDT TCE',famille_id:'fam2'},{id:'p6',label:'CDT GO',famille_id:'fam2'},{id:'p7',label:'Directeur de travaux',famille_id:'fam3'},{id:'p8',label:'Responsable travaux',famille_id:'fam3'},{id:'p9',label:'Ingénieur structure',famille_id:'fam4'},{id:'p10',label:'Ingénieur fluides',famille_id:'fam4'},{id:'p11',label:"Chargé d'affaires",famille_id:'fam5'},{id:'p12',label:'CA second œuvre',famille_id:'fam5'},{id:'p13',label:"Architecte MOE",famille_id:'fam6'},{id:'p14',label:"Maître d'œuvre",famille_id:'fam6'}],
+  specialites:[],
   // ── NOUVEAU référentiel ──
   familles_metier:[
     {id:'fm1',label:'Conduite & Direction de travaux',actif:true},
@@ -767,6 +768,7 @@ async function loadData(){
   if(!REF.regions)REF.regions=DEFAULT_REFS.regions;if(!REF.villes)REF.villes=DEFAULT_REFS.villes;
   if(!REF.secteurs)REF.secteurs=DEFAULT_REFS.secteurs;if(!REF.familles)REF.familles=DEFAULT_REFS.familles;
   if(!REF.postes)REF.postes=DEFAULT_REFS.postes;
+  if(!REF.specialites)REF.specialites=[];
   // Init nouveaux référentiels si absents
   if(!REF.familles_metier)REF.familles_metier=DEFAULT_REFS.familles_metier;
   if(!REF.metiers)REF.metiers=DEFAULT_REFS.metiers;
@@ -980,17 +982,21 @@ function applyVivierF(){
     _vivierNav=res.map(c=>c.id); // Stocker les IDs pour navigation ← →
     res.forEach((c,i)=>{
     const locTag=c.ville?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">📍 ${esc(c.ville)}${c.departement_code?' ('+esc(c.departement_code)+')':''}</span>`:'';
-    const sectTag=c.secteur_act_new_id?refLbl('secteurs_act',c.secteur_act_new_id):(refLbl('secteurs',c.secteur_act_id)||'');
-    const metierTag=c.metier1_id?refLbl('metiers',c.metier1_id):(c.poste_ref_id?refLbl('postes',c.poste_ref_id):'');
+    const sectLabel=c.secteur_act_new_id?refLbl('secteurs_act',c.secteur_act_new_id):(refLbl('secteurs',c.secteur_act_id)||'');
+    const ssLabel=c.sous_secteur_id?refLbl('sous_secteurs',c.sous_secteur_id):'';
+    const metierLabel=c.metier1_id?refLbl('metiers',c.metier1_id):'';
+    const specLabels=[c.spec1_id,c.spec2_id,c.spec3_id].filter(Boolean).map(id=>refLbl('specialites',id)).filter(Boolean);
+    const posteLabel=metierLabel||c.poste||'';
     h+=`<div class="vrow" onclick="openCandDetail('${c.id}')">
       ${av(c.prenom+' '+c.nom,c.photo,i,46)}
       <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:600;margin-bottom:3px">${esc(c.prenom)} ${esc(c.nom)}${c.cv?` <span style="font-size:10px;background:var(--acc-light);color:var(--acc);border-radius:4px;padding:1px 5px">CV</span>`:''}</div>
-        <div style="font-size:13px;color:var(--ts);margin-bottom:5px">${esc(c.poste||'—')}${c.ent?' · '+esc(c.ent):''}</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:2px">${esc(c.nom)} ${esc(c.prenom)}${c.cv?` <span style="font-size:10px;background:var(--acc-light);color:var(--acc);border-radius:4px;padding:1px 5px">CV</span>`:''}</div>
+        ${posteLabel?`<div style="font-size:13px;color:var(--ts);margin-bottom:2px">${esc(posteLabel)}${c.ent?' · '+esc(c.ent):''}</div>`:''}
+        ${c.ville?`<div style="font-size:12px;color:var(--tm);margin-bottom:5px">📍 ${esc(c.ville)}</div>`:''}
         <div style="display:flex;gap:5px;flex-wrap:wrap">
-          ${locTag}
-          ${sectTag?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(sectTag)}</span>`:''}
-          ${metierTag?`<span style="font-size:11px;background:var(--acc-light);border:1px solid var(--br2);border-radius:5px;padding:1px 7px;color:var(--acc2)">${esc(metierTag)}</span>`:''}
+          ${sectLabel?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(sectLabel)}</span>`:''}
+          ${ssLabel?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(ssLabel)}</span>`:''}
+          ${specLabels.map(s=>`<span style="font-size:11px;background:var(--acc-light);border:1px solid var(--br2);border-radius:5px;padding:1px 7px;color:var(--acc2)">${esc(s)}</span>`).join('')}
           ${c.sal?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">💰 ${esc(c.sal)}</span>`:''}
           ${(c.notes||[]).length>0?`<span style="font-size:11px;color:var(--tm)">📝 ${c.notes.length} note${c.notes.length>1?'s':''}</span>`:''}
           ${c.prequalif?.motivation_note?`<span style="font-size:11px;color:var(--amber)">⭐ ${c.prequalif.motivation_note}/5</span>`:''}
@@ -1277,17 +1283,11 @@ async function processBulkImport(files){
   if(closeBtn)closeBtn.disabled=false;
   updBadges();
 }
-// Ouvre une fiche candidat depuis le kanban d'une commande — le bouton X rouvre la commande
+// Ouvre une fiche candidat depuis le kanban d'une commande
+// Le bouton Fermer dans le header candidat rouvre la commande via _fromCmd
 function openCandDetailFromCmd(candId, cmdId){
+  window._lastFromCmd=cmdId;
   openCandDetail(candId);
-  setTimeout(()=>{
-    const mhx=document.querySelector('.mhx');
-    if(mhx){
-      const newBtn=mhx.cloneNode(true);
-      mhx.parentNode.replaceChild(newBtn,mhx);
-      newBtn.onclick=()=>{activeCmdTab[cmdId]='cands';CM();openCmdDetail(cmdId);};
-    }
-  },0);
 }
 
 function previewCandPhoto(candId){
@@ -1499,7 +1499,11 @@ function openCandForm(id){
     <div class="section-title">Famille métier & Poste</div>
     <div class="fld"><label>Famille métier</label>${searchSel('f-fm',famMetiers,c.famille_metier_id||'','— Famille métier —')}</div>
     <div id="metiers-wrap">${[1,2,3].map(n=>`<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em">Métier ${n}${n===1?' (principal)':''}</label>${searchSel('f-m'+n,metiersFam,c['metier'+n+'_id']||'','— Métier —')}</div>`).join('')}</div>
-    <div class="fr"><div class="fld"><label>Statut candidat</label><select id="f-statut_cand"><option value="Candidat"${(c.statut_cand||'Candidat')==='Candidat'?' selected':''}>Candidat</option><option value="Embauché"${c.statut_cand==='Embauché'?' selected':''}>Embauché</option><option value="Indisponible"${c.statut_cand==='Indisponible'?' selected':''}>Indisponible</option></select></div><div class="fld"><label>Poste visé (libre)</label><input id="f-poste" value="${v('poste')}"></div></div>
+    <div class="fr"><div class="fld"><label>Statut candidat</label><select id="f-statut_cand"><option value="Candidat"${(c.statut_cand||'Candidat')==='Candidat'?' selected':''}>Candidat</option><option value="Embauché"${c.statut_cand==='Embauché'?' selected':''}>Embauché</option><option value="Indisponible"${c.statut_cand==='Indisponible'?' selected':''}>Indisponible</option></select></div></div>
+    <div class="section-title">Spécialités</div>
+    <div class="fr">
+      ${[1,2,3].map(n=>`<div class="fld"><label>Spécialité ${n}</label>${searchSel('f-spec'+n,(REF.specialites||[]).filter(s=>s.actif!==false),c['spec'+n+'_id']||'','— Spécialité —')}</div>`).join('')}
+    </div>
     <div class="section-title">Localisation & Expérience</div>
     <div class="fld"><label>Localisation</label>${geoWidget('geo-c',c.ville||c.loc||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
     <div class="fr"><div class="fld"><label>Entreprise actuelle</label><input id="f-ent" value="${v('ent')}"></div><div class="fld"><label>Prétentions salariales</label><input id="f-sal" value="${v('sal')}"></div></div>
@@ -1533,6 +1537,7 @@ function saveCand(){
       source_canal:source_canal||existing.source_canal||'',
       famille_metier_id:ssGet('f-fm'),
       metier1_id:ssGet('f-m1'),metier2_id:ssGet('f-m2'),metier3_id:ssGet('f-m3'),
+      spec1_id:ssGet('f-spec1'),spec2_id:ssGet('f-spec2'),spec3_id:ssGet('f-spec3'),
       secteur_act_new_id:ssGet('f-sa'),sous_secteur_id:ssGet('f-ss'),
       secteur_act_id:existing.secteur_act_id||'',secteur_poste_id:existing.secteur_poste_id||'',
       famille_id:existing.famille_id||'',poste_ref_id:existing.poste_ref_id||'',
@@ -1557,6 +1562,12 @@ function saveCand(){
   doSave();
 }
 
+function closeCandDetail(){
+  const fromCmd=window._lastFromCmd;
+  window._lastFromCmd=null;
+  CM();
+  if(fromCmd){activeCmdTab[fromCmd]='cands';setTimeout(()=>openCmdDetail(fromCmd),30);}
+}
 function openCandDetail(id){
   const c=getCand(id);if(!c)return;
   const sAct=refLbl('secteurs',c.secteur_act_id),sPoste=refLbl('secteurs',c.secteur_poste_id);
@@ -1599,7 +1610,7 @@ function openCandDetail(id){
           ${buildNavArrows(id,_vivierNav,'candNav')}
         </div>
       </div>
-      <button onclick="CM()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
+      <button onclick="closeCandDetail()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
     </div>
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab(this,'tab-infos')">Infos</button>
@@ -3271,9 +3282,24 @@ async function deleteUser(id,name){
 
 let rtab='secteurs';
 function openRef(){rtab='secteurs';renderRef();}
-function renderRef(){OM('Référentiels',`<div class="ref-tabs"><button class="ref-tab${rtab==='secteurs'?' active':''}" onclick="swRef('secteurs')">Secteurs / Sous-secteurs</button><button class="ref-tab${rtab==='metiers'?' active':''}" onclick="swRef('metiers')">Familles & Métiers</button><button class="ref-tab${rtab==='geo'?' active':''}" onclick="swRef('geo')">Régions & Villes</button></div><div id="rc">${rRC()}</div>`,'w');}
+function renderRef(){OM('Référentiels',`<div class="ref-tabs"><button class="ref-tab${rtab==='secteurs'?' active':''}" onclick="swRef('secteurs')">Secteurs / Sous-secteurs</button><button class="ref-tab${rtab==='metiers'?' active':''}" onclick="swRef('metiers')">Familles & Métiers</button><button class="ref-tab${rtab==='specialites'?' active':''}" onclick="swRef('specialites')">⭐ Spécialités</button></div><div id="rc">${rRC()}</div>`,'w');}
 function swRef(t){rtab=t;document.getElementById('rc').innerHTML=rRC();}
-function rRC(){if(rtab==='secteurs')return rRSecteurs();if(rtab==='metiers')return rRMetiers();return rRG();}
+function rRC(){if(rtab==='secteurs')return rRSecteurs();if(rtab==='metiers')return rRMetiers();if(rtab==='specialites')return rRSpecialites();return rRSecteurs();}
+
+function rRSpecialites(){
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false);
+  let h='<div>';
+  if(!specs.length)h+='<div style="color:var(--tm);font-size:13px;font-style:italic;padding:8px 0">Aucune spécialité. Ajoutez-en ci-dessous.</div>';
+  else h+=specs.map(s=>`<div class="rpr">
+    <span style="flex:1;font-size:13px">${esc(s.label)}</span>
+    <button class="ic-btn" onclick="renRefItem('specialites','${s.id}')">✏️</button>
+    <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('specialites','${s.id}')" title="Supprimer">🗑</button>
+  </div>`).join('');
+  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px">
+    <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une spécialité</div>
+    <div class="radd"><input type="text" id="new-specialites" placeholder="ex: Terrassement, Réseau humide..."><button onclick="addRefFlat('specialites')">+ Ajouter</button></div>
+  </div>`;
+}
 
 function rRMetiers(){
   let h='<div>';
@@ -4199,8 +4225,6 @@ function openEtapeInfo(cmdId,candId,etape){
       <button class="btn btn-s" onclick="activeCmdTab['${cmdId}']='cands';CM();openCmdDetail('${cmdId}')">Fermer sans enregistrer</button>
       <button class="btn btn-p" onclick="saveEtapeInfo('${cmdId}','${candId}','${etape}')">Enregistrer</button>
     </div>`,'w');
-  // Override the modal X button to reopen the command (variables not in template literal here)
-  setTimeout(()=>{const x=document.querySelector('.mhx');if(x){const oldX=x.cloneNode(true);x.parentNode.replaceChild(oldX,x);oldX.onclick=()=>{activeCmdTab[cmdId]='cands';CM();openCmdDetail(cmdId);};}},0);
 }
 
 function saveEtapeInfo(cmdId,candId,etape){
