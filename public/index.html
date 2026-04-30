@@ -557,7 +557,11 @@ const DEFAULT_REFS={
   secteurs:[{id:'sec1',label:'BTP — Gros Œuvre'},{id:'sec2',label:'BTP — Second Œuvre'},{id:'sec3',label:'BTP — TCE / Tertiaire'},{id:'sec4',label:'BTP — Génie Civil'},{id:'sec5',label:'BTP — Industrie'},{id:'sec6',label:'Promotion immobilière'},{id:'sec7',label:"Bureau d'études structure"},{id:'sec8',label:"Bureau d'études fluides"},{id:'sec9',label:'Ingénierie & MOE'}],
   familles:[{id:'fam1',label:'Encadrement chantier'},{id:'fam2',label:'Conduite de travaux'},{id:'fam3',label:'Direction travaux'},{id:'fam4',label:"Bureau d'études"},{id:'fam5',label:'Commercial & Affaires'},{id:'fam6',label:"Maîtrise d'œuvre"}],
   postes:[{id:'p1',label:'Chef de chantier GO',famille_id:'fam1'},{id:'p2',label:'Chef de chantier TCE',famille_id:'fam1'},{id:'p3',label:'Chef de chantier GC',famille_id:'fam1'},{id:'p4',label:'Conducteur de travaux',famille_id:'fam2'},{id:'p5',label:'CDT TCE',famille_id:'fam2'},{id:'p6',label:'CDT GO',famille_id:'fam2'},{id:'p7',label:'Directeur de travaux',famille_id:'fam3'},{id:'p8',label:'Responsable travaux',famille_id:'fam3'},{id:'p9',label:'Ingénieur structure',famille_id:'fam4'},{id:'p10',label:'Ingénieur fluides',famille_id:'fam4'},{id:'p11',label:"Chargé d'affaires",famille_id:'fam5'},{id:'p12',label:'CA second œuvre',famille_id:'fam5'},{id:'p13',label:"Architecte MOE",famille_id:'fam6'},{id:'p14',label:"Maître d'œuvre",famille_id:'fam6'}],
-  specialites:[],
+  specialites:[
+    {id:'spec_tp1',label:'Terrassement',sous_secteur_id:'ss1',actif:true},
+    {id:'spec_tp2',label:'Enrobés',sous_secteur_id:'ss1',actif:true},
+    {id:'spec_tp3',label:'Réseaux électriques',sous_secteur_id:'ss1',actif:true},
+  ],
   // ── NOUVEAU référentiel ──
   familles_metier:[
     {id:'fm1',label:'Conduite & Direction de travaux',actif:true},
@@ -1451,6 +1455,7 @@ function ssPick(id,val,label){
   ssClose(id);
   if(id==='f-fm')refreshMetiersForm(val);
   if(id==='f-sa')refreshSousSectForm(val,'f-ss','cand');
+  if(id==='f-ss')refreshSpecsForm(val);
   if(id==='cl-sa')refreshSousSectForm(val,'cl-ss','client');
 }
 function ssGet(id){return document.getElementById(id+'-val')?.value||'';}
@@ -1463,6 +1468,16 @@ function refreshSousSectForm(sectId,prefix){
   const c=document.getElementById(prefix+'-wrap');if(!c)return;
   const ss=(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&(!sectId||s.secteur_id===sectId));
   c.innerHTML=searchSel(prefix,ss,ssGet(prefix)||'','— Sous-secteur —');
+  refreshSpecsForm(''); // Reset specs when sector changes
+}
+function buildSpecSelects(ssId,cand){
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  return [1,2,3].map(n=>`<div class="fld"><label>Spécialité ${n}</label>${searchSel('f-spec'+n,specs,cand?.['spec'+n+'_id']||'','— Spécialité —')}</div>`).join('');
+}
+function refreshSpecsForm(ssId){
+  const wrap=document.getElementById('specs-wrap');if(!wrap)return;
+  const c=EID?getCand(EID):{};
+  wrap.innerHTML=buildSpecSelects(ssId,c);
 }
 
 function openCandForm(id){
@@ -1501,8 +1516,9 @@ function openCandForm(id){
     <div id="metiers-wrap">${[1,2,3].map(n=>`<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em">Métier ${n}${n===1?' (principal)':''}</label>${searchSel('f-m'+n,metiersFam,c['metier'+n+'_id']||'','— Métier —')}</div>`).join('')}</div>
     <div class="fr"><div class="fld"><label>Statut candidat</label><select id="f-statut_cand"><option value="Candidat"${(c.statut_cand||'Candidat')==='Candidat'?' selected':''}>Candidat</option><option value="Embauché"${c.statut_cand==='Embauché'?' selected':''}>Embauché</option><option value="Indisponible"${c.statut_cand==='Indisponible'?' selected':''}>Indisponible</option></select></div></div>
     <div class="section-title">Spécialités</div>
-    <div class="fr">
-      ${[1,2,3].map(n=>`<div class="fld"><label>Spécialité ${n}</label>${searchSel('f-spec'+n,(REF.specialites||[]).filter(s=>s.actif!==false),c['spec'+n+'_id']||'','— Spécialité —')}</div>`).join('')}
+    <div style="font-size:11px;color:var(--ts);margin-bottom:8px">Spécialités rattachées au sous-secteur sélectionné</div>
+    <div class="fr" id="specs-wrap">
+      ${buildSpecSelects(c.sous_secteur_id||ssGet('f-ss')||'',c)}
     </div>
     <div class="section-title">Localisation & Expérience</div>
     <div class="fld"><label>Localisation</label>${geoWidget('geo-c',c.ville||c.loc||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
@@ -3287,18 +3303,42 @@ function swRef(t){rtab=t;document.getElementById('rc').innerHTML=rRC();}
 function rRC(){if(rtab==='secteurs')return rRSecteurs();if(rtab==='metiers')return rRMetiers();if(rtab==='specialites')return rRSpecialites();return rRSecteurs();}
 
 function rRSpecialites(){
-  const specs=(REF.specialites||[]).filter(s=>s.actif!==false);
+  const ssList=(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
   let h='<div>';
-  if(!specs.length)h+='<div style="color:var(--tm);font-size:13px;font-style:italic;padding:8px 0">Aucune spécialité. Ajoutez-en ci-dessous.</div>';
-  else h+=specs.map(s=>`<div class="rpr">
-    <span style="flex:1;font-size:13px">${esc(s.label)}</span>
-    <button class="ic-btn" onclick="renRefItem('specialites','${s.id}')">✏️</button>
-    <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('specialites','${s.id}')" title="Supprimer">🗑</button>
-  </div>`).join('');
-  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px">
-    <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une spécialité</div>
-    <div class="radd"><input type="text" id="new-specialites" placeholder="ex: Terrassement, Réseau humide..."><button onclick="addRefFlat('specialites')">+ Ajouter</button></div>
-  </div>`;
+  ssList.forEach(ss=>{
+    const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&s.sous_secteur_id===ss.id);
+    const uid='rspec-'+ss.id;
+    h+=`<div style="margin-bottom:6px">
+      <div class="rpr" style="cursor:pointer" onclick="toggleRefGroup('${uid}')">
+        <span style="flex:1;font-size:13px;font-weight:500">${esc(ss.label)}</span>
+        <span style="font-size:11px;color:var(--tm);margin-right:6px">${specs.length} spécialité${specs.length!==1?'s':''}</span>
+        <span id="${uid}-arrow" style="font-size:12px;color:var(--tm)">▶</span>
+      </div>
+      <div id="${uid}" style="display:none" class="rchildren">
+        ${specs.length?specs.map(s=>`<div class="rcr"><span style="flex:1;font-size:12px">${esc(s.label)}</span>
+          <button class="ic-btn" onclick="renRefItem('specialites','${s.id}')">✏️</button>
+          <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('specialites','${s.id}')" title="Supprimer">🗑</button>
+        </div>`).join(''):'<div style="font-size:12px;color:var(--tm);font-style:italic;padding:4px 0">Aucune spécialité</div>'}
+        <div class="radd" style="margin-top:6px">
+          <input type="text" id="nspec-${ss.id}" placeholder="Nouvelle spécialité...">
+          <button onclick="addSpecialite('${ss.id}')">+ Ajouter</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  return h+`</div>`;
+}
+
+function addSpecialite(ssId){
+  const inp=document.getElementById('nspec-'+ssId);
+  const l=(inp?.value||'').trim();if(!l)return;
+  if(!REF.specialites)REF.specialites=[];
+  REF.specialites.push({id:genId(),label:l,sous_secteur_id:ssId,actif:true});
+  inp.value='';saveKey('refs');
+  const og=Array.from(document.querySelectorAll('[id^="rspec-"]')).filter(el=>!el.id.endsWith('-arrow')&&el.style.display==='block').map(el=>el.id);
+  document.getElementById('rc').innerHTML=rRC();
+  og.forEach(uid=>toggleRefGroup(uid));
+  toggleRefGroup('rspec-'+ssId);
 }
 
 function rRMetiers(){
