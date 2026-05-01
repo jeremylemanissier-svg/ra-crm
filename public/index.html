@@ -539,6 +539,16 @@ function consAvatar(name){
   const ini=(name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   return `<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle">${ini}</span>`;
 }
+// Helper réutilisable : affiche photo (ou initiales) + nom consultant
+function renderCons(name,size){
+  if(!name)return '—';
+  size=size||20;
+  const u=_usersCache.find(x=>x.id===name||x.label===name);
+  const display=name;
+  if(u?.photo)return `<span style="display:inline-flex;align-items:center;gap:5px"><img src="${u.photo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0">${esc(display)}</span>`;
+  const ini=(name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-flex;width:${size}px;height:${size}px;border-radius:50%;background:var(--acc);color:white;font-size:${Math.round(size*0.45)}px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${ini}</span>${esc(display)}</span>`;
+}
 const TODAY=new Date().toISOString().slice(0,10);
 const AV_COLORS=[['#e8f4f8','#1e6080'],['#ddeef5','#165068'],['#ecfdf5','#065f46'],['#fff7ed','#9a3412'],['#fef3c7','#92400e'],['#f0f4f8','#2c5282'],['#f0fdf4','#166534'],['#fef2f2','#991b1b']];
 const ACT_TYPES=['Appel','Rendez-vous','Email','Relance'];
@@ -1083,7 +1093,7 @@ function rClients(){
     const nbA=DB.actions.filter(a=>a.client_id===c.id).length,nbC=DB.commandes.filter(cmd=>cmd.client_id===c.id).length,nbCt=DB.contacts.filter(ct=>ct.client_id===c.id).length;
     h+=`<div class="cl-card" style="cursor:pointer" onclick="openClientDetail('${c.id}')">
       <div style="display:flex;gap:11px;align-items:center">${avatarHtml}<div style="min-width:0"><div style="font-size:14px;font-weight:600">${esc(c.nom)}</div><div style="font-size:12px;color:var(--ts)">${esc(c.secteur||'—')}</div></div></div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">📦 Archivé</span>`:''}${c.effectif?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(c.effectif)}</span>`:''}<span style="font-size:11px;color:var(--tm)">${esc(c.cons||'')}</span></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">📦 Archivé</span>`:''}${c.effectif?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(c.effectif)}</span>`:''}<span style="font-size:11px;color:var(--tm)">${renderCons(c.cons||'')}</span></div>
       <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:3px">
         <div>📍 ${esc(c.ville||c.loc||'—')}${c.departement?' · '+esc(c.departement):''}</div>
         <div>📞 ${esc(c.phone||'—')}</div>
@@ -2407,7 +2417,7 @@ function buildCandCmdsSection(candId){
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bg)">
       <div style="flex:1;min-width:0">
         <a href="#" onclick="event.preventDefault();CM();openCmdDetail('${cmd.id}')" style="font-size:13px;font-weight:600;color:var(--acc);text-decoration:none">${esc(cmd.titre)}</a>
-        <div style="font-size:12px;color:var(--ts);margin-top:2px">🏢 ${esc(cl?.nom||'—')} · 👤 ${esc(cmd.cons)}</div>
+        <div style="font-size:12px;color:var(--ts);margin-top:2px">🏢 ${esc(cl?.nom||'—')} · ${renderCons(cmd.cons,16)}</div>
         ${infoTag?`<div style="margin-top:3px">${infoTag}</div>`:''}
       </div>
       <span style="${etapeStyle};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:500;flex-shrink:0">${esc(etapeLabel)}</span>
@@ -2725,7 +2735,7 @@ function openCmdDetail(id){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:14px;margin-bottom:0;border-bottom:1px solid var(--br)">
       <div>
         <div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div>
-        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · 📋 ${esc(cmd.cons)} · 📅 ${cmd.date_cmd||cmd.date||'—'}</div>
+        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · ${renderCons(cmd.cons,18)} · 📅 ${cmd.date_cmd||cmd.date||'—'}</div>
         <div style="margin-top:8px">${buildPriorityBadge(cmd)}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
@@ -3060,7 +3070,7 @@ function openClientDetail(id){
   const allActs=DB.actions.filter(a=>a.client_id===id).sort((a,b)=>b.date>a.date?1:-1);
   const cmds=DB.commandes.filter(cmd=>cmd.client_id===id);
   const cts=DB.contacts.filter(ct=>ct.client_id===id);
-  const actsH=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${esc(a.cons)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><button class="ic-btn" onclick="delAction('${a.id}')" style="flex-shrink:0">🗑</button></div>`;}).join('');
+  const actsH=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><button class="ic-btn" onclick="delAction('${a.id}')" style="flex-shrink:0">🗑</button></div>`;}).join('');
   const cmdsH=cmds.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune commande</div>':cmds.map(cmd=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="CM();openCmdDetail('${cmd.id}')"><div style="flex:1;font-weight:500;color:var(--tp)">${esc(cmd.titre)}</div><span style="background:${cmd.statut==='Active'?'#ecfdf5':'var(--acc-light)'};color:${cmd.statut==='Active'?'#065f46':'var(--acc2)'};border-radius:20px;padding:1px 8px;font-size:11px">${esc(cmd.statut)}</span></div>`).join('');
   const ctsH=buildClientContacts(id,cts);
   const leftHtml=`
@@ -3081,7 +3091,7 @@ function openClientDetail(id){
       <button onclick="CM()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
     </div>
     <div class="dg2" style="margin-bottom:14px">
-      <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${esc(c.cons||'—')}</div></div>
+      <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${renderCons(c.cons||'—',18)}</div></div>
         <div class="dg"><div class="dl">Localisation</div><div class="dv">${[c.ville,c.departement?`(${c.departement_code}) ${c.departement}`:'',c.region].filter(Boolean).join(' · ')||'—'}</div></div>
         <div class="dg"><div class="dl">Téléphone</div><div class="dv">${esc(c.phone||'—')}</div></div>
         ${c.site_web?`<div class="dg"><div class="dl">Site web</div><div class="dv"><a href="${esc(c.site_web)}" target="_blank" style="color:var(--acc);font-size:13px">${esc(c.site_web)}</a></div></div>`:''}
@@ -3166,7 +3176,7 @@ function saveAction(){
   const panel=document.getElementById('acts-panel-'+refId);
   if(panel){
     const allActs=DB.actions.filter(a=>a.client_id===refId).sort((a,b)=>b.date>a.date?1:-1);
-    panel.innerHTML=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${esc(a.cons)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><button class="ic-btn" onclick="delAction('${a.id}')" style="flex-shrink:0">🗑</button></div>`;}).join('');
+    panel.innerHTML=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><button class="ic-btn" onclick="delAction('${a.id}')" style="flex-shrink:0">🗑</button></div>`;}).join('');
   }else{
     // Toujours rouvrir la fiche client, jamais renvoyer au listing
     setTimeout(()=>openClientDetail(refId),30);
@@ -3316,7 +3326,7 @@ function rDashCRM(){
       h+=`<tr>
         <td><span style="font-size:15px">${ACT_ICO[a.type]||'📋'}</span> <span style="font-size:12px;color:var(--ts)">${esc(a.type)}</span></td>
         <td style="font-size:12px;white-space:nowrap">${a.date}</td>
-        <td style="font-size:12px;font-weight:500">${esc(a.cons)}</td>
+        <td style="font-size:12px">${renderCons(a.cons,18)}</td>
         <td style="font-size:12px">${esc(a.client_nom||'—')}</td>
         <td style="font-size:12px">${esc(a.contact_nom||'—')}</td>
         <td style="font-size:12px;color:var(--ts);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.commentaire||'—')}</td>
@@ -4743,9 +4753,8 @@ function filterLinkContacts(clientId){
 function doLinkContact(contactId,clientId){
   DB.contacts=DB.contacts.map(ct=>ct.id===contactId?{...ct,client_id:clientId}:ct);
   save();CM();
-  const panel=document.querySelector('.client-contacts-list');
-  if(panel){const cts=DB.contacts.filter(ct=>ct.client_id===clientId);panel.innerHTML=buildClientContacts(clientId,cts);}
   showToast('✓ Contact rattaché');
+  setTimeout(()=>openClientDetail(clientId),30);
 }
 function unlinkContactFromClient(contactId,clientId){
   if(!confirm('Dissocier ce contact de cette fiche ? (Le contact reste dans la base)'))return;
@@ -4774,10 +4783,9 @@ function saveContactFromClient(clientId){
   const doSave=()=>{
     const ct={id:genId(),prenom,nom,fonction:g('qc-fonction'),phone,email,cons:g('qc-cons'),comment:g('qc-comment'),client_id:clientId,created_at:TODAY};
     DB.contacts.push(ct);save();CM();
-    // Refresh contacts section in client detail if open
-    const ctList=document.querySelector('.client-contacts-list');
-    if(ctList){const cts=DB.contacts.filter(x=>x.client_id===clientId);ctList.innerHTML=buildClientContactsHtml(clientId,cts);}
     showToast('✓ Contact créé et rattaché au client');
+    // Rouvrir la fiche client (CM ferme tout)
+    setTimeout(()=>openClientDetail(clientId),30);
   };
   if(dupes.length){showDuplicatesAlert(dupes,'contact',doSave);}else{doSave();}
 }
