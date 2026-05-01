@@ -1934,20 +1934,7 @@ function sireneSelect(idx){
   const geoInp=document.getElementById('geo-cl-ville');if(geoInp&&r.ville){geoInp.value=r.ville;}
   const sireneInp=document.getElementById('sirene-inp');if(sireneInp)sireneInp.value=r.nom;
   drop.classList.remove('open');
-  // Offer to pick specific établissement if SIREN available
-  if(r.siren){
-    showToast('✓ Données INSEE importées');
-    setTimeout(()=>{
-      if(confirm('Souhaitez-vous sélectionner un établissement précis (SIRET) ?')){
-        openEtabPicker(r.siren,(etab)=>{
-          set('f-siret',etab.siret);
-          set('f-adresse_sirene',etab.adresse);
-          const gv=document.getElementById('geo-cl-ville');if(gv&&etab.ville)gv.value=etab.ville;
-          showToast('✓ Établissement sélectionné');
-        });
-      }
-    },500);
-  }
+  if(r.siren)showToast('✓ Données INSEE importées');
 }
 
 function buildControlesRefView(candId, controles){
