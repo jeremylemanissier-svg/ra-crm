@@ -1457,6 +1457,7 @@ function ssPick(id,val,label){
   if(id==='f-sa')refreshSousSectForm(val,'f-ss','cand');
   if(id==='f-ss')refreshSpecsForm(val);
   if(id==='cl-sa')refreshSousSectForm(val,'cl-ss','client');
+  if(id==='cl-ss')refreshClientSpecsForm(val);
 }
 function ssGet(id){return document.getElementById(id+'-val')?.value||'';}
 function refreshMetiersForm(famId){
@@ -1529,6 +1530,56 @@ function refreshSpecsForm(ssId){
   wrap.innerHTML=buildSpecSelects(ssId,c);
 }
 
+function buildClientSpecSelects(ssId,cl){
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  let count=1;
+  for(let n=1;n<=5;n++){if(cl?.['cl_spec'+n+'_id'])count=Math.min(n+1,5);}
+  window._clSpecCount=Math.max(count,window._clSpecCount||1);
+  let h='';
+  for(let n=1;n<=window._clSpecCount;n++){
+    h+=`<div class="fld" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${n}</label>${searchSel('cl-spec'+n,specs,cl?.['cl_spec'+n+'_id']||'','— Spécialité —')}</div>
+      ${n>1?`<button type="button" onclick="removeClientSpec(${n})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._clSpecCount<5)h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addClientSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  return h;
+}
+function addClientSpecSlot(){
+  if((window._clSpecCount||1)>=5)return;
+  window._clSpecCount=(window._clSpecCount||1)+1;
+  const wrap=document.getElementById('cl-specs-wrap');if(!wrap)return;
+  const c=EID?getClient(EID):{};
+  wrap.innerHTML=buildClientSpecSelects(ssGet('cl-ss')||'',c);
+}
+function removeClientSpec(n){
+  for(let i=n;i<5;i++){
+    const curr=document.getElementById('cl-spec'+i+'-val');const next=document.getElementById('cl-spec'+(i+1)+'-val');
+    if(curr&&next)curr.value=next.value;
+    const ci=document.getElementById('cl-spec'+i+'-inp');const ni=document.getElementById('cl-spec'+(i+1)+'-inp');
+    if(ci&&ni)ci.value=ni.value;
+  }
+  window._clSpecCount=Math.max(1,(window._clSpecCount||1)-1);
+  const ssId=ssGet('cl-ss')||'';
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  const wrap=document.getElementById('cl-specs-wrap');if(!wrap)return;
+  let h='';
+  for(let i=1;i<=window._clSpecCount;i++){
+    const cv=document.getElementById('cl-spec'+i+'-val')?.value||'';
+    h+=`<div class="fld" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${i}</label>${searchSel('cl-spec'+i,specs,cv,'— Spécialité —')}</div>
+      ${i>1?`<button type="button" onclick="removeClientSpec(${i})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._clSpecCount<5)h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addClientSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  wrap.innerHTML=h;
+}
+function refreshClientSpecsForm(ssId){
+  const wrap=document.getElementById('cl-specs-wrap');if(!wrap)return;
+  window._clSpecCount=1;
+  const c=EID?getClient(EID):{};
+  wrap.innerHTML=buildClientSpecSelects(ssId,c);
+}
 function openCandForm(id){
   EID=id||null;window._pPhoto=null;window._pCV=null;window._specCount=1;
   const c=id?getCand(id):{};const v=f=>esc(c[f]||'');
@@ -2875,9 +2926,8 @@ function openClientForm(id){
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
   const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length]||AV_COLORS[0];
   const ini=(c.nom||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  window._pClientLogo=null;
+  window._pClientLogo=null;window._clSpecCount=1;
   OM(id?'Modifier':'Nouveau client / prospect',`
-    <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
       <div style="position:relative;flex-shrink:0;cursor:pointer" title="${c.logo?'Changer le logo':'Ajouter un logo'}" onclick="document.getElementById('logo-edit-inp').click()">
         ${c.logo
           ?`<img id="logo-edit-preview-img" src="${c.logo}" style="width:72px;height:72px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`
@@ -2903,6 +2953,11 @@ function openClientForm(id){
     <div class="fr">
       <div class="fld"><label>Secteur d'activité</label>${searchSel('cl-sa',saItems,c.secteur_act_new_id||c.secteur_ref_id||'','— Secteur —')}</div>
       <div class="fld"><label>Sous-secteur</label><div id="cl-ss-wrap">${searchSel('cl-ss',ssItems,c.sous_secteur_id||'','— Sous-secteur —')}</div></div>
+    </div>
+    <div class="section-title">Spécialités</div>
+    <div style="font-size:11px;color:var(--ts);margin-bottom:8px">Rattachées au sous-secteur sélectionné</div>
+    <div id="cl-specs-wrap">
+      ${buildClientSpecSelects(c.sous_secteur_id||'',c)}
     </div>
     <div class="fld"><label>Localisation</label>${geoWidget('geo-cl',c.ville||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
     <div class="section-title">Données INSEE</div>
@@ -2953,6 +3008,8 @@ function saveClient(){
     statut_sirene:g('statut_sirene'),date_creation_sirene:g('date_creation_sirene'),
     source_sirene:g('source_sirene')||'Manuel',
     email:g('email'),phone:g('phone'),contact_principal_id:g('contact_principal_id'),
+    cl_spec1_id:ssGet('cl-spec1'),cl_spec2_id:ssGet('cl-spec2'),cl_spec3_id:ssGet('cl-spec3'),
+    cl_spec4_id:ssGet('cl-spec4'),cl_spec5_id:ssGet('cl-spec5'),
     logo,
   };
   const savedId=EID;
