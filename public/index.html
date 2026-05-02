@@ -883,7 +883,7 @@ function rDash(){
   ${todayR.length===0?'<div style="text-align:center;padding:16px 0;color:var(--tm);font-size:13px">🎉 Agenda libre aujourd\'hui</div>':todayR.slice(0,5).map(r=>`<div class="today-item"><div class="ta"></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.nom)}</div><div style="font-size:12px;color:var(--ts)">${r.heure} · ${esc(r.obj)}</div></div><div style="font-size:11px;color:var(--tm)">${esc(r.cons)}</div></div>`).join('')}
   </div>
   <div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:13px">Commandes en cours</div>
-  ${actCmds.length===0?'<div style="color:var(--tm);font-size:13px">Aucune commande active</div>':actCmds.slice(0,5).map(cmd=>{const cl=getClient(cmd.client_id);const nc=cmd.candidats?.length||0;return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px"><div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--tp);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cmd.titre)}</div><div style="color:var(--ts)">${esc(cl?.nom||'—')} · ${esc(cmd.cons)}</div></div><span style="color:var(--tm);font-size:11px;flex-shrink:0">${nc} candidat${nc!==1?'s':''}</span></div>`;}).join('')}
+  ${actCmds.length===0?'<div style="color:var(--tm);font-size:13px">Aucune commande active</div>':actCmds.slice(0,5).map(cmd=>{const cl=getClient(cmd.client_id);const nc=cmd.candidats?.length||0;return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="openCmdDetail('${cmd.id}')"><div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cmd.titre)}</div><div style="color:var(--ts)">${esc(cl?.nom||'—')} · ${renderCons(cmd.cons,14)}</div></div><span style="color:var(--tm);font-size:11px;flex-shrink:0">${nc} candidat${nc!==1?'s':''}</span></div>`;}).join('')}
   </div></div>`;
   h+=`<div class="dash-grid">
   <div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:13px">Activité commerciale (ce mois)</div>
@@ -3101,9 +3101,12 @@ function saveClient(){
     logo,
   };
   const savedId=EID;
-  EID?DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c):DB.clients.push({...form,id:genId(),actions:[]});
+  let newId=null;
+  if(EID){DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c);}
+  else{newId=genId();DB.clients.push({...form,id:newId,actions:[]});}
   save();CM();R(CV);
-  if(savedId)setTimeout(()=>openClientDetail(savedId),30);
+  const targetId=savedId||newId;
+  if(targetId)setTimeout(()=>openClientDetail(targetId),30);
 }
 function delClient(id){if(!confirm('Supprimer ?'))return;DB.clients=DB.clients.filter(c=>c.id!==id);save();R(CV);}
 function openClientDetail(id){
@@ -3256,11 +3259,12 @@ function openContactForm(id){
     <div class="fld"><label>Fonction</label><input id="f-fonction" value="${v('fonction')}" placeholder="DRH, PDG, Directeur technique..."></div>
     <div class="fld"><label>Rattaché à</label><select id="f-client_id">${clOpts}</select></div>
     <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div></div>
+    <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="f-linkedin" value="${v('linkedin')}" placeholder="https://linkedin.com/in/..."></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveContact()">Enregistrer</button></div>`,'n');
 }
 function saveContact(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
-  const form={prenom:g('prenom'),nom:g('nom'),fonction:g('fonction'),client_id:g('client_id'),email:g('email'),phone:g('phone')};
+  const form={prenom:g('prenom'),nom:g('nom'),fonction:g('fonction'),client_id:g('client_id'),email:g('email'),phone:g('phone'),linkedin:g('linkedin')};
   const savedId=EID;
   EID?DB.contacts=DB.contacts.map(c=>c.id===EID?{...c,...form}:c):DB.contacts.push({...form,id:genId()});
   save();CM();R(CV);
@@ -3277,8 +3281,9 @@ function openContactDetail(id){
     </div>
     <div class="dg2">
       <div>
-        <div class="dg"><div class="dl">Téléphone</div><div class="dv">${esc(ct.phone||'—')}</div></div>
-        <div class="dg"><div class="dl">Email</div><div class="dv">${esc(ct.email||'—')}</div></div>
+        <div class="dg"><div class="dl">Téléphone</div><div class="dv" style="display:flex;align-items:center;gap:5px">${ct.phone?`<a href="tel:${esc(ct.phone)}" style="color:var(--tp);text-decoration:none">${esc(ct.phone)}</a>`:' —'}${ct.linkedin?liBtn(ct.linkedin):''}</div></div>
+        <div class="dg"><div class="dl">Email</div><div class="dv">${ct.email?`<a href="mailto:${esc(ct.email)}" style="color:var(--acc);text-decoration:none">${esc(ct.email)}</a>`:'—'}</div></div>
+        ${ct.linkedin?`<div class="dg"><div class="dl">LinkedIn</div><div class="dv">${liBtn(ct.linkedin)} <a href="${esc(ct.linkedin)}" target="_blank" style="color:var(--acc);font-size:12px;text-decoration:none">Voir le profil</a></div></div>`:''}
       </div>
       <div><div class="dg"><div class="dl">Entreprise</div><div class="dv">${esc(cl?.nom||'—')}</div></div></div>
     </div>
@@ -3366,20 +3371,73 @@ function rDashCRM(){
   else{
     h+=`<table><thead><tr><th>Type</th><th>Date</th><th>Consultant</th><th>Entreprise</th><th>Contact</th><th>Commentaire</th><th></th></tr></thead><tbody>`;
     acts.forEach(a=>{
-      h+=`<tr>
+      const hasCmt=(a.admin_comments||[]).length>0;
+      h+=`<tr style="cursor:pointer" onclick="openActionDetail('${a.id}')">
         <td><span style="font-size:15px">${ACT_ICO[a.type]||'📋'}</span> <span style="font-size:12px;color:var(--ts)">${esc(a.type)}</span></td>
         <td style="font-size:12px;white-space:nowrap">${a.date}</td>
         <td style="font-size:12px">${renderCons(a.cons,18)}</td>
-        <td style="font-size:12px">${esc(a.client_nom||'—')}</td>
+        <td style="font-size:12px;color:var(--acc)">${esc(a.client_nom||'—')}</td>
         <td style="font-size:12px">${esc(a.contact_nom||'—')}</td>
         <td style="font-size:12px;color:var(--ts);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.commentaire||'—')}</td>
-        <td><button class="ic-btn" onclick="delAction('${a.id}')">🗑</button></td>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap">
+          <button class="btn btn-s btn-sm" onclick="openActionComments('${a.id}')" title="Commentaires admin">${hasCmt?'💬 '+(a.admin_comments.length):'💬'}</button>
+          <button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>
+        </td>
       </tr>`;
     });
     h+=`</tbody></table>`;
   }
   h+='</div>';
   document.getElementById('body-dash-crm').innerHTML=h;
+}
+
+function openActionDetail(actionId){
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  const cl=getClient(a.client_id);const ct=getContact(a.contact_id);
+  OM('Détail action',`
+    <div style="margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">${ACT_ICO[a.type]||'📋'} ${esc(a.type)}</div>
+      <div style="font-size:13px;color:var(--ts);margin-bottom:8px">${a.date} · ${renderCons(a.cons,16)}</div>
+      ${cl?`<div style="font-size:13px;margin-bottom:3px">🏢 <b>${esc(cl.nom)}</b></div>`:''}
+      ${ct?`<div style="font-size:13px;margin-bottom:3px">👤 ${esc(ct.prenom)} ${esc(ct.nom)}${ct.linkedin?` ${liBtn(ct.linkedin)}`:''}</div>`:''}
+      ${a.commentaire?`<div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px">${esc(a.commentaire)}</div>`:''}
+    </div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openActionComments('${actionId}')">💬 Commentaires</button></div>`,'n');
+}
+
+function openActionComments(actionId){
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  const isAdmin=currentUser?.role==='admin';
+  const cmts=(a.admin_comments||[]);
+  const cmtHtml=cmts.length?cmts.map((c,i)=>`<div style="padding:9px 12px;background:var(--bg);border-radius:8px;margin-bottom:7px;position:relative">
+    <div style="font-size:11px;color:var(--tm);margin-bottom:3px">${renderCons(c.by,14)} · ${c.date}</div>
+    <div style="font-size:13px">${esc(c.text)}</div>
+    ${isAdmin?`<button onclick="delActionComment('${actionId}',${i})" style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:var(--red);font-size:12px">✕</button>`:''}
+  </div>`).join(''):'<div style="color:var(--tm);font-size:13px;font-style:italic;padding:8px 0">Aucun commentaire</div>';
+  OM('💬 Commentaires — '+esc(a.type),`
+    <div style="margin-bottom:10px;font-size:12px;color:var(--ts)">Action du ${a.date} · ${esc(a.client_nom||'—')}</div>
+    <div id="cmt-list-${actionId}" style="max-height:300px;overflow-y:auto;margin-bottom:12px">${cmtHtml}</div>
+    ${isAdmin?`<div class="fld"><label>Ajouter un commentaire</label><textarea id="cmt-inp-${actionId}" rows="3" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="addActionComment('${actionId}')">Ajouter</button></div>`
+    :`<div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`}
+  `,'n');
+}
+function addActionComment(actionId){
+  const inp=document.getElementById('cmt-inp-'+actionId);
+  const text=(inp?.value||'').trim();if(!text)return;
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  if(!a.admin_comments)a.admin_comments=[];
+  a.admin_comments.push({by:currentUser?.display_name||'Admin',date:TODAY,text});
+  DB.actions=DB.actions.map(x=>x.id===actionId?a:x);
+  save();showToast('✓ Commentaire ajouté');
+  openActionComments(actionId); // reste sur la même modale
+}
+function delActionComment(actionId,idx){
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  if(!confirm('Supprimer ce commentaire ?'))return;
+  a.admin_comments.splice(idx,1);
+  DB.actions=DB.actions.map(x=>x.id===actionId?a:x);
+  save();openActionComments(actionId);
 }
 
 async function openAdminPanel(){
