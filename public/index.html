@@ -411,6 +411,10 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span class="sb-lbl">Agenda</span><span class="sb-badge" id="badge-ag" style="display:none">0</span>
         </button>
+        <button class="sb-btn" onclick="openRef()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h6"/></svg>
+          <span class="sb-lbl">Référentiel</span>
+        </button>
         <div id="admin-nav" style="display:none">
           <div class="sb-sect">Admin</div>
           <button class="sb-btn" onclick="openAdminPanel()">
@@ -1447,9 +1451,42 @@ function ssPickIdx(id,idx){
 }
 function ssFilter(id,q){
   const drop=document.getElementById(id+'-drop');if(!drop)return;
-  const ql=q.toLowerCase();
-  drop.querySelectorAll('.geo-opt').forEach(o=>{const show=!ql||o.textContent.toLowerCase().includes(ql);o.style.display=show?'':'none';});
+  const ql=q.toLowerCase().trim();
+  let visible=0;
+  drop.querySelectorAll('.geo-opt:not(.ss-create-btn)').forEach(o=>{const show=!ql||o.textContent.toLowerCase().includes(ql);o.style.display=show?'':'none';if(show)visible++;});
+  const existing=drop.querySelector('.ss-create-btn');if(existing)existing.remove();
+  if(ql&&ql.length>1&&visible===0){
+    const btn=document.createElement('div');
+    btn.className='ss-create-btn geo-opt';
+    btn.style.cssText='padding:8px 12px;cursor:pointer;color:var(--acc);font-weight:600;font-size:12px;border-top:1px solid var(--br)';
+    btn.textContent='+ Créer "'+q+'"';
+    btn.onmousedown=e=>e.preventDefault();
+    btn.onclick=()=>ssQuickCreate(id,q);
+    drop.appendChild(btn);
+  }
   drop.classList.add('open');
+}
+function ssQuickCreate(selId,label){
+  const REF_MAP={'f-sa':'secteurs_act','cl-sa':'secteurs_act','f-ss':'sous_secteurs','cl-ss':'sous_secteurs','f-spec1':'specialites','f-spec2':'specialites','f-spec3':'specialites','f-spec4':'specialites','f-spec5':'specialites','cl-spec1':'specialites','cl-spec2':'specialites','cl-spec3':'specialites','cl-spec4':'specialites','cl-spec5':'specialites','f-fm':'familles_metier','f-m1':'metiers','f-m2':'metiers','f-m3':'metiers'};
+  const arr=REF_MAP[selId];
+  if(!arr){alert('Création rapide non disponible pour ce champ.');return;}
+  let parentId='',parentKey='';
+  if(arr==='sous_secteurs'){parentId=ssGet('f-sa')||ssGet('cl-sa');parentKey='secteur_id';}
+  if(arr==='specialites'){parentId=ssGet('f-ss')||ssGet('cl-ss');parentKey='sous_secteur_id';}
+  if(arr==='metiers'){parentId=ssGet('f-fm');parentKey='famille_id';}
+  if((arr==='sous_secteurs'||arr==='specialites'||arr==='metiers')&&!parentId){
+    alert(`Sélectionnez d'abord le ${arr==='metiers'?'famille métier':arr==='specialites'?'sous-secteur':'secteur'} parent avant de créer.`);return;
+  }
+  const newId=genId();
+  const item={id:newId,label:label.trim(),actif:true};
+  if(parentKey&&parentId)item[parentKey]=parentId;
+  if(!REF[arr])REF[arr]=[];
+  REF[arr].push(item);
+  saveKey('refs');
+  if(!_ssItems[selId])_ssItems[selId]=[];
+  _ssItems[selId].push(item);
+  ssPick(selId,newId,label.trim());
+  showToast('✓ "'+label.trim()+'" créé et sélectionné');
 }
 function ssOpen(id){
   const drop=document.getElementById(id+'-drop');if(!drop)return;
@@ -3008,7 +3045,7 @@ function openClientForm(id){
     <div class="section-title">Données INSEE</div>
     <div class="fr"><div class="fld"><label>SIREN</label><input id="f-siren" value="${v('siren')}"></div><div class="fld"><label>SIRET</label><input id="f-siret" value="${v('siret')}"></div></div>
     <div class="fld"><label>Adresse officielle</label><input id="f-adresse_sirene" value="${v('adresse_sirene')}"></div>
-    <div class="fr"><div class="fld"><label>Code APE / NAF</label><input id="f-naf" value="${v('naf')}"></div><div class="fld"><label>Libellé activité</label><input id="f-naf_label" value="${v('naf_label')}"></div></div>
+    <div class="fr"><div class="fld"><label>Code APE / NAF</label><input id="f-naf" value="${v('naf')}"></div></div>
     <div class="fr"><div class="fld"><label>Statut INSEE</label><input id="f-statut_sirene" value="${v('statut_sirene')||'Active'}"></div><div class="fld"><label>Date de création</label><input id="f-date_creation_sirene" value="${v('date_creation_sirene')}"></div></div>
     <input type="hidden" id="f-source_sirene" value="${v('source_sirene')||'Manuel'}">
     <div class="section-title">Contact & Web</div>
@@ -4690,33 +4727,35 @@ function findDuplicatesClient(nom,siren,siret,excludeId){
   });
 }
 function findDuplicatesContact(prenom,nom,email,phone,excludeId){
-  const ep=normEmail(email),ph=normPhone(phone),fn=normNom(prenom+' '+nom);
+  // Doublon uniquement si prénom + nom + entreprise identiques (pas sur email/téléphone seuls)
+  const fn=normNom((prenom||'')+' '+(nom||''));
+  if(fn.length<3)return[];
   return DB.contacts.filter(c=>{
     if(c.id===excludeId)return false;
-    if(ep&&normEmail(c.email)===ep)return true;
-    if(ph&&ph.length>6&&normPhone(c.phone)===ph)return true;
-    if(fn.length>3&&normNom((c.prenom||'')+' '+(c.nom||''))===fn)return true;
-    return false;
+    const cfn=normNom((c.prenom||'')+' '+(c.nom||''));
+    return cfn===fn;
   });
 }
 function showDuplicatesAlert(dupes,type,onContinue){
   if(!dupes.length){onContinue();return;}
   const rows=dupes.slice(0,3).map(d=>{
     const nm=d.prenom?`${esc(d.prenom)} ${esc(d.nom)}`:esc(d.nom);
-    const info=d.email?esc(d.email):d.siret?esc(d.siret):'';
+    const cl=d.client_id?getClient(d.client_id):null;
+    const info=cl?esc(cl.nom):d.email?esc(d.email):'';
     return `<div style="background:var(--bg);border-radius:7px;padding:9px 12px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center">
       <div><div style="font-size:13px;font-weight:600">${nm}</div><div style="font-size:11px;color:var(--tm)">${info}${d.cons?' · '+esc(d.cons):''}</div></div>
-      <button class="btn btn-s btn-sm" onclick="CM()">Voir</button>
     </div>`;
   }).join('');
+  // Stocker onContinue dans variable globale pour éviter toString() corrompu
+  window._dupOnContinue=onContinue;
   OM('⚠️ Doublon potentiel détecté',`
     <div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:9px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--amber)">
-      Une fiche similaire existe déjà. Vérifiez avant de créer.
+      Un contact avec le même nom existe déjà. Vérifiez avant de créer.
     </div>
     <div style="margin-bottom:14px">${rows}</div>
     <div class="fa">
       <button class="btn btn-s" onclick="CM()">Annuler</button>
-      <button class="btn btn-d" onclick="CM();(${onContinue.toString()})()">Créer quand même</button>
+      <button class="btn btn-d" onclick="CM();if(window._dupOnContinue){window._dupOnContinue();window._dupOnContinue=null;}">Créer quand même</button>
     </div>`,'n');
 }
 
