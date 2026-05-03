@@ -1685,8 +1685,6 @@ function openCandForm(id){
   const famMetiers=(REF.familles_metier||[]).filter(x=>x.actif!==false);
   const metiersFam=c.famille_metier_id?(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===c.famille_metier_id):(REF.metiers||[]).filter(m=>m.actif!==false);
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
-  const cts=id?DB.contacts.filter(ct=>ct.client_id===id):[];
-  const ctsH=cts.length?buildClientContacts(id||'',cts):'<div style="color:var(--tm);font-size:12px;font-style:italic">Aucun contact</div>';
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
   const isPDF=c.cv&&(c.cv.type==='application/pdf'||c.cv.name?.toLowerCase().endsWith('.pdf'));
   const cvPanelHtml=c.cv?`
@@ -3031,6 +3029,8 @@ function openClientForm(id){
   const effOpts=`<option value="">— Effectif —</option>`+EFFECTIFS.map(e=>`<option value="${e}"${c.effectif===e?' selected':''}>${e}</option>`).join('');
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
+  const cts=id?DB.contacts.filter(ct=>ct.client_id===id):[];
+  const ctsH=cts.length?buildClientContacts(id||''  ,cts):'<div style="color:var(--tm);font-size:12px;font-style:italic">Aucun contact</div>';
   const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length]||AV_COLORS[0];
   const ini=(c.nom||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   window._pClientLogo=null;window._clSpecCount=1;
