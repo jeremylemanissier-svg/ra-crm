@@ -1676,6 +1676,8 @@ function openCandForm(id){
   const famMetiers=(REF.familles_metier||[]).filter(x=>x.actif!==false);
   const metiersFam=c.famille_metier_id?(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===c.famille_metier_id):(REF.metiers||[]).filter(m=>m.actif!==false);
   const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
+  const cts=id?DB.contacts.filter(ct=>ct.client_id===id):[];
+  const ctsH=cts.length?buildClientContacts(id||'',cts):'<div style="color:var(--tm);font-size:12px;font-style:italic">Aucun contact</div>';
   const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
   const isPDF=c.cv&&(c.cv.type==='application/pdf'||c.cv.name?.toLowerCase().endsWith('.pdf'));
   const cvPanelHtml=c.cv?`
@@ -2484,8 +2486,14 @@ function saveNote(candId){
 }
 function delCand(id){if(!confirm('Supprimer ce candidat ?'))return;DB.candidats=DB.candidats.filter(c=>c.id!==id);DB.commandes=DB.commandes.map(cmd=>({...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==id)}));save();CM();R(CV);}
 
-function openCmdForm(id){
+function openCmdFormForClient(clientId){
+  // Mémoriser le clientId pour saveCmd → après save, rouvrir la fiche client
+  window._cmdFromClientId=clientId;
+  openCmdForm(null,clientId);
+}
+function openCmdForm(id,preClientId){
   EID=id||null;const cmd=id?DB.commandes.find(x=>x.id===id):{};const v=f=>esc(cmd[f]||'');
+  const preId=preClientId||cmd.client_id||'';
   const clItems=alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
   const ctItems=alphaSort(DB.contacts.map(c=>{const cl=getClient(c.client_id);return {id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}`};}));
   const consItems=getCONS();
@@ -2493,7 +2501,7 @@ function openCmdForm(id){
   OM(id?'Modifier la commande':'Nouvelle commande',`
     <div class="fld"><label>Titre du poste</label><input id="f-titre" value="${v('titre')}"></div>
     <div class="fr">
-      <div class="fld"><label>Client</label>${searchSel('f-client_id',clItems,cmd.client_id||'','— Rechercher un client —')}</div>
+      <div class="fld"><label>Client</label>${searchSel('f-client_id',clItems,preId,'— Rechercher un client —')}</div>
       <div class="fld"><label>Contact</label>${searchSel('f-contact_id',ctItems,cmd.contact_id||'','— Rechercher un contact —')}</div>
     </div>
     <div class="fr3">
@@ -2502,16 +2510,17 @@ function openCmdForm(id){
       <div class="fld"><label>Date de la commande</label><input type="date" id="f-date_cmd" value="${v('date_cmd')||TODAY}"></div>
     </div>
     <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
-    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
+    <div class="fa"><button class="btn btn-s" onclick="CM();if(window._cmdFromClientId){const cid=window._cmdFromClientId;window._cmdFromClientId=null;setTimeout(()=>openClientDetail(cid),30);}">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
 }
 function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
-  const savedId=EID;
+  const savedId=EID;const fromClient=window._cmdFromClientId||null;window._cmdFromClientId=null;
   if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
   else{const existing={id:genId(),date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
   save();CM();R(CV);
-  if(savedId)setTimeout(()=>openCmdDetail(savedId),30);
+  if(fromClient)setTimeout(()=>openClientDetail(fromClient),30);
+  else if(savedId)setTimeout(()=>openCmdDetail(savedId),30);
 }
 function delCmd(id){if(!confirm('Supprimer ?'))return;DB.commandes=DB.commandes.filter(c=>c.id!==id);save();R(CV);}
 // ══ SCORING PRIORITÉ COMMANDE ════════════════════════════
@@ -3016,7 +3025,7 @@ function openClientForm(id){
   const ini=(c.nom||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   window._pClientLogo=null;window._clSpecCount=1;
   OM(id?'Modifier':'Nouveau client / prospect',`
-      <div style="position:relative;flex-shrink:0;cursor:pointer" title="${c.logo?'Changer le logo':'Ajouter un logo'}" onclick="document.getElementById('logo-edit-inp').click()">
+      <div style="position:relative;flex-shrink:0;width:72px;height:72px;cursor:pointer" title="${c.logo?'Changer le logo':'Ajouter un logo'}" onclick="document.getElementById('logo-edit-inp').click()">
         ${c.logo
           ?`<img id="logo-edit-preview-img" src="${c.logo}" style="width:72px;height:72px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`
           :`<div id="logo-edit-preview-img" style="width:72px;height:72px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;">${ini}</div>`}
@@ -3057,7 +3066,16 @@ function openClientForm(id){
     <div class="section-title">Contact & Web</div>
     <div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div>
     <div class="fld"><label>Site internet</label><input id="f-site_web" value="${v('site_web')}" placeholder="https://..."></div>
-    <div class="fld"><label>Contact principal</label><select id="f-contact_principal_id">${ctOpts}</select></div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--ts)">Contacts (${cts.length})</div>
+        <div style="display:flex;gap:5px">
+          <button type="button" class="btn btn-s btn-sm" onclick="openLinkContactToClient(EID)">🔗 Rattacher</button>
+          <button type="button" class="btn btn-p btn-sm" onclick="openAddContactFromClient(EID)">+ Nouveau</button>
+        </div>
+      </div>
+      <div class="client-contacts-list" style="max-height:180px;overflow-y:auto">${ctsH}</div>
+    </div>
     <div class="fa">
       <button class="btn btn-s" onclick="CM();${id?`openClientDetail('${id}')`:''}">Annuler</button>
       <button class="btn btn-p" onclick="saveClient()">Enregistrer</button>
@@ -3161,7 +3179,13 @@ return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div
       </div>
       <div class="client-contacts-list" style="max-height:220px;overflow-y:auto">${ctsH}</div>
     </div>
-    <div style="margin-bottom:14px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Commandes (${cmds.length})</div>${cmdsH}</div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">Commandes (${cmds.length})</div>
+        <button class="btn btn-p btn-sm" onclick="openCmdFormForClient('${id}')">+ Commande</button>
+      </div>
+      ${cmdsH}
+    </div>
     <div style="margin-bottom:14px">
       <div style="font-size:13px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--br);padding-top:14px;margin-top:14px;margin-bottom:10px">📋 Conditions commerciales</div>
       <div style="margin-bottom:12px">
