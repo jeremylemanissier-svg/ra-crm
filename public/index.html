@@ -1516,6 +1516,15 @@ function ssPick(id,val,label){
   if(id==='f-ss')refreshSpecsForm(val);
   if(id==='cl-sa')refreshSousSectForm(val,'cl-ss','client');
   if(id==='cl-ss')refreshClientSpecsForm(val);
+  if(id==='f-client_id'){
+    // Rafraîchir les contacts filtrés par le client sélectionné
+    const wrap=document.getElementById('f-contact_id-wrap');
+    if(wrap){
+      const cts=val?DB.contacts.filter(c=>c.client_id===val):DB.contacts;
+      const items=cts.map(c=>{const cl=getClient(c.client_id);return{id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}`};});
+      wrap.innerHTML=searchSel('f-contact_id',items,'','— Contact —');
+    }
+  }
 }
 function ssGet(id){return document.getElementById(id+'-val')?.value||'';}
 function refreshMetiersForm(famId){
@@ -2495,14 +2504,15 @@ function openCmdForm(id,preClientId){
   EID=id||null;const cmd=id?DB.commandes.find(x=>x.id===id):{};const v=f=>esc(cmd[f]||'');
   const preId=preClientId||cmd.client_id||'';
   const clItems=alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
-  const ctItems=alphaSort(DB.contacts.map(c=>{const cl=getClient(c.client_id);return {id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}`};}));
+  // Contacts filtrés par client sélectionné (ou tous si pas de client)
+  const ctForClient=(cid)=>alphaSort(DB.contacts.filter(c=>!cid||c.client_id===cid).map(c=>{const cl=getClient(c.client_id);return {id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}` };}));
   const consItems=getCONS();
   const sOpts=['Active','Suspendue','Pourvue'].map(s=>`<option value="${s}"${(cmd.statut||'Active')===s?' selected':''}>${s}</option>`).join('');
   OM(id?'Modifier la commande':'Nouvelle commande',`
     <div class="fld"><label>Titre du poste</label><input id="f-titre" value="${v('titre')}"></div>
     <div class="fr">
       <div class="fld"><label>Client</label>${searchSel('f-client_id',clItems,preId,'— Rechercher un client —')}</div>
-      <div class="fld"><label>Contact</label>${searchSel('f-contact_id',ctItems,cmd.contact_id||'','— Rechercher un contact —')}</div>
+      <div class="fld"><label>Contact</label><div id="f-contact_id-wrap">${searchSel('f-contact_id',ctForClient(preId),cmd.contact_id||'','— Contact —')}</div></div>
     </div>
     <div class="fr3">
       <div class="fld"><label>Consultant</label>${searchSel('f-cons',consItems,cmd.cons||currentUser?.display_name||'','— Consultant —')}</div>
@@ -3151,7 +3161,7 @@ return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div
         <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
         ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé</span>`:''}
         <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
-        <button class="btn btn-p btn-sm" onclick="CM();openClientForm('${id}')">✏️ Modifier</button>
+        <button class="btn btn-p btn-sm" onclick="openClientForm('${id}')">✏️ Modifier</button>
       </div>
       ${buildNavArrows(id,_clientsNav,'clientNav')}
       <button onclick="CM()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
