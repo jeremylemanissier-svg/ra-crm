@@ -195,10 +195,16 @@ app.post('/api/users', admin, (req, res) => {
   writeJSON('users.json', users); res.json({ ok: true });
 });
 app.put('/api/users/:id', admin, (req, res) => {
-  const { display_name, role, password, photo } = req.body;
-  users = readJSON('users.json', []).map(u => {
+  const { display_name, role, password, photo, username } = req.body;
+  let usersData = readJSON('users.json', []);
+  if(username){
+    const conflict=usersData.find(u=>u.id!==req.params.id&&u.username===username.toLowerCase().trim());
+    if(conflict)return res.status(409).json({error:'Identifiant déjà utilisé'});
+  }
+  users = usersData.map(u => {
     if (u.id !== req.params.id) return u;
     const up = { ...u, display_name, role };
+    if (username) up.username = username.toLowerCase().trim();
     if (photo !== undefined) up.photo = photo;
     if (password && password.length >= 4) up.password_hash = bcrypt.hashSync(password, 10);
     return up;
