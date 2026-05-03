@@ -769,7 +769,8 @@ async function api(method,url,data){
     const j=await r.json();if(!r.ok)throw new Error(j.error||'Erreur');return j;
   }catch(e){if(e.message!=='Session invalide')console.error(e);return null;}
 }
-async function saveKey(k){const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
+async function saveKey(k){if(k==='refs')_ssItems={}; // Vider cache dropdowns
+const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
 function save(){['candidats','clients','contacts','commandes','relances','actions'].forEach(k=>saveKey(k));saveKey('refs');saveKey('settings');}
 
 function showLogin(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.remove('visible');}
@@ -781,7 +782,7 @@ async function doLogin(){
   const user=await api('POST','/api/auth/login',{username,password});
   if(!user){err.textContent='Identifiant ou mot de passe incorrect.';return;}
   currentUser=user;await loadData();setupUI();showApp();
-  G('dash');
+  const _lv=localStorage.getItem('upsearch_last_view')||'dash';const _vv=['dash','vivier','commandes','clients','contacts','dashboard-crm','agenda'];G(_vv.includes(_lv)?_lv:'dash');
 }
 async function doLogout(){await api('POST','/api/auth/logout');currentUser=null;showLogin();}
 function setupUI(){
@@ -1107,7 +1108,7 @@ function rClients(){
       <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:3px">
         <div>📍 ${esc(c.ville||c.loc||'—')}${c.departement?' · '+esc(c.departement):''}</div>
         <div>📞 ${esc(c.phone||'—')}</div>
-        ${c.site_web?`<div><a href="${esc(c.site_web)}" target="_blank" style="color:var(--acc);text-decoration:none;font-size:11px" onclick="event.stopPropagation()">🌐 ${esc(c.site_web)}</a></div>`:''}
+        ${c.site_web?`<div onclick="event.stopPropagation()"><a href="${esc(c.site_web)}" target="_blank" class="btn btn-s btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;font-size:11px">🌐 Voir le site</a></div>`:''}
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--br);padding-top:8px" onclick="event.stopPropagation()">
         <div style="font-size:11px;color:var(--tm)">${nbC} cmd · ${nbCt} contact${nbCt!==1?'s':''} · ${nbA} action${nbA!==1?'s':''}</div>
@@ -3170,7 +3171,7 @@ return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div
       <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${renderCons(c.cons||'—',18)}</div></div>
         <div class="dg"><div class="dl">Localisation</div><div class="dv">${[c.ville,c.departement?`(${c.departement_code}) ${c.departement}`:'',c.region].filter(Boolean).join(' · ')||'—'}</div></div>
         <div class="dg"><div class="dl">Téléphone</div><div class="dv">${esc(c.phone||'—')}</div></div>
-        ${c.site_web?`<div class="dg"><div class="dl">Site web</div><div class="dv"><a href="${esc(c.site_web)}" target="_blank" style="color:var(--acc);font-size:13px">${esc(c.site_web)}</a></div></div>`:''}
+        ${c.site_web?`<div class="dg"><div class="dl">Site web</div><div class="dv"><a href="${esc(c.site_web)}" target="_blank" class="btn btn-s btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🌐 Voir le site</a></div></div>`:''}
       </div>
       <div>
         <div class="dg"><div class="dl">Effectif</div><div class="dv">${esc(c.effectif||'—')}</div></div>
@@ -3468,7 +3469,14 @@ function addActionComment(actionId){
   a.admin_comments.push({by:currentUser?.display_name||'Admin',date:TODAY,text});
   DB.actions=DB.actions.map(x=>x.id===actionId?a:x);
   save();showToast('✓ Commentaire ajouté');
-  openActionComments(actionId); // reste sur la même modale
+  // Mettre à jour la liste des commentaires DANS la modale sans la fermer
+  const listEl=document.getElementById('cmt-list-'+actionId);
+  if(listEl){
+    const aUp=DB.actions.find(x=>x.id===actionId);
+    const cmts=aUp?.admin_comments||[];
+    listEl.innerHTML=cmts.map((c,i)=>{const u=_usersCache.find(x=>x.id===c.by||x.label===c.by);const ph=u?.photo?`<img src="${u.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${(c.by||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>`;return `<div style="display:flex;align-items:flex-start;gap:7px;margin-bottom:8px">${ph}<div style="flex:1;background:var(--acc-light);border:1px solid var(--br2);border-radius:12px 12px 12px 3px;padding:6px 10px;position:relative"><div style="font-size:10px;font-weight:600;color:var(--acc2);margin-bottom:2px">${esc(c.by)} · ${c.date}</div><div style="font-size:12px">${esc(c.text)}</div>${currentUser?.role==='admin'?`<button onclick="delActionComment('${actionId}',${i})" style="position:absolute;top:4px;right:6px;background:none;border:none;cursor:pointer;color:var(--red);font-size:11px">✕</button>`:''}</div></div>`;}).join('');
+    const inp2=document.getElementById('cmt-inp-'+actionId);if(inp2)inp2.value='';
+  }else{openActionComments(actionId);}
 }
 function delActionComment(actionId,idx){
   const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
@@ -3487,7 +3495,7 @@ async function openAdminPanel(){
     return `<div class="admin-row">
     ${av}
     <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">${esc(u.display_name)}</div><div style="font-size:11px;color:var(--tm)">@${esc(u.username)} · ${u.role==='admin'?'<span style="color:var(--acc2)">Administrateur</span>':'Consultant'}</div></div>
-    <button class="btn btn-s btn-sm" onclick="openEditUser('${u.id}','${esc(u.display_name)}','${u.role}','${u.photo||''}')">Modifier</button>
+    <button class="btn btn-s btn-sm" onclick="openEditUser('${u.id}','${esc(u.display_name)}','${u.role}','${u.photo||''}','${esc(u.username||'')}')">Modifier</button>
     <button class="btn btn-d btn-sm" onclick="deleteUser('${u.id}','${esc(u.display_name)}')">Suppr.</button>
   </div>`;}).join('')}</div>
   <div style="border-top:1px solid var(--br);padding-top:16px">
@@ -3529,7 +3537,7 @@ async function createUser(){
     openAdminPanel();
   }else alert('Erreur : cet identifiant est déjà utilisé.');
 }
-function openEditUser(id,name,role,currentPhoto){
+function openEditUser(id,name,role,currentPhoto,username){
   OM("Modifier l'utilisateur",`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
       <div id="eu-photo-preview" style="width:60px;height:60px;border-radius:50%;overflow:hidden;border:2px dashed var(--br);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" onclick="document.getElementById('eu-photo-inp').click()">
@@ -3539,7 +3547,8 @@ function openEditUser(id,name,role,currentPhoto){
       <div style="flex:1;font-size:12px;color:var(--ts)">Cliquer sur la photo pour la changer<br><button type="button" class="btn btn-d btn-sm" style="margin-top:5px" onclick="document.getElementById('eu-photo-del').value='1';document.getElementById('eu-photo-preview').innerHTML='<span style=\\'font-size:22px\\'>📷</span>'">✕ Supprimer la photo</button></div>
       <input type="hidden" id="eu-photo-del" value="0">
     </div>
-    <div class="fld"><label>Prénom / Nom</label><input id="eu-name" value="${name}"></div>
+    <div class="fld"><label>Prénom / Nom (affiché)</label><input id="eu-name" value="${name}"></div>
+    <div class="fld"><label>Identifiant de connexion</label><input id="eu-username" value="${username||''}" placeholder="ex: simon.david" autocomplete="off"></div>
     <div class="fld"><label>Rôle</label><select id="eu-role"><option value="user"${role==='user'?' selected':''}>Consultant</option><option value="admin"${role==='admin'?' selected':''}>Administrateur</option></select></div>
     <div class="fld"><label>Nouveau mot de passe (laisser vide pour ne pas changer)</label><input type="password" id="eu-pass" placeholder="Nouveau mot de passe..."></div>
     <div class="fa"><button class="btn btn-s" onclick="openAdminPanel()">Retour</button><button class="btn btn-p" onclick="editUser('${id}')">Enregistrer</button></div>`,'n');
@@ -3555,9 +3564,11 @@ function previewEditUserPhoto(inp){
 }
 async function editUser(id){
   const name=document.getElementById('eu-name')?.value.trim(),role=document.getElementById('eu-role')?.value,pass=document.getElementById('eu-pass')?.value;
+  const username=document.getElementById('eu-username')?.value.trim();
   const delPhoto=document.getElementById('eu-photo-del')?.value==='1';
   const photoInp=document.getElementById('eu-photo-inp');
   const body={display_name:name,role};
+  if(username)body.username=username.toLowerCase();
   if(pass&&pass.length>=4)body.password=pass;
   if(delPhoto){body.photo=null;}
   else if(photoInp?.files?.[0]){body.photo=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(photoInp.files[0]);});}
