@@ -371,8 +371,7 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
 <div id="app">
   <div class="app-inner">
     <div id="sidebar">
-      <div class="sb-logo" onclick="G('dash')" style="cursor:pointer" title="Retour accueil">
-        <img src="/logo.png" alt="UpSearch" style="height:34px;max-width:150px;object-fit:contain"
+      <div class="sb-logo" onclick="G('dash')" style="cursor:pointer" title="Retour accueil">        <img src="/logo.png" alt="UpSearch" style="height:34px;max-width:150px;object-fit:contain"
           onerror="this.style.display='none';document.getElementById('sb-logo-fallback').style.display='flex'">
         <div id="sb-logo-fallback" style="display:none;align-items:center;gap:10px">
           <div class="sb-logo-mark">US</div>
@@ -430,6 +429,9 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
       <div class="sb-user">
         <div class="sb-uav" id="user-av">?</div>
         <div class="sb-uname" id="user-name">—</div>
+        <button class="sb-logout" onclick="openNotifs()" title="Notifications" style="position:relative">
+          🔔<span id="notif-badge" style="display:none;position:absolute;top:-2px;right:-2px;background:#ef4444;color:white;border-radius:50%;width:14px;height:14px;font-size:9px;font-weight:700;line-height:14px;text-align:center">0</span>
+        </button>
         <button class="sb-logout" onclick="doLogout()" title="Déconnexion">⏻</button>
       </div>
     </div>
@@ -773,6 +775,7 @@ async function saveKey(k){
   if(k==='refs'){
     _ssItems={}; // Vider le cache dropdowns → rechargement depuis REF à la prochaine ouverture
   }
+  if(k==='settings'&&DB._notifs)DB._settings._notifs=DB._notifs;
 const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
 function save(){['candidats','clients','contacts','commandes','relances','actions'].forEach(k=>saveKey(k));saveKey('refs');saveKey('settings');}
 
@@ -820,6 +823,9 @@ async function loadData(){
     if(usrs&&Array.isArray(usrs))_usersCache=usrs;
   }catch(e){console.warn('Consultants non chargés',e);}
   DB._settings=(st&&typeof st==='object'&&!Array.isArray(st))?st:{};
+  // Charger les notifications depuis _settings
+  if(!DB._notifs)DB._notifs=DB._settings._notifs||{};
+  setTimeout(()=>updateNotifBadge(),100);
   applyLogoSettings();
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
@@ -899,9 +905,15 @@ function rDash(){
   const myProspects=DB.clients.filter(c=>c.cons===me&&c.type==='Prospect');
 
   // ── Relances & actions du consultant ──────────────────────────────────────
-  const myRelances=DB.relances.filter(r=>r.cons===me||!r.cons);
-  const todayR=myRelances.filter(r=>r.date===TODAY&&!r.fait);
-  const overdueR=myRelances.filter(r=>!r.fait&&r.date<TODAY);
+  // Tâches assignées au consultant connecté et non terminées
+  const myTasks=DB.relances.filter(r=>{
+    if(r.fait)return false;
+    // Assigné via assigned_to (nouveau) ou via cons (ancien)
+    const assigned=r.assigned_to||[r.cons];
+    return assigned.includes(me);
+  }).sort((a,b)=>(a.date+a.heure)>(b.date+b.heure)?1:-1);
+  const overdueT=myTasks.filter(r=>r.date<TODAY).length;
+  const todayT=myTasks.filter(r=>r.date===TODAY).length;
   const myActs=DB.actions.filter(a=>a.cons===me&&a.date?.startsWith(thisMonth));
 
   // ── Bandeau ────────────────────────────────────────────────────────────────
@@ -947,13 +959,30 @@ function rDash(){
   h+=`<div class="dash-grid">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
-      <div style="font-size:14px;font-weight:600">Relances du jour</div>
+      <div style="font-size:14px;font-weight:600">Tâches planifiées</div>
       <div style="display:flex;gap:5px">
-        ${todayR.length>0?`<span style="background:var(--amber-bg);color:var(--amber);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${todayR.length} à faire</span>`:''}
-        ${overdueR.length>0?`<span style="background:var(--red-bg);color:var(--red);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${overdueR.length} en retard</span>`:''}
+        ${todayT>0?`<span style="background:var(--amber-bg);color:var(--amber);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${todayT} aujourd'hui</span>`:''}
+        ${overdueT>0?`<span style="background:var(--red-bg);color:var(--red);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${overdueT} en retard</span>`:''}
+        <button class="btn btn-p btn-sm" onclick="openAgendaForm()">+ Tâche</button>
       </div>
     </div>
-    ${todayR.length===0?`<div style="text-align:center;padding:16px 0;color:var(--tm);font-size:13px">🎉 Agenda libre aujourd'hui</div>`:todayR.slice(0,5).map(r=>`<div class="today-item"><div class="ta"></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.nom)}</div><div style="font-size:12px;color:var(--ts)">${r.heure||''} · ${esc(r.obj||'')}</div></div></div>`).join('')}
+    ${myTasks.length===0
+      ?`<div style="text-align:center;padding:16px 0;color:var(--tm);font-size:13px">🎉 Aucune tâche en attente</div>`
+      :myTasks.slice(0,6).map(r=>{
+        const isLate=r.date<TODAY;const isToday=r.date===TODAY;
+        const ico=r.planif_type==='Rendez-vous'?'🤝':'🔔';
+        const dateColor=isLate?'var(--red)':isToday?'var(--amber)':'var(--ts)';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg)">
+          <button onclick="toggleRel('${r.id}')" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--br);background:var(--bg);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px" title="Marquer comme fait">✓</button>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ico} ${esc(r.obj||r.nom||'—')}</div>
+            <div style="font-size:11px;color:${dateColor}">${r.date}${r.heure?' à '+r.heure:''} · ${esc(r.nom||'')}</div>
+            ${r.created_by&&r.created_by!==me?`<div style="font-size:10px;color:var(--tm)">Planifié par ${esc(r.created_by)}</div>`:''}
+          </div>
+          <button class="ic-btn" onclick="openAgendaForm('${r.id}')" title="Modifier">✏️</button>
+        </div>`;
+      }).join('')}
+    ${myTasks.length>6?`<div style="text-align:center;margin-top:8px"><button class="btn btn-s btn-sm" onclick="G('agenda')">Voir les ${myTasks.length} tâches →</button></div>`:''}
   </div>
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
@@ -3467,13 +3496,28 @@ function delContact(id){if(!confirm('Supprimer ?'))return;DB.contacts=DB.contact
 function openAgendaForm(id){
   EID=id||null;const r=id?DB.relances.find(x=>x.id===id):{};const v=f=>esc(r[f]||'');
   const curT=r.type||'Candidat';
+  const curPlanif=r.planif_type||'Relance';
   const refs=curT==='Candidat'?DB.candidats.map(c=>`<option value="${c.id}"${r.ref===c.id?' selected':''}>${esc(c.prenom)} ${esc(c.nom)}</option>`):DB.clients.map(c=>`<option value="${c.id}"${r.ref===c.id?' selected':''}>${esc(c.nom)}</option>`);
   const cOpts=getCONS().map(u=>`<option value="${u.id}"${(r.cons||currentUser?.display_name)===u.id?' selected':''}>${u.label}</option>`).join('');
-  OM(id?'Modifier':'Nouvelle relance',`
-    <div class="fr"><div class="fld"><label>Type</label><select id="rt" onchange="rfRels()"><option value="Candidat"${curT==='Candidat'?' selected':''}>Candidat</option><option value="Client"${curT==='Client'?' selected':''}>Client</option></select></div><div class="fld"><label>Référence</label><select id="rr"><option value="">— Sélectionner —</option>${refs.join('')}</select></div></div>
+  // assigned_to peut être multi-consultants (array) — on affiche des checkboxes
+  const assignedArr=r.assigned_to||[r.cons||currentUser?.display_name||''];
+  const assignedHtml=getCONS().map(u=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-bottom:4px">
+    <input type="checkbox" value="${u.id}" ${assignedArr.includes(u.id)?'checked':''} onchange=""> ${u.label}
+  </label>`).join('');
+  OM(id?'Modifier la tâche':'Nouvelle tâche planifiée',`
+    <div class="fr">
+      <div class="fld"><label>Type de tâche</label><select id="rplanif">
+        <option value="Relance"${curPlanif==='Relance'?' selected':''}>🔔 Relance</option>
+        <option value="Rendez-vous"${curPlanif==='Rendez-vous'?' selected':''}>🤝 Rendez-vous</option>
+      </select></div>
+      <div class="fld"><label>Référence</label><select id="rt" onchange="rfRels()"><option value="Candidat"${curT==='Candidat'?' selected':''}>Candidat</option><option value="Client"${curT==='Client'?' selected':''}>Client</option></select></div>
+    </div>
+    <div class="fld"><label>Entité concernée</label><select id="rr"><option value="">— Sélectionner —</option>${refs.join('')}</select></div>
     <div class="fld"><label>Objet</label><input id="ro" value="${v('obj')}"></div>
     <div class="fr"><div class="fld"><label>Date</label><input type="date" id="rd" value="${v('date')||TODAY}"></div><div class="fld"><label>Heure</label><input type="time" id="rh" value="${v('heure')||'10:00'}"></div></div>
-    <div class="fld"><label>Consultant</label><select id="rc">${cOpts}</select></div>
+    <div class="fld"><label>Assigné à (cocher les consultants concernés)</label>
+      <div style="padding:8px;background:var(--bg);border:1px solid var(--br);border-radius:7px" id="rass-wrap">${assignedHtml}</div>
+    </div>
     <div class="fld"><label>Notes</label><textarea id="rn" style="min-height:55px">${v('notes')}</textarea></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveRel()">Enregistrer</button></div>`,'n');
 }
@@ -3487,12 +3531,77 @@ function saveRel(){
   const type=g('rt'),ref=g('rr');
   const ri=type==='Candidat'?getCand(ref):getClient(ref);
   const nom=type==='Candidat'?(ri?`${ri.prenom} ${ri.nom}`:''):(ri?.nom||'');
-  const form={type,ref,nom,obj:g('ro'),date:g('rd'),heure:g('rh'),cons:g('rc'),notes:g('rn'),fait:EID?(DB.relances.find(r=>r.id===EID)?.fait||false):false};
+  // Récupérer les consultants assignés (checkboxes)
+  const assigned_to=Array.from(document.querySelectorAll('#rass-wrap input[type=checkbox]:checked')).map(cb=>cb.value);
+  // Compatibilité : cons = premier assigné
+  const cons=assigned_to[0]||currentUser?.display_name||'';
+  const created_by=EID?(DB.relances.find(r=>r.id===EID)?.created_by||currentUser?.display_name):currentUser?.display_name;
+  const form={
+    type,ref,nom,
+    obj:g('ro'),date:g('rd'),heure:g('rh'),
+    planif_type:g('rplanif'),
+    cons,assigned_to,created_by,
+    notes:g('rn'),
+    fait:EID?(DB.relances.find(r=>r.id===EID)?.fait||false):false,
+    completed_by:EID?(DB.relances.find(r=>r.id===EID)?.completed_by||null):null,
+    completed_at:EID?(DB.relances.find(r=>r.id===EID)?.completed_at||null):null,
+  };
   EID?DB.relances=DB.relances.map(r=>r.id===EID?{...r,...form}:r):DB.relances.push({...form,id:genId()});
   save();CM();R(CV);
 }
-function toggleRel(id){DB.relances=DB.relances.map(r=>r.id===id?{...r,fait:!r.fait}:r);save();R(CV);}
+function toggleRel(id){
+  const r=DB.relances.find(x=>x.id===id);if(!r)return;
+  const nowDone=!r.fait;
+  const me=currentUser?.display_name||'';
+  const updatedR={...r,fait:nowDone,
+    completed_by:nowDone?me:null,
+    completed_at:nowDone?(TODAY+' '+new Date().toTimeString().slice(0,5)):null
+  };
+  DB.relances=DB.relances.map(x=>x.id===id?updatedR:x);
+  save();
+  // Notification au créateur si différent de celui qui valide
+  if(nowDone&&r.created_by&&r.created_by!==me){
+    addNotif(r.created_by,`✅ Tâche validée par ${me}`,`"${r.obj||r.nom}" a été marquée comme faite par ${me}.`,id);
+  }
+  R(CV);
+  if(CV==='dash')rDash();
+}
 function delRel(id){if(!confirm('Supprimer ?'))return;DB.relances=DB.relances.filter(r=>r.id!==id);save();R(CV);}
+
+// ── Notifications internes ─────────────────────────────────────────────────
+function addNotif(toUser,title,msg,relId){
+  if(!DB._notifs)DB._notifs={};
+  if(!DB._notifs[toUser])DB._notifs[toUser]=[];
+  DB._notifs[toUser].unshift({id:genId(),title,msg,relId,date:TODAY,read:false});
+  // Conserver max 30 notifs par user
+  DB._notifs[toUser]=DB._notifs[toUser].slice(0,30);
+  saveKey('settings'); // on stocke dans settings pour éviter un endpoint supplémentaire
+  // Si le destinataire est connecté en ce moment, afficher un toast
+  if(currentUser?.display_name===toUser)showToast('🔔 '+title);
+  // Mettre à jour le badge notif
+  updateNotifBadge();
+}
+function getMyNotifs(){return(DB._notifs&&DB._notifs[currentUser?.display_name])||[];}
+function updateNotifBadge(){
+  const unread=getMyNotifs().filter(n=>!n.read).length;
+  let badge=document.getElementById('notif-badge');
+  if(badge)badge.style.display=unread>0?'':'none',badge.textContent=unread;
+}
+function openNotifs(){
+  const notifs=getMyNotifs();
+  // Marquer tout comme lu
+  if(DB._notifs&&DB._notifs[currentUser?.display_name]){
+    DB._notifs[currentUser?.display_name]=DB._notifs[currentUser?.display_name].map(n=>({...n,read:true}));
+    saveKey('settings');updateNotifBadge();
+  }
+  if(!notifs.length){OM('🔔 Notifications','<div style="padding:20px;text-align:center;color:var(--tm)">Aucune notification</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>','n');return;}
+  const rows=notifs.slice(0,15).map(n=>`<div style="padding:10px 12px;border-bottom:1px solid var(--bg);${n.read?'':'background:var(--acc-light);'}" onclick="${n.relId?`CM();`:''}" style="cursor:pointer">
+    <div style="font-size:13px;font-weight:600">${esc(n.title)}</div>
+    <div style="font-size:12px;color:var(--ts);margin-top:2px">${esc(n.msg)}</div>
+    <div style="font-size:11px;color:var(--tm);margin-top:2px">${n.date}</div>
+  </div>`).join('');
+  OM('🔔 Notifications',rows+'<div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>','n');
+}
 
 function resetDashF(){dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};document.getElementById('df-cons').value='';document.getElementById('df-from').value='';document.getElementById('df-to').value='';document.getElementById('df-client').value='';document.getElementById('df-contact').value='';document.getElementById('df-sect').value='';rDashCRM();}
 
