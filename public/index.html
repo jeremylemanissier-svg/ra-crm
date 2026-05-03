@@ -873,29 +873,77 @@ function previewPhoto(src){
 }
 
 function rDash(){
-  const todayR=DB.relances.filter(r=>r.date===TODAY&&!r.fait),overdueR=DB.relances.filter(r=>!r.fait&&r.date<TODAY);
-  const actCmds=DB.commandes.filter(c=>c.statut==='Active'),thisMonth=TODAY.slice(0,7);
-  const monthActs=DB.clients.flatMap(c=>c.actions||[]).filter(a=>a.date?.startsWith(thisMonth));
-  let h=`<div class="kpi-grid">
-    <div class="kpi-card"><div class="kpi-val">${DB.candidats.length}</div><div class="kpi-lbl">Candidats vivier</div><div class="kpi-ico" style="background:#e8f4f8"><svg width="14" height="14" fill="none" stroke="#1e6080" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div></div>
-    <div class="kpi-card"><div class="kpi-val">${actCmds.length}</div><div class="kpi-lbl">Commandes actives</div><div class="kpi-ico" style="background:#fff7ed"><svg width="14" height="14" fill="none" stroke="#ea580c" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/></svg></div></div>
-    <div class="kpi-card"><div class="kpi-val">${DB.clients.filter(c=>c.type==='Client').length}</div><div class="kpi-lbl">Clients</div><div class="kpi-ico" style="background:#ecfdf5"><svg width="14" height="14" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div></div>
-    <div class="kpi-card"><div class="kpi-val">${DB.clients.filter(c=>c.type==='Prospect').length}</div><div class="kpi-lbl">Prospects</div><div class="kpi-ico" style="background:#e8f4f8"><svg width="14" height="14" fill="none" stroke="#1e6080" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div></div>
+  const me=currentUser?.display_name||'';
+  const isAdmin=currentUser?.role==='admin';
+
+  // ── KPIs globaux (visibles par tous) ──────────────────────────────────────
+  const actCmds=DB.commandes.filter(c=>c.statut==='Active');
+  const thisMonth=TODAY.slice(0,7);
+
+  // ── Données personnalisées ─────────────────────────────────────────────────
+  // Commandes : les miennes + "voir tout" pour admin
+  const myCmds=isAdmin?actCmds:actCmds.filter(c=>c.cons===me);
+  // Candidats : les miens (consultant rattaché)
+  const myCands=DB.candidats.filter(c=>!c.archived&&(isAdmin||c.cons===me||!c.cons));
+  // Relances : les miennes
+  const myRelances=DB.relances.filter(r=>isAdmin||r.cons===me||!r.cons);
+  const todayR=myRelances.filter(r=>r.date===TODAY&&!r.fait);
+  const overdueR=myRelances.filter(r=>!r.fait&&r.date<TODAY);
+  // Actions commerciales : les miennes
+  const myActs=DB.actions.filter(a=>(isAdmin||a.cons===me)&&a.date?.startsWith(thisMonth));
+
+  // ── Bandeau consultant connecté ───────────────────────────────────────────
+  const consoBanner=`<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);border-radius:10px;margin-bottom:18px;border:1px solid var(--br)">
+    ${renderCons(me,36)}
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:700">Bonjour ${esc(me.split(' ')[0])} 👋</div>
+      <div style="font-size:12px;color:var(--ts)">${TODAY} · ${myCmds.length} commande${myCmds.length!==1?'s':''} active${myCmds.length!==1?'s':''} · ${myCands.length} candidat${myCands.length!==1?'s':''}</div>
+    </div>
+    ${isAdmin?`<span style="background:var(--acc-light);color:var(--acc2);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600">👑 Admin</span>`:''}
   </div>`;
+
+  // ── KPIs globaux ──────────────────────────────────────────────────────────
+  let h=consoBanner;
+  h+=`<div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-val">${DB.candidats.filter(c=>!c.archived).length}</div><div class="kpi-lbl">Candidats vivier</div><div class="kpi-ico" style="background:#e8f4f8"><svg width="14" height="14" fill="none" stroke="#1e6080" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div></div>
+    <div class="kpi-card"><div class="kpi-val">${actCmds.length}</div><div class="kpi-lbl">Commandes actives <span style="font-size:10px;color:var(--tm)">(global)</span></div><div class="kpi-ico" style="background:#fff7ed"><svg width="14" height="14" fill="none" stroke="#ea580c" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/></svg></div></div>
+    <div class="kpi-card"><div class="kpi-val">${DB.clients.filter(c=>c.type==='Client').length}</div><div class="kpi-lbl">Clients <span style="font-size:10px;color:var(--tm)">(global)</span></div><div class="kpi-ico" style="background:#ecfdf5"><svg width="14" height="14" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div></div>
+    <div class="kpi-card"><div class="kpi-val">${DB.clients.filter(c=>c.type==='Prospect').length}</div><div class="kpi-lbl">Prospects <span style="font-size:10px;color:var(--tm)">(global)</span></div><div class="kpi-ico" style="background:#e8f4f8"><svg width="14" height="14" fill="none" stroke="#1e6080" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div></div>
+  </div>`;
+
+  // ── Zone personnalisée ────────────────────────────────────────────────────
   h+=`<div class="dash-grid">
-  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px"><div style="font-size:14px;font-weight:600">Relances du jour</div><div style="display:flex;gap:5px">${todayR.length>0?`<span style="background:var(--amber-bg);color:var(--amber);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${todayR.length} à faire</span>`:''} ${overdueR.length>0?`<span style="background:var(--red-bg);color:var(--red);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${overdueR.length} en retard</span>`:''}</div></div>
-  ${todayR.length===0?'<div style="text-align:center;padding:16px 0;color:var(--tm);font-size:13px">🎉 Agenda libre aujourd\'hui</div>':todayR.slice(0,5).map(r=>`<div class="today-item"><div class="ta"></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.nom)}</div><div style="font-size:12px;color:var(--ts)">${r.heure} · ${esc(r.obj)}</div></div><div style="font-size:11px;color:var(--tm)">${esc(r.cons)}</div></div>`).join('')}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+      <div style="font-size:14px;font-weight:600">Relances du jour</div>
+      <div style="display:flex;gap:5px">
+        ${todayR.length>0?`<span style="background:var(--amber-bg);color:var(--amber);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${todayR.length} à faire</span>`:''}
+        ${overdueR.length>0?`<span style="background:var(--red-bg);color:var(--red);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${overdueR.length} en retard</span>`:''}
+      </div>
+    </div>
+    ${todayR.length===0?`<div style="text-align:center;padding:16px 0;color:var(--tm);font-size:13px">🎉 Agenda libre aujourd'hui</div>`:todayR.slice(0,5).map(r=>`<div class="today-item"><div class="ta"></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.nom)}</div><div style="font-size:12px;color:var(--ts)">${r.heure} · ${esc(r.obj)}</div></div><div style="font-size:11px;color:var(--tm)">${esc(r.cons)}</div></div>`).join('')}
   </div>
-  <div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:13px">Commandes en cours</div>
-  ${actCmds.length===0?'<div style="color:var(--tm);font-size:13px">Aucune commande active</div>':actCmds.slice(0,5).map(cmd=>{const cl=getClient(cmd.client_id);const nc=cmd.candidats?.length||0;return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="openCmdDetail('${cmd.id}')"><div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cmd.titre)}</div><div style="color:var(--ts)">${esc(cl?.nom||'—')} · ${renderCons(cmd.cons,14)}</div></div><span style="color:var(--tm);font-size:11px;flex-shrink:0">${nc} candidat${nc!==1?'s':''}</span></div>`;}).join('')}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+      <div style="font-size:14px;font-weight:600">Mes commandes en cours</div>
+      ${isAdmin?`<button class="btn btn-s btn-sm" onclick="G('commandes')">Toutes (${actCmds.length})</button>`:''}
+    </div>
+    ${myCmds.length===0?'<div style="color:var(--tm);font-size:13px">Aucune commande active</div>':myCmds.slice(0,5).map(cmd=>{const cl=getClient(cmd.client_id);const nc=cmd.candidats?.length||0;return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="openCmdDetail('${cmd.id}')"><div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cmd.titre)}</div><div style="color:var(--ts)">${esc(cl?.nom||'—')} · ${cmd.priority?`⭐${cmd.priority}/5`:''}</div></div><span style="color:var(--tm);font-size:11px;flex-shrink:0">${nc} cand.</span></div>`;}).join('')}
   </div></div>`;
+
   h+=`<div class="dash-grid">
-  <div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:13px">Activité commerciale (ce mois)</div>
-  ${monthActs.length===0?'<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucune action ce mois</div>':monthActs.sort((a,b)=>b.date>a.date?1:-1).slice(0,6).map(a=>`<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div><div style="font-size:12px;font-weight:500;color:var(--tp)">${esc(a.type)} — ${esc(a.auteur)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${a.commentaire?' · '+esc(a.commentaire.slice(0,55)):''}</div></div></div>`).join('')}
+  <div class="card">
+    <div style="font-size:14px;font-weight:600;margin-bottom:13px">Activité commerciale (ce mois)</div>
+    ${myActs.length===0?'<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucune action ce mois</div>':myActs.sort((a,b)=>b.date>a.date?1:-1).slice(0,6).map(a=>{const cl=getClient(a.client_id);return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div><div style="font-size:12px;font-weight:500;color:var(--tp)">${esc(a.type)} — ${esc(cl?.nom||a.client_nom||'—')}</div><div style="font-size:11px;color:var(--tm)">${a.date}${a.commentaire?' · '+esc(a.commentaire.slice(0,55)):''}</div></div></div>`;}).join('')}
   </div>
-  <div class="card"><div style="font-size:14px;font-weight:600;margin-bottom:13px">Derniers candidats</div>
-  ${DB.candidats.slice(-5).reverse().map((c,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bg);cursor:pointer" onclick="openCandDetail('${c.id}')">${av(c.prenom+' '+c.nom,c.photo,i,32)}<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:var(--acc)">${esc(c.prenom)} ${esc(c.nom)}</div><div style="font-size:12px;color:var(--ts)">${esc(c.poste||'—')}</div></div><div style="font-size:11px;color:var(--tm)">${esc(c.loc||'')}</div></div>`).join('')}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+      <div style="font-size:14px;font-weight:600">Mes derniers candidats</div>
+      <button class="btn btn-s btn-sm" onclick="G('vivier')">Voir tout (${myCands.length})</button>
+    </div>
+    ${myCands.length===0?`<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucun candidat</div>`:myCands.slice(-5).reverse().map((c,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bg);cursor:pointer" onclick="openCandDetail('${c.id}')">${av(c.prenom+' '+c.nom,c.photo,i,32)}<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;color:var(--acc)">${esc(c.prenom)} ${esc(c.nom)}</div><div style="font-size:12px;color:var(--ts)">${c.metier1_id?esc(refLbl('metiers',c.metier1_id)):esc(c.poste||'—')}</div></div><div style="font-size:11px;color:var(--tm)">${esc(c.ville||c.loc||'')}</div></div>`).join('')}
   </div></div>`;
+
   document.getElementById('body-dash').innerHTML=h;
 }
 
