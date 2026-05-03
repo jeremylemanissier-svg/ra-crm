@@ -449,7 +449,7 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
           <button class="btn btn-s btn-sm" onclick="openRef()">⚙ Référentiels</button>
           <div class="view-toggle">
             <button class="vtbtn active" id="vivier-list-btn" onclick="setVivierView('list')">☰ Liste</button>
-            <button class="vtbtn" id="vivier-kanban-btn" onclick="setVivierView('kanban')">⊞ Kanban</button>
+            
           </div>
           <button class="btn btn-s btn-sm" onclick="openLinkedInImport()">🔗 Import LinkedIn</button>
           <button class="btn btn-s btn-sm" onclick="document.getElementById('bulk-cv-inp').click()">📥 Import CVs</button>
@@ -479,7 +479,7 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
           <div id="cl-filters" style="display:flex;gap:6px"></div>
           <div class="view-toggle">
             <button class="vtbtn active" id="cl-list-btn" onclick="setClientsView('list')">☰ Liste</button>
-            <button class="vtbtn" id="cl-kanban-btn" onclick="setClientsView('kanban')">⊞ Kanban</button>
+            
           </div>
           <button class="btn btn-p" style="margin-left:auto" onclick="openClientForm()">+ Nouveau client</button>
         </div>
@@ -769,7 +769,10 @@ async function api(method,url,data){
     const j=await r.json();if(!r.ok)throw new Error(j.error||'Erreur');return j;
   }catch(e){if(e.message!=='Session invalide')console.error(e);return null;}
 }
-async function saveKey(k){if(k==='refs')_ssItems={}; // Vider cache dropdowns
+async function saveKey(k){
+  if(k==='refs'){
+    _ssItems={}; // Vider le cache dropdowns → rechargement depuis REF à la prochaine ouverture
+  }
 const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
 function save(){['candidats','clients','contacts','commandes','relances','actions'].forEach(k=>saveKey(k));saveKey('refs');saveKey('settings');}
 
@@ -996,7 +999,12 @@ function applyVivierF(){
   if(f.prenom)res=res.filter(c=>c.prenom?.toLowerCase().includes(f.prenom.toLowerCase()));
   if(f.nom)res=res.filter(c=>c.nom?.toLowerCase().includes(f.nom.toLowerCase()));
   if(f.ville)res=res.filter(c=>(c.ville||c.loc||'').toLowerCase().includes(f.ville.toLowerCase()));
-  if(f.departement)res=res.filter(c=>(c.departement||'').toLowerCase().includes(f.departement.toLowerCase()));
+  if(f.departement)res=res.filter(c=>{
+    const dep=(c.departement||c.departement_code||'').toLowerCase();
+    const depCode=(c.departement_code||'').toLowerCase();
+    const q=f.departement.toLowerCase();
+    return dep.includes(q)||depCode.includes(q);
+  });
   if(f.region)res=res.filter(c=>(c.region||'').toLowerCase().includes(f.region.toLowerCase()));
   if(f.famille_metier_id)res=res.filter(c=>c.famille_metier_id===f.famille_metier_id);
   if(f.metier_id)res=res.filter(c=>c.metier1_id===f.metier_id||c.metier2_id===f.metier_id||c.metier3_id===f.metier_id);
@@ -2525,11 +2533,12 @@ function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
   const savedId=EID;const fromClient=window._cmdFromClientId||null;window._cmdFromClientId=null;
+  let newCmdId=null;
   if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
-  else{const existing={id:genId(),date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
+  else{newCmdId=genId();const existing={id:newCmdId,date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
   save();CM();R(CV);
   if(fromClient)setTimeout(()=>openClientDetail(fromClient),30);
-  else if(savedId)setTimeout(()=>openCmdDetail(savedId),30);
+  else setTimeout(()=>openCmdDetail(savedId||newCmdId),30);
 }
 function delCmd(id){if(!confirm('Supprimer ?'))return;DB.commandes=DB.commandes.filter(c=>c.id!==id);save();R(CV);}
 // ══ SCORING PRIORITÉ COMMANDE ════════════════════════════
@@ -3147,7 +3156,7 @@ function openClientDetail(id){
   const cts=DB.contacts.filter(ct=>ct.client_id===id);
   const actsH=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);const cmts=a.admin_comments||[];const hasCmt=cmts.length>0;
 const cmtBubbles=cmts.map(c=>{const u=_usersCache.find(x=>x.id===c.by||x.label===c.by);const photoHtml=u?.photo?`<img src="${u.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${(c.by||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>`;return `<div style="display:flex;align-items:flex-start;gap:7px;margin-top:7px;padding-left:28px">${photoHtml}<div style="flex:1;background:var(--acc-light);border:1px solid var(--br2);border-radius:12px 12px 12px 3px;padding:6px 10px"><div style="font-size:10px;font-weight:600;color:var(--acc2);margin-bottom:2px">${esc(c.by)} · ${c.date}</div><div style="font-size:12px;color:var(--tp);line-height:1.5">${esc(c.text)}</div></div></div>`;}).join('');
-return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="ic-btn" onclick="openActionComments('${a.id}')" title="Commentaires">${hasCmt?'💬<sup style=\'font-size:9px\'>'+cmts.length+'</sup>':'💬'}</button><button class="ic-btn" onclick="delAction('${a.id}')">🗑</button></div></div>${cmtBubbles}</div>`;}).join('');
+return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="ic-btn" onclick="openActionComments('${a.id}')" title="Commentaires">${hasCmt?'💬<sup style=\'font-size:9px\'>'+cmts.length+'</sup>':'💬'}</button>${(currentUser?.role==='admin'||a.cons===currentUser?.display_name)?`<button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>`:''}</div></div>${cmtBubbles}</div>`;}).join('');
   const cmdsH=cmds.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune commande</div>':cmds.map(cmd=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="CM();openCmdDetail('${cmd.id}')"><div style="flex:1;font-weight:500;color:var(--tp)">${esc(cmd.titre)}</div><span style="background:${cmd.statut==='Active'?'#ecfdf5':'var(--acc-light)'};color:${cmd.statut==='Active'?'#065f46':'var(--acc2)'};border-radius:20px;padding:1px 8px;font-size:11px">${esc(cmd.statut)}</span></div>`).join('');
   const ctsH=buildClientContacts(id,cts);
   const leftHtml=`
@@ -3261,7 +3270,7 @@ function saveAction(){
     const allActs=DB.actions.filter(a=>a.client_id===refId).sort((a,b)=>b.date>a.date?1:-1);
     panel.innerHTML=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);const cmts=a.admin_comments||[];const hasCmt=cmts.length>0;
 const cmtBubbles=cmts.map(c=>{const u=_usersCache.find(x=>x.id===c.by||x.label===c.by);const photoHtml=u?.photo?`<img src="${u.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${(c.by||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>`;return `<div style="display:flex;align-items:flex-start;gap:7px;margin-top:7px;padding-left:28px">${photoHtml}<div style="flex:1;background:var(--acc-light);border:1px solid var(--br2);border-radius:12px 12px 12px 3px;padding:6px 10px"><div style="font-size:10px;font-weight:600;color:var(--acc2);margin-bottom:2px">${esc(c.by)} · ${c.date}</div><div style="font-size:12px;color:var(--tp);line-height:1.5">${esc(c.text)}</div></div></div>`;}).join('');
-return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="ic-btn" onclick="openActionComments('${a.id}')" title="Commentaires">${hasCmt?'💬<sup style=\'font-size:9px\'>'+cmts.length+'</sup>':'💬'}</button><button class="ic-btn" onclick="delAction('${a.id}')">🗑</button></div></div>${cmtBubbles}</div>`;}).join('');
+return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="ic-btn" onclick="openActionComments('${a.id}')" title="Commentaires">${hasCmt?'💬<sup style=\'font-size:9px\'>'+cmts.length+'</sup>':'💬'}</button>${(currentUser?.role==='admin'||a.cons===currentUser?.display_name)?`<button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>`:''}</div></div>${cmtBubbles}</div>`;}).join('');
   }else{
     // Toujours rouvrir la fiche client, jamais renvoyer au listing
     setTimeout(()=>openClientDetail(refId),30);
@@ -3288,7 +3297,13 @@ function refreshActionContacts(clientId){
   const filtered=clientId?DB.contacts.filter(ct=>ct.client_id===clientId||ct.client_ids?.includes(clientId)):DB.contacts;
   sel.innerHTML=`<option value="">— Contact (obligatoire) —</option>`+filtered.map(ct=>`<option value="${ct.id}">${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
 }
-function delAction(id){if(!confirm('Supprimer cette action ?'))return;DB.actions=DB.actions.filter(a=>a.id!==id);save();R(CV);}
+function delAction(id){
+  const a=DB.actions.find(x=>x.id===id);if(!a)return;
+  const isAdmin=currentUser?.role==='admin';
+  if(!isAdmin&&a.cons!==currentUser?.display_name){alert('Vous ne pouvez supprimer que vos propres actions.');return;}
+  if(!confirm('Supprimer cette action ?'))return;
+  DB.actions=DB.actions.filter(x=>x.id!==id);save();R(CV);showToast('✓ Action supprimée');
+}
 
 function openContactForm(id){
   EID=id||null;const ct=id?getContact(id):{};const v=f=>esc(ct[f]||'');
@@ -3420,7 +3435,7 @@ function rDashCRM(){
         <td style="font-size:12px;color:var(--ts);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.commentaire||'—')}</td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap">
           <button class="btn btn-s btn-sm" onclick="openActionComments('${a.id}')" title="Commentaires admin">${hasCmt?'💬 '+(a.admin_comments.length):'💬'}</button>
-          <button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>
+          ${(currentUser?.role==='admin'||a.cons===currentUser?.display_name)?`<button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>`:''}
         </td>
       </tr>`;
     });
