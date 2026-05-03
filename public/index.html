@@ -516,7 +516,7 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
       <div class="view" id="view-agenda">
         <div class="toolbar">
           <button class="fb" id="btn-done" onclick="toggleDone()">Voir les faites</button>
-          <button class="btn btn-p" style="margin-left:auto" onclick="openAgendaForm()">+ Relance</button>
+          <button class="btn btn-p" style="margin-left:auto" onclick="openAgendaForm()">+ Tâche</button>
         </div>
         <div class="view-body" id="body-agenda"></div>
       </div>
@@ -1974,6 +1974,7 @@ function openCandDetail(id){
         </div>
         <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-s btn-sm" onclick="openAgendaForm(null,'cand','${id}')">📋 Tâche</button>
           <button class="btn btn-p btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
           ${buildNavArrows(id,_vivierNav,'candNav')}
         </div>
@@ -3316,6 +3317,7 @@ return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div
         <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
         ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé</span>`:''}
         <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
+        <button class="btn btn-s btn-sm" onclick="openAgendaForm(null,'client','${id}')">📋 Tâche</button>
         <button class="btn btn-p btn-sm" onclick="openClientForm('${id}')">✏️ Modifier</button>
       </div>
       ${buildNavArrows(id,_clientsNav,'clientNav')}
@@ -3493,61 +3495,86 @@ function openContactDetail(id){
 }
 function delContact(id){if(!confirm('Supprimer ?'))return;DB.contacts=DB.contacts.filter(c=>c.id!==id);save();R(CV);}
 
-function openAgendaForm(id){
-  EID=id||null;const r=id?DB.relances.find(x=>x.id===id):{};const v=f=>esc(r[f]||'');
-  const curT=r.type||'Candidat';
+function openAgendaForm(id, ctxType, ctxId){
+  EID=id||null;
+  const r=id?DB.relances.find(x=>x.id===id):{};
+  const v=f=>esc(r[f]||'');
   const curPlanif=r.planif_type||'Relance';
-  const refs=curT==='Candidat'?DB.candidats.map(c=>`<option value="${c.id}"${r.ref===c.id?' selected':''}>${esc(c.prenom)} ${esc(c.nom)}</option>`):DB.clients.map(c=>`<option value="${c.id}"${r.ref===c.id?' selected':''}>${esc(c.nom)}</option>`);
-  const cOpts=getCONS().map(u=>`<option value="${u.id}"${(r.cons||currentUser?.display_name)===u.id?' selected':''}>${u.label}</option>`).join('');
-  // assigned_to peut être multi-consultants (array) — on affiche des checkboxes
+
+  // Contexte pré-sélectionné selon la fiche d'origine
+  const preType=ctxType||(r.type||'Candidat'); // 'cand'|'client'|'Candidat'|'Client'
+  const isCandCtx=preType==='cand'||preType==='Candidat';
+  const preRef=ctxId||r.ref||'';
+
+  // Items pour les searchSel
+  const candItems=alphaSort(DB.candidats.map(c=>({id:c.id,label:`${c.prenom} ${c.nom}`})));
+  const clientItems=alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
+  const consItems=getCONS();
+
+  // Assignés (checkboxes)
   const assignedArr=r.assigned_to||[r.cons||currentUser?.display_name||''];
-  const assignedHtml=getCONS().map(u=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-bottom:4px">
-    <input type="checkbox" value="${u.id}" ${assignedArr.includes(u.id)?'checked':''} onchange=""> ${u.label}
-  </label>`).join('');
+
+  // Champ référence selon contexte
+  const refLabel=isCandCtx?'Candidat concerné':'Client / Prospect concerné';
+  const refItems=isCandCtx?candItems:clientItems;
+  const refSel=searchSel('r-ref',refItems,preRef,'— Rechercher —');
+
+  // Si contexte forcé (depuis une fiche), on masque le choix de type
+  const typeSelector=ctxType?`<input type="hidden" id="r-type" value="${isCandCtx?'Candidat':'Client'}">`
+    :`<div class="fld"><label>Lié à</label><select id="r-type" onchange="refreshAgendaRef(this.value)" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="Candidat"${isCandCtx?' selected':''}>Candidat</option><option value="Client"${!isCandCtx?' selected':''}>Client / Prospect</option></select></div>`;
+
   OM(id?'Modifier la tâche':'Nouvelle tâche planifiée',`
+    <div class="fld"><label>Type de tâche</label><select id="r-planif" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit">
+      <option value="Relance"${curPlanif==='Relance'?' selected':''}>🔔 Relance</option>
+      <option value="Rendez-vous"${curPlanif==='Rendez-vous'?' selected':''}>🤝 Rendez-vous</option>
+    </select></div>
+    ${typeSelector}
+    <div class="fld" id="r-ref-wrap"><label>${refLabel}</label>${refSel}</div>
+    <div class="fld"><label>Objet</label><input id="r-obj" value="${v('obj')}" placeholder="Objet de la tâche..."></div>
     <div class="fr">
-      <div class="fld"><label>Type de tâche</label><select id="rplanif">
-        <option value="Relance"${curPlanif==='Relance'?' selected':''}>🔔 Relance</option>
-        <option value="Rendez-vous"${curPlanif==='Rendez-vous'?' selected':''}>🤝 Rendez-vous</option>
-      </select></div>
-      <div class="fld"><label>Référence</label><select id="rt" onchange="rfRels()"><option value="Candidat"${curT==='Candidat'?' selected':''}>Candidat</option><option value="Client"${curT==='Client'?' selected':''}>Client</option></select></div>
+      <div class="fld"><label>Date</label><input type="date" id="r-date" value="${v('date')||TODAY}"></div>
+      <div class="fld"><label>Heure</label><input type="time" id="r-heure" value="${v('heure')||'10:00'}"></div>
     </div>
-    <div class="fld"><label>Entité concernée</label><select id="rr"><option value="">— Sélectionner —</option>${refs.join('')}</select></div>
-    <div class="fld"><label>Objet</label><input id="ro" value="${v('obj')}"></div>
-    <div class="fr"><div class="fld"><label>Date</label><input type="date" id="rd" value="${v('date')||TODAY}"></div><div class="fld"><label>Heure</label><input type="time" id="rh" value="${v('heure')||'10:00'}"></div></div>
-    <div class="fld"><label>Assigné à (cocher les consultants concernés)</label>
-      <div style="padding:8px;background:var(--bg);border:1px solid var(--br);border-radius:7px" id="rass-wrap">${assignedHtml}</div>
+    <div class="fld"><label>Assigné à</label>
+      <div style="padding:8px 10px;background:var(--bg);border:1px solid var(--br);border-radius:7px;display:flex;flex-direction:column;gap:5px">
+        ${getCONS().map(u=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:2px 0">
+          <input type="checkbox" value="${esc(u.id)}" ${assignedArr.includes(u.id)?'checked':''} style="width:15px;height:15px;accent-color:var(--acc);flex-shrink:0">
+          <span>${esc(u.label)}</span>
+        </label>`).join('')}
+      </div>
     </div>
-    <div class="fld"><label>Notes</label><textarea id="rn" style="min-height:55px">${v('notes')}</textarea></div>
+    <div class="fld"><label>Notes</label><textarea id="r-notes" style="min-height:60px;width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;font-family:inherit;resize:vertical">${v('notes')}</textarea></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveRel()">Enregistrer</button></div>`,'n');
 }
-function rfRels(){
-  const type=document.getElementById('rt')?.value;
-  const items=type==='Candidat'?DB.candidats.map(c=>`<option value="${c.id}">${esc(c.prenom)} ${esc(c.nom)}</option>`):DB.clients.map(c=>`<option value="${c.id}">${esc(c.nom)}</option>`);
-  document.getElementById('rr').innerHTML='<option value="">— Sélectionner —</option>'+items.join('');
+
+function refreshAgendaRef(type){
+  const wrap=document.getElementById('r-ref-wrap');if(!wrap)return;
+  const isCand=type==='Candidat';
+  const items=isCand?alphaSort(DB.candidats.map(c=>({id:c.id,label:`${c.prenom} ${c.nom}`}))):alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
+  wrap.innerHTML=`<label>${isCand?'Candidat concerné':'Client / Prospect concerné'}</label>`+searchSel('r-ref',items,'','— Rechercher —');
 }
 function saveRel(){
   const g=id=>document.getElementById(id)?.value||'';
-  const type=g('rt'),ref=g('rr');
+  const type=g('r-type')||'Candidat';
+  const ref=ssGet('r-ref')||g('r-ref-val')||'';
   const ri=type==='Candidat'?getCand(ref):getClient(ref);
   const nom=type==='Candidat'?(ri?`${ri.prenom} ${ri.nom}`:''):(ri?.nom||'');
-  // Récupérer les consultants assignés (checkboxes)
-  const assigned_to=Array.from(document.querySelectorAll('#rass-wrap input[type=checkbox]:checked')).map(cb=>cb.value);
-  // Compatibilité : cons = premier assigné
+  const assigned_to=Array.from(document.querySelectorAll('.mmodal input[type=checkbox]:checked, #ov input[type=checkbox]:checked')).map(cb=>cb.value).filter(Boolean);
   const cons=assigned_to[0]||currentUser?.display_name||'';
   const created_by=EID?(DB.relances.find(r=>r.id===EID)?.created_by||currentUser?.display_name):currentUser?.display_name;
   const form={
     type,ref,nom,
-    obj:g('ro'),date:g('rd'),heure:g('rh'),
-    planif_type:g('rplanif'),
+    obj:g('r-obj'),date:g('r-date')||TODAY,heure:g('r-heure'),
+    planif_type:g('r-planif')||'Relance',
     cons,assigned_to,created_by,
-    notes:g('rn'),
+    notes:g('r-notes'),
     fait:EID?(DB.relances.find(r=>r.id===EID)?.fait||false):false,
     completed_by:EID?(DB.relances.find(r=>r.id===EID)?.completed_by||null):null,
     completed_at:EID?(DB.relances.find(r=>r.id===EID)?.completed_at||null):null,
   };
+  if(!form.obj){alert('Veuillez renseigner un objet.');return;}
   EID?DB.relances=DB.relances.map(r=>r.id===EID?{...r,...form}:r):DB.relances.push({...form,id:genId()});
-  save();CM();R(CV);
+  save();CM();R(CV);showToast('✓ Tâche enregistrée');
 }
 function toggleRel(id){
   const r=DB.relances.find(x=>x.id===id);if(!r)return;
