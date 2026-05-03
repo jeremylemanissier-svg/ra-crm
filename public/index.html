@@ -788,7 +788,7 @@ async function doLogin(){
   const user=await api('POST','/api/auth/login',{username,password});
   if(!user){err.textContent='Identifiant ou mot de passe incorrect.';return;}
   currentUser=user;await loadData();setupUI();showApp();
-  const _lv=localStorage.getItem('upsearch_last_view')||'dash';const _vv=['dash','vivier','commandes','clients','contacts','dashboard-crm','agenda'];G(_vv.includes(_lv)?_lv:'dash');
+  G('dash');
 }
 async function doLogout(){await api('POST','/api/auth/logout');currentUser=null;showLogin();}
 function setupUI(){
@@ -885,7 +885,7 @@ function rDash(){
 
   // ── Commandes du consultant ────────────────────────────────────────────────
   const allActiveCmds=DB.commandes.filter(c=>c.statut==='Active');
-  const myCmds=allActiveCmds.filter(c=>c.cons===me);
+  const myCmds=isAdmin?allActiveCmds:allActiveCmds.filter(c=>c.cons===me);
 
   // ── Candidats EN PROCESS dans les commandes du consultant ─────────────────
   // Un candidat "en process" = présent dans au moins une commande active du consultant
@@ -901,8 +901,8 @@ function rDash(){
     .map(id=>getCand(id)).filter(Boolean).filter(c=>!c.archived);
 
   // ── Clients & Prospects du consultant ─────────────────────────────────────
-  const myClients=DB.clients.filter(c=>c.cons===me&&c.type==='Client');
-  const myProspects=DB.clients.filter(c=>c.cons===me&&c.type==='Prospect');
+  const myClients=isAdmin?DB.clients.filter(c=>c.type==='Client'):DB.clients.filter(c=>c.cons===me&&c.type==='Client');
+  const myProspects=isAdmin?DB.clients.filter(c=>c.type==='Prospect'):DB.clients.filter(c=>c.cons===me&&c.type==='Prospect');
 
   // ── Relances & actions du consultant ──────────────────────────────────────
   // Tâches assignées au consultant connecté et non terminées
@@ -910,11 +910,11 @@ function rDash(){
     if(r.fait)return false;
     // Assigné via assigned_to (nouveau) ou via cons (ancien)
     const assigned=r.assigned_to||[r.cons];
-    return assigned.includes(me);
+    return assigned.includes(me)||isAdmin;
   }).sort((a,b)=>(a.date+a.heure)>(b.date+b.heure)?1:-1);
   const overdueT=myTasks.filter(r=>r.date<TODAY).length;
   const todayT=myTasks.filter(r=>r.date===TODAY).length;
-  const myActs=DB.actions.filter(a=>a.cons===me&&a.date?.startsWith(thisMonth));
+  const myActs=isAdmin?DB.actions.filter(a=>a.date?.startsWith(thisMonth)):DB.actions.filter(a=>a.cons===me&&a.date?.startsWith(thisMonth));
 
   // ── Bandeau ────────────────────────────────────────────────────────────────
   const u=_usersCache.find(x=>x.id===me||x.label===me);
@@ -5449,7 +5449,7 @@ function createCandFromLinkedIn(){
 }
 
 async function init(){
-  try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();const lv=localStorage.getItem('upsearch_last_view')||'dash';const vv=['dash','vivier','commandes','clients','contacts','dashboard-crm','agenda'];G(vv.includes(lv)?lv:'dash');}else{showLogin();}}
+  try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();G('dash');}else{showLogin();}}
   catch(e){showLogin();}
 }
 init();
