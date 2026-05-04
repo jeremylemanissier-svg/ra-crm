@@ -1,272 +1,5660 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const session = require('express-session');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const zlib = require('zlib');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'US2026!';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'upsearch-secret-2026';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-
-// Support both DATA_DIR and legacy DB_PATH variable
-let DATA_DIR = process.env.DATA_DIR;
-if (!DATA_DIR && process.env.DB_PATH) {
-  DATA_DIR = path.dirname(process.env.DB_PATH);
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UpSearch — CRM/ATS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --sb:#08566e;--sb2:#0a6880;--sbt:#7a9eb8;--acc:#1e6080;--acc2:#165068;--acc-light:#e8f4f8;
+  --bg:#f1f5f8;--card:#ffffff;--br:#dde6ec;--br2:#b8ccd6;
+  --tp:#0d2333;--ts:#446070;--tm:#8aacbc;
+  --green:#16a34a;--green-bg:#f0fdf4;--red:#dc2626;--red-bg:#fef2f2;--amber:#d97706;--amber-bg:#fffbeb;
 }
-if (!DATA_DIR) DATA_DIR = './data';
-console.log('📁 DATA_DIR:', DATA_DIR);
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--tp);height:100vh;overflow:hidden;}
 
-const genId = () => crypto.randomBytes(8).toString('hex');
+/* ══ LOADING ══ */
+#loading{position:fixed;inset:0;background:var(--sb);display:flex;align-items:center;justify-content:center;z-index:998;flex-direction:column;gap:16px;}
+#loading.hidden{display:none;}
+.spin{width:36px;height:36px;border:3px solid rgba(37,99,235,0.3);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-// ── Helpers JSON ──────────────────────────────────────
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-function readJSON(file, def) {
-  try { return JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), 'utf8')); }
-  catch(e) { return def; }
+/* ══ LOGIN ══ */
+#login-screen{position:fixed;inset:0;background:var(--sb);display:flex;align-items:center;justify-content:center;z-index:999;background:linear-gradient(135deg,#071420 0%,#0c2030 50%,#0f2e44 100%);}
+#login-screen.hidden{display:none;}
+.login-box{background:rgba(255,255,255,0.04);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:44px;width:100%;max-width:400px;}
+.login-logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:28px;}
+.login-logo-mark{width:44px;height:44px;background:var(--acc);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;letter-spacing:-1px;}
+.login-logo-name{font-size:22px;font-weight:700;color:#fff;letter-spacing:-0.5px;}
+.login-logo-name span{color:var(--acc);}
+.login-subtitle{text-align:center;font-size:13px;color:var(--sbt);margin-bottom:28px;}
+.lf{margin-bottom:16px;}
+.lf label{display:block;font-size:11px;font-weight:600;color:var(--sbt);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em;}
+.lf input{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:11px 14px;font-size:14px;color:#fff;outline:none;font-family:inherit;transition:border-color .2s;}
+.lf input:focus{border-color:var(--acc);}
+.login-btn{width:100%;padding:12px;background:var(--acc);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;margin-top:6px;font-family:inherit;transition:background .2s;}
+.login-btn:hover{background:var(--acc2);}
+.login-err{color:#f87171;font-size:12px;text-align:center;margin-top:10px;min-height:18px;}
+
+/* ══ APP SHELL ══ */
+#app{display:none;height:100vh;flex-direction:column;}
+#app.visible{display:flex;}
+.app-inner{display:flex;flex:1;overflow:hidden;}
+
+/* ══ SIDEBAR ══ */
+#sidebar{width:220px;background:var(--sb);display:flex;flex-direction:column;flex-shrink:0;border-right:1px solid rgba(255,255,255,0.04);}
+.sb-logo{padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:10px;}
+.sb-logo-mark{width:32px;height:32px;background:var(--acc);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:-1px;}
+.sb-logo-text{font-size:15px;font-weight:700;color:#fff;letter-spacing:-0.3px;}
+.sb-logo-text span{color:var(--acc);}
+nav{padding:8px;flex:1;overflow-y:auto;}
+.sb-btn{width:100%;display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;border:none;background:transparent;color:var(--sbt);cursor:pointer;font-size:12.5px;font-family:inherit;text-align:left;margin-bottom:1px;transition:all .15s;}
+.sb-btn:hover{background:rgba(255,255,255,0.05);color:#94a3b8;}
+.sb-btn.active{background:rgba(30,96,128,0.18);color:#7ec8e0;font-weight:500;}
+.sb-btn svg{width:14px;height:14px;flex-shrink:0;opacity:.8;}
+.sb-btn.active svg{opacity:1;}
+.sb-lbl{flex:1;}
+.sb-cnt{font-size:10px;color:rgba(148,163,184,0.4);}
+.sb-btn.active .sb-cnt{color:rgba(126,200,224,0.7);}
+.sb-badge{background:#dc2626;color:#fff;border-radius:20px;padding:1px 6px;font-size:10px;font-weight:600;}
+.sb-sect{padding:14px 10px 5px;font-size:10px;font-weight:600;color:rgba(124,147,176,0.5);text-transform:uppercase;letter-spacing:.1em;}
+.sb-user{padding:10px 14px;border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:9px;}
+.sb-uav{width:32px;height:32px;border-radius:8px;background:rgba(30,96,128,0.25);color:#7ec8e0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;}
+.sb-uname{font-size:12px;color:#cbd5e1;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sb-logout{background:none;border:none;color:var(--sbt);cursor:pointer;font-size:18px;line-height:1;padding:3px;border-radius:5px;opacity:.6;}
+.sb-logout:hover{color:#f87171;opacity:1;}
+
+/* ══ CONTENT ══ */
+#content{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.view-header{padding:13px 24px;background:var(--card);border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.view-title{font-size:15px;font-weight:600;color:var(--tp);}
+.view-online{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ts);}
+.online-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;}
+.view-body{flex:1;overflow:auto;padding:20px;}
+.view{display:none;height:100%;}
+.view.active{display:flex;flex-direction:column;}
+
+/* ══ TOOLBAR ══ */
+.toolbar{padding:10px 24px;background:var(--card);border-bottom:1px solid var(--br);display:flex;align-items:center;gap:9px;flex-shrink:0;flex-wrap:wrap;}
+.sw{position:relative;flex:1;max-width:280px;}
+.sw input{width:100%;padding:7px 10px 7px 32px;border:1px solid var(--br);border-radius:7px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit;}
+.sw input:focus{outline:2px solid var(--acc);outline-offset:-1px;}
+.si{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--tm);width:14px;height:14px;pointer-events:none;}
+.fb{border:1px solid var(--br);border-radius:20px;padding:5px 12px;font-size:12px;background:var(--card);color:var(--ts);cursor:pointer;font-family:inherit;transition:all .15s;}
+.fb.on{border-color:var(--acc);background:var(--acc-light);color:var(--acc);font-weight:500;}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit;transition:opacity .15s;}
+.btn:hover{opacity:.85;}
+.btn-p{background:var(--acc);color:#fff;}
+.btn-s{background:var(--card);color:var(--ts);border:1px solid var(--br);}
+.btn-d{background:#fff1f2;color:var(--red);border:1px solid #fecaca;}
+.btn-g{background:transparent;color:var(--ts);border:1px solid transparent;padding:4px 8px;font-size:12px;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.btn-xs{padding:3px 8px;font-size:11px;}
+.ic-btn{padding:5px 7px;border-radius:6px;background:transparent;border:1px solid var(--br);cursor:pointer;font-size:13px;font-family:inherit;color:var(--ts);line-height:1;}
+.ic-btn:hover{background:var(--bg);}
+
+/* ══ CARDS ══ */
+.card{background:var(--card);border-radius:10px;border:1px solid var(--br);padding:16px 18px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+.kpi-card{background:var(--card);border-radius:10px;border:1px solid var(--br);padding:16px 18px;position:relative;overflow:hidden;}
+.kpi-val{font-size:26px;font-weight:600;color:var(--tp);}
+.kpi-lbl{font-size:11px;color:var(--ts);margin-top:3px;}
+.kpi-ico{position:absolute;right:14px;top:14px;border-radius:9px;padding:8px;display:flex;}
+
+/* ══ TABLE ══ */
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;padding:5px 10px 9px;color:var(--tm);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--br);}
+td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
+
+/* ══ VIVIER ══ */
+.vivier-wrap{display:flex;flex:1;overflow:hidden;}
+.vivier-sidebar{width:230px;flex-shrink:0;background:var(--card);border-right:1px solid var(--br);overflow-y:auto;padding:16px;}
+.vivier-list{flex:1;overflow-y:auto;padding:16px 20px;}
+.vs-title{font-size:12px;font-weight:600;color:var(--tp);margin-bottom:14px;}
+.vs-sect{font-size:10px;font-weight:600;color:var(--tm);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px;}
+.vs-field{margin-bottom:8px;}
+.vs-field label{display:block;font-size:11px;color:var(--ts);margin-bottom:3px;}
+.vs-field input,.vs-field select{width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit;}
+.vs-field input:focus,.vs-field select:focus{outline:2px solid var(--acc);outline-offset:-1px;}
+.vs-reset{width:100%;padding:7px;border:1px solid var(--br);border-radius:7px;font-size:12px;background:transparent;color:var(--ts);cursor:pointer;font-family:inherit;margin-top:8px;}
+.vs-reset:hover{background:var(--bg);}
+.vrow{background:var(--card);border-radius:10px;border:1px solid var(--br);padding:13px 16px;margin-bottom:9px;display:flex;gap:14px;align-items:center;cursor:pointer;transition:box-shadow .15s;}
+.vrow:hover{box-shadow:0 2px 12px rgba(0,0,0,.07);border-color:var(--br2);}
+
+/* ══ COMMANDES ══ */
+.cmd-row{background:var(--card);border-radius:10px;border:1px solid var(--br);padding:14px 17px;margin-bottom:10px;display:flex;gap:13px;align-items:flex-start;transition:box-shadow .15s;}
+.cmd-row:hover{box-shadow:0 2px 10px rgba(0,0,0,.06);}
+
+/* ══ CLIENTS ══ */
+.cl-card{background:var(--card);border-radius:10px;border:1px solid var(--br);padding:15px 17px;display:flex;flex-direction:column;gap:10px;transition:box-shadow .15s;}
+.cl-card:hover{box-shadow:0 2px 10px rgba(0,0,0,.06);}
+
+/* ══ PIPELINE ══ */
+.pipe-cmd{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;}
+.pipe-col{flex-shrink:0;min-width:155px;}
+.pipe-col-head{font-size:11px;font-weight:600;color:var(--ts);margin-bottom:7px;padding:0 2px;}
+.pipe-cand-card{background:var(--card);border:1px solid var(--br);border-radius:8px;padding:8px 10px;margin-bottom:6px;border-left:3px solid;}
+
+/* ══ TIMELINE / NOTES ══ */
+.tl-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--bg);}
+.tl-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:var(--bg);}
+.note-item{background:var(--bg);border-radius:8px;padding:10px 13px;margin-bottom:8px;border-left:3px solid var(--acc);}
+.note-meta{font-size:11px;color:var(--tm);margin-bottom:4px;}
+.note-content{font-size:13px;color:var(--tp);line-height:1.6;}
+
+/* ══ AGENDA ══ */
+.ag-sect{margin-bottom:20px;}
+.ag-date{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px;display:flex;align-items:center;gap:5px;}
+.ag-date.late{color:var(--red);}
+.ag-date.today{color:var(--amber);}
+.ag-date.future{color:var(--ts);}
+.ag-row{background:var(--card);border-radius:10px;border:1px solid var(--br);padding:11px 15px;margin-bottom:7px;display:flex;gap:11px;align-items:flex-start;}
+.ag-row.done{opacity:.5;}
+.rchk{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--br);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-top:1px;transition:all .15s;}
+.rchk.on{border-color:var(--green);background:var(--green-bg);}
+
+/* ══ DASHBOARD ══ */
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.today-item{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid var(--br);}
+.ta{width:3px;height:30px;border-radius:3px;background:var(--acc);flex-shrink:0;margin-top:2px;}
+
+/* ══ MODAL ══ */
+#ov{display:none;position:fixed;inset:0;background:rgba(10,22,40,.6);z-index:200;align-items:center;justify-content:center;padding:18px;}
+#ov.open{display:flex;}
+#mb{background:var(--card);border-radius:14px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.3);}
+#mb.n{max-width:460px;}
+#mb.w{max-width:660px;}
+#mb.xl{max-width:880px;}
+#mb.xxl{max-width:96vw;width:1200px;}
+#mb.xxl .mbody{max-height:88vh;}
+#mb.xxl .split-panel{height:78vh;}
+.mh{display:flex;justify-content:space-between;align-items:center;padding:20px 24px 0;}
+.mh h3{font-size:16px;font-weight:600;color:var(--tp);}
+.mhx{background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:#dc2626;font-size:20px;font-weight:700;line-height:1;padding:0;width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.mhx:hover{background:#fee2e2;color:#b91c1c;}
+.mbody{padding:16px 24px 22px;}
+
+/* ══ TABS ══ */
+.tabs{display:flex;border-bottom:2px solid var(--br);margin-bottom:18px;gap:0;}
+.tab-btn{padding:9px 18px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--ts);font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.tab-btn:hover{color:var(--tp);}
+.tab-btn.active{color:var(--acc);border-bottom-color:var(--acc);font-weight:600;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ══ FORMS ══ */
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.fld{margin-bottom:12px;}
+.fld label{display:block;font-size:11px;font-weight:600;color:var(--ts);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;}
+.fld input,.fld select,.fld textarea{width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit;transition:border-color .15s;}
+.fld textarea{resize:vertical;min-height:70px;}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:var(--acc);}
+.fld-hint{font-size:11px;color:var(--tm);margin-top:3px;}
+.check-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;color:var(--tp);cursor:pointer;}
+.check-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--acc);cursor:pointer;}
+.fa{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;}
+.section-title{font-size:13px;font-weight:600;color:var(--tp);margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--br);}
+.exp-block{background:var(--bg);border-radius:9px;padding:14px;margin-bottom:10px;border:1px solid var(--br);}
+.exp-block-title{font-size:12px;font-weight:600;color:var(--acc);margin-bottom:10px;}
+
+/* ══ DETAIL ══ */
+.dg2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.dg{margin-bottom:10px;}
+.dl{font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
+.dv{font-size:13px;color:var(--tp);}
+.dnotes{background:var(--bg);border-radius:9px;padding:11px 14px;margin-bottom:14px;}
+.dact{display:flex;justify-content:space-between;padding-top:14px;border-top:1px solid var(--br);}
+
+/* ══ CV / PHOTO ══ */
+.dropzone{border:2px dashed var(--br);border-radius:9px;padding:18px;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s;}
+.dropzone:hover{border-color:var(--acc);background:var(--acc-light);}
+.cv-file{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--br);border-radius:9px;padding:10px 14px;}
+.cv-badge{display:inline-flex;align-items:center;gap:4px;background:var(--acc-light);color:var(--acc);border:1px solid #bfdbfe;border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500;transition:background .15s;}
+.cv-badge:hover{background:#dbeafe;}
+.parse-banner{display:none;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:500;margin-top:10px;align-items:center;gap:8px;}
+.parse-banner.success{background:#f0fdf4;color:var(--green);border:1px solid #bbf7d0;display:flex;}
+.parse-banner.error{background:var(--red-bg);color:var(--red);border:1px solid #fecaca;display:flex;}
+.parse-banner.loading{background:var(--acc-light);color:var(--acc);border:1px solid #bfdbfe;display:flex;}
+
+/* ══ BADGES ══ */
+.b-client{background:#ecfdf5;color:#065f46;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500;}
+.b-prospect{background:var(--acc-light);color:var(--acc2);border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500;}
+.etape-badge{border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500;display:inline-block;border:1px solid;white-space:nowrap;}
+
+/* ══ STAR RATING ══ */
+.star-rating{display:flex;gap:4px;}
+.star-btn{font-size:22px;background:none;border:none;cursor:pointer;color:#e2e8f0;line-height:1;transition:color .1s;}
+.star-btn.on{color:#f59e0b;}
+
+/* ══ REFERENTIELS ══ */
+.ref-tabs{display:flex;border-bottom:1px solid var(--br);margin-bottom:14px;}
+.ref-tab{padding:8px 14px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;color:var(--ts);background:none;border-top:none;border-left:none;border-right:none;font-family:inherit;margin-bottom:-1px;}
+.ref-tab.active{color:var(--acc2);border-bottom-color:var(--acc);font-weight:500;}
+.rpr{display:flex;align-items:center;gap:7px;padding:7px 10px;background:var(--bg);border-radius:7px;border:1px solid var(--br);margin-bottom:5px;}
+.rcr{display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:6px;border:1px solid var(--br);background:var(--card);margin-bottom:3px;}
+.rchildren{padding-left:16px;margin-top:3px;margin-bottom:8px;}
+.radd{display:flex;gap:7px;margin-top:8px;}
+.ref-chevron{font-size:11px;color:var(--tm);margin-right:7px;transition:transform .15s;flex-shrink:0;}
+.ref-row-l0{background:var(--card);border-radius:8px;border:1px solid var(--br);margin-bottom:3px;}
+.ref-row-l1{background:var(--bg);border-radius:7px;border:1px solid var(--br);margin-bottom:2px;}
+.ref-row-l2{border-radius:5px;padding:5px 8px !important;}
+.ref-children{margin-top:3px;}
+.radd input{flex:1;border:1px solid var(--br);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit;}
+.radd button{padding:6px 14px;background:var(--acc);color:#fff;border:none;border-radius:7px;font-size:12px;cursor:pointer;font-family:inherit;}
+
+/* ══ ADMIN ══ */
+.admin-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--br);}
+
+/* ══ VOICE DICTATION ══ */
+.mic-btn{background:none;border:1px solid var(--br);border-radius:7px;padding:4px 10px;cursor:pointer;font-size:13px;color:var(--ts);font-family:inherit;display:inline-flex;align-items:center;gap:5px;transition:all .2s;}
+.mic-btn.active{background:#fef2f2;border-color:#dc2626;color:#dc2626;animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.mic-wrap{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.mic-status{font-size:11px;color:var(--tm);font-style:italic;}
+
+/* ══ DOUBLON ALERT ══ */
+.doublon-alert{background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:12px 14px;margin-bottom:12px;}
+.doublon-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--br);font-size:12px;cursor:pointer;}
+.doublon-row:last-child{border-bottom:none;}
+.doublon-row:hover{color:var(--acc);}
+
+/* ══ SPLIT PANEL ══ */
+.split-panel{display:grid;grid-template-columns:1fr 1fr;gap:0;height:100%;}
+.split-left{overflow-y:auto;padding:0 16px 16px 0;border-right:1px solid var(--br);}
+.split-right{overflow-y:auto;padding:0 0 16px 16px;background:var(--bg);}
+.split-right-title{font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.bi-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;margin-bottom:5px;font-size:13px;background:var(--bg);}
+.bi-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.bi-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
+.bi-status{font-size:11px;flex-shrink:0;font-weight:500;}
+.bi-progress{height:4px;background:var(--br);border-radius:2px;margin:10px 0;}
+.bi-bar{height:100%;background:var(--acc);border-radius:2px;transition:width .3s;}
+.geo-wrap{position:relative;}
+.geo-input{width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit;}
+.geo-input:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:var(--acc);}
+.geo-drop{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--br);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:9000;max-height:220px;overflow-y:auto;margin-top:3px;display:none;}
+.geo-drop.open{display:block;}
+.geo-opt{padding:8px 12px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.geo-opt:hover{background:var(--bg);}
+.geo-opt-name{font-weight:500;color:var(--tp);}
+.geo-opt-info{font-size:11px;color:var(--tm);flex-shrink:0;}
+.geo-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;}
+.geo-tag{background:var(--acc-light);color:var(--acc2);border-radius:5px;padding:2px 8px;font-size:11px;font-weight:500;}
+
+/* ══ DETAIL LABELS (gras) ══ */
+.dl{font-size:11px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
+.dv{font-size:13px;color:var(--tp);}
+.dg{margin-bottom:10px;}
+.dg2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.dact{display:flex;justify-content:space-between;padding-top:14px;border-top:1px solid var(--br);}
+.dnotes{background:var(--bg);border-radius:9px;padding:11px 14px;margin-bottom:14px;}
+
+/* ══ KANBAN ══ */
+.kanban-wrap{display:flex;gap:12px;overflow-x:auto;padding:0 0 12px;flex:1;}
+.kanban-col{flex-shrink:0;width:220px;display:flex;flex-direction:column;}
+.kanban-col-head{font-size:12px;font-weight:600;color:var(--ts);padding:8px 12px;border-radius:8px 8px 0 0;border:1px solid var(--br);border-bottom:none;background:var(--card);display:flex;align-items:center;justify-content:space-between;}
+.kanban-col-body{flex:1;background:#f8fafc;border:1px solid var(--br);border-radius:0 0 8px 8px;padding:8px;min-height:120px;overflow-y:auto;max-height:calc(100vh - 250px);}
+.kanban-col-body.drag-over{background:var(--acc-light);border-color:var(--acc);}
+.kcard{background:var(--card);border:1px solid var(--br);border-radius:8px;padding:10px 12px;margin-bottom:7px;cursor:grab;border-left:3px solid var(--acc);}
+.kcard:active{cursor:grabbing;box-shadow:0 4px 20px rgba(0,0,0,.15);}
+.kcard.dragging{opacity:.5;}
+.view-toggle{display:flex;gap:4px;background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:3px;}
+.vtbtn{padding:5px 10px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--ts);font-family:inherit;}
+.vtbtn.active{background:var(--card);color:var(--tp);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+
+/* ══ MOTS-CLÉS ══ */
+.tag-wrap{display:flex;flex-wrap:wrap;gap:5px;border:1px solid var(--br);border-radius:7px;padding:6px 8px;background:var(--bg);min-height:36px;cursor:text;}
+.tag-wrap:focus-within{outline:2px solid var(--acc);outline-offset:-1px;}
+.mk-tag{background:var(--acc-light);color:var(--acc2);border-radius:5px;padding:2px 8px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:4px;}
+.mk-tag button{background:none;border:none;cursor:pointer;color:var(--acc);font-size:14px;line-height:1;padding:0;}
+.mk-input{border:none;outline:none;background:transparent;font-size:12px;font-family:inherit;color:var(--tp);min-width:120px;flex:1;}
+.bool-hint{font-size:11px;color:var(--tm);margin-top:4px;padding:6px 8px;background:var(--bg);border-radius:6px;border:1px solid var(--br);}
+
+/* ══ PIÈCES JOINTES ══ */
+.pj-item{display:flex;align-items:center;gap:9px;background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:8px 12px;margin-bottom:6px;}
+.pj-icon{font-size:18px;flex-shrink:0;}
+.pj-info{flex:1;min-width:0;}
+.pj-name{font-size:13px;font-weight:600;color:var(--tp);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pj-meta{font-size:11px;color:var(--tm);}
+.pj-tag{display:inline-block;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:600;margin-right:4px;}
+
+/* ══ ANONYMIZE ══ */
+.anon-wrap{position:relative;background:#222;border-radius:8px;overflow:hidden;}
+.anon-canvas-wrap{position:relative;display:inline-block;cursor:crosshair;}
+#anon-pdf-canvas{display:block;}
+#anon-overlay{position:absolute;top:0;left:0;pointer-events:none;}
+.anon-rect{position:absolute;background:white;border:2px solid #e74c3c;cursor:move;box-sizing:border-box;}
+.anon-rect .resize-handle{position:absolute;bottom:0;right:0;width:10px;height:10px;background:#e74c3c;cursor:se-resize;}
+.anon-rect .del-btn{position:absolute;top:-8px;right:-8px;width:18px;height:18px;border-radius:50%;background:#e74c3c;color:white;border:none;cursor:pointer;font-size:12px;line-height:18px;text-align:center;padding:0;}
+.anon-toolbar{background:var(--sb);padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.anon-page-nav{display:flex;align-items:center;gap:8px;color:white;font-size:13px;}
+
+/* ══ VOICE BTN ══ */
+.voice-btn{border:none;background:var(--bg);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:14px;color:var(--ts);margin-left:6px;vertical-align:middle;transition:all .15s;}
+.voice-btn:hover{background:var(--br);color:var(--tp);}
+.fld label{display:flex;align-items:center;flex-wrap:wrap;gap:4px;}
+
+.empty{text-align:center;padding:60px 0;color:var(--tm);font-size:13px;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:10px;}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="spin"></div>
+  <div style="color:var(--sbt);font-size:13px;margin-top:4px">Chargement...</div>
+</div>
+
+<!-- Login -->
+<div id="login-screen" class="hidden">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-mark">US</div>
+      <div class="login-logo-name">Up<span>Search</span></div>
+    </div>
+    <div class="login-subtitle">Plateforme CRM / ATS</div>
+    <div class="lf"><label>Identifiant</label><input id="l-user" type="text" placeholder="ex: jeremy" autocomplete="username"></div>
+    <div class="lf"><label>Mot de passe</label><input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="login-btn" onclick="doLogin()">Se connecter</button>
+    <div class="login-err" id="l-err"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="app-inner">
+    <div id="sidebar">
+      <div class="sb-logo" onclick="G('dash')" style="cursor:pointer" title="Retour accueil">        <img src="/logo.png" alt="UpSearch" style="height:34px;max-width:150px;object-fit:contain"
+          onerror="this.style.display='none';document.getElementById('sb-logo-fallback').style.display='flex'">
+        <div id="sb-logo-fallback" style="display:none;align-items:center;gap:10px">
+          <div class="sb-logo-mark">US</div>
+          <div class="sb-logo-text">Up<span>Search</span></div>
+        </div>
+      </div>
+      <nav>
+        <button class="sb-btn active" onclick="G('dash')" id="nav-dash">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="sb-lbl">Tableau de bord</span>
+        </button>
+        <div class="sb-sect">ATS</div>
+        <button class="sb-btn" onclick="G('vivier')" id="nav-vivier">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          <span class="sb-lbl">Vivier</span><span class="sb-cnt" id="cnt-vivier"></span>
+        </button>
+        <button class="sb-btn" onclick="G('commandes')" id="nav-commandes">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <span class="sb-lbl">Commandes</span><span class="sb-cnt" id="cnt-cmds"></span>
+        </button>
+        <div class="sb-sect">CRM</div>
+        <button class="sb-btn" onclick="G('clients')" id="nav-clients">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span class="sb-lbl">Prospects / Clients</span><span class="sb-cnt" id="cnt-clients"></span>
+        </button>
+        <button class="sb-btn" onclick="G('contacts')" id="nav-contacts">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="sb-lbl">Contacts</span><span class="sb-cnt" id="cnt-contacts"></span>
+        </button>
+        <button class="sb-btn" onclick="G('dashboard-crm')" id="nav-dashboard-crm">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="sb-lbl">Dashboard commercial</span><span class="sb-cnt" id="cnt-dash-acts"></span>
+        </button>
+        <div class="sb-sect">Suivi</div>
+        <button class="sb-btn" onclick="G('agenda')" id="nav-agenda">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span class="sb-lbl">Agenda</span><span class="sb-badge" id="badge-ag" style="display:none">0</span>
+        </button>
+        <button class="sb-btn" onclick="G('objectifs')" id="nav-objectifs">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          <span class="sb-lbl">Objectifs</span>
+        </button>
+        <button class="sb-btn" onclick="openRef()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h6"/></svg>
+          <span class="sb-lbl">Référentiel</span>
+        </button>
+        <div id="admin-nav" style="display:none">
+          <div class="sb-sect">Admin</div>
+          <button class="sb-btn" onclick="openAdminPanel()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+            <span class="sb-lbl">Utilisateurs</span>
+          </button>
+          <button class="sb-btn" onclick="openLogoAdmin()">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span class="sb-lbl">Marque</span>
+          </button>
+        </div>
+      </nav>
+      <div class="sb-user">
+        <div class="sb-uav" id="user-av">?</div>
+        <div class="sb-uname" id="user-name">—</div>
+        <button class="sb-logout" onclick="openNotifs()" title="Notifications" style="position:relative">
+          🔔<span id="notif-badge" style="display:none;position:absolute;top:-2px;right:-2px;background:#ef4444;color:white;border-radius:50%;width:14px;height:14px;font-size:9px;font-weight:700;line-height:14px;text-align:center">0</span>
+        </button>
+        <button class="sb-logout" onclick="doLogout()" title="Déconnexion">⏻</button>
+      </div>
+    </div>
+
+    <div id="content">
+      <div class="view-header">
+        <div class="view-title" id="vtitle">Tableau de bord</div>
+        <div class="view-online"><div class="online-dot"></div><span>En ligne · données partagées</span></div>
+      </div>
+
+      <!-- Dashboard -->
+      <div class="view active" id="view-dash"><div class="view-body" id="body-dash"></div></div>
+
+      <!-- Vivier -->
+      <div class="view" id="view-vivier">
+        <div class="toolbar">
+          <button class="btn btn-s btn-sm" onclick="openRef()">⚙ Référentiels</button>
+          <div class="view-toggle">
+            <button class="vtbtn active" id="vivier-list-btn" onclick="setVivierView('list')">☰ Liste</button>
+            
+          </div>
+          <button class="btn btn-s btn-sm" onclick="openLinkedInImport()">🔗 Import LinkedIn</button>
+          <button class="btn btn-s btn-sm" onclick="document.getElementById('bulk-cv-inp').click()">📥 Import CVs</button>
+          <input type="file" id="bulk-cv-inp" style="display:none" accept=".pdf" multiple onchange="openBulkImport(this.files)">
+          <button class="btn btn-p" style="margin-left:auto" onclick="openCandForm()">+ Nouveau candidat</button>
+        </div>
+        <div class="vivier-wrap" id="vivier-main">
+          <div class="vivier-sidebar" id="vivier-sidebar"></div>
+          <div class="vivier-list" id="vivier-list"></div>
+        </div>
+      </div>
+
+      <!-- Commandes -->
+      <div class="view" id="view-commandes">
+        <div class="toolbar">
+          <div class="sw"><svg class="si" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Titre, client..." id="s-cmds" oninput="rCommandes()"></div>
+          <select id="s-cmds-cons" onchange="rCommandes()" style="border:1px solid var(--br);border-radius:7px;padding:5px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;cursor:pointer"><option value="">Tous les consultants</option></select>
+          <div id="cmd-filters" style="display:flex;gap:6px"></div>
+          <button class="btn btn-p" style="margin-left:auto" onclick="openCmdForm()">+ Nouvelle commande</button>
+        </div>
+        <div class="view-body" id="body-cmds"></div>
+      </div>
+
+      <!-- Clients -->
+      <div class="view" id="view-clients">
+        <div class="toolbar">
+          <div class="sw"><svg class="si" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Nom, secteur..." id="s-clients" oninput="rClients()"></div>
+          <div id="cl-filters" style="display:flex;gap:6px"></div>
+          <div class="view-toggle">
+            <button class="vtbtn active" id="cl-list-btn" onclick="setClientsView('list')">☰ Liste</button>
+            
+          </div>
+          <button class="btn btn-p" style="margin-left:auto" onclick="openClientForm()">+ Nouveau client</button>
+        </div>
+        <div class="view-body" id="body-clients"></div>
+      </div>
+
+      <!-- Contacts -->
+      <div class="view" id="view-contacts">
+        <div class="toolbar">
+          <div class="sw"><svg class="si" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Nom, fonction, entreprise..." id="s-contacts" oninput="rContacts()"></div>
+          <button class="btn btn-p" style="margin-left:auto" onclick="openContactForm()">+ Nouveau contact</button>
+        </div>
+        <div class="view-body" id="body-contacts"></div>
+      </div>
+
+      <!-- Dashboard CRM -->
+      <div class="view" id="view-dashboard-crm">
+        <div class="toolbar">
+          <select id="df-cons" onchange="dashF.cons=this.value;rDashCRM()" style="border:1px solid var(--br);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les consultants</option></select>
+          <input type="date" id="df-from" onchange="dashF.date_from=this.value;rDashCRM()" style="border:1px solid var(--br);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit">
+          <input type="date" id="df-to" onchange="dashF.date_to=this.value;rDashCRM()" style="border:1px solid var(--br);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit">
+          <select id="df-client" onchange="dashF.client_id=this.value;rDashCRM()" style="border:1px solid var(--br);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Toutes les entreprises</option></select>
+          <select id="df-contact" onchange="dashF.contact_id=this.value;rDashCRM()" style="border:1px solid var(--br);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les contacts</option></select>
+          <select id="df-sect" onchange="dashF.secteur_id=this.value;rDashCRM()" style="border:1px solid var(--br);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les secteurs</option></select>
+          <button class="btn btn-s btn-sm" onclick="resetDashF()">↺</button>
+          <button class="btn btn-p" style="margin-left:auto" onclick="openActionForm()">+ Nouvelle action</button>
+        </div>
+        <div class="view-body" id="body-dash-crm"></div>
+      </div>
+
+      <!-- Objectifs -->
+      <div class="view" id="view-objectifs">
+        <div class="view-body" id="body-objectifs"></div>
+      </div>
+
+      <!-- Agenda -->
+      <div class="view" id="view-agenda">
+        <div class="toolbar">
+          <button class="fb" id="btn-done" onclick="toggleDone()">Voir les faites</button>
+          <button class="btn btn-p" style="margin-left:auto" onclick="openAgendaForm()">+ Tâche</button>
+        </div>
+        <div class="view-body" id="body-agenda"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="ov">
+  <div id="mb" class="n">
+    <div class="mh"><h3 id="mtitle"></h3><button class="mhx" onclick="CM()">&times;</button></div>
+    <div class="mbody" id="mbody"></div>
+  </div>
+</div>
+
+<script>
+// CONS dynamique — chargé depuis les utilisateurs au démarrage
+let _usersCache=[];
+function getCONS(){return _usersCache.length?_usersCache:[{id:'Jérémy',label:'Jérémy',photo:null}];}
+// Mapping rétrocompatibilité anciens prénoms courts → display_name complet
+const CONS_COMPAT={'Jérémy':'Jérémy LEMANISSIER','Simon':'Simon DAVID','Antoine':'Antoine DUPONT','Shirley':'Shirley GOSSELIN','Anne-Sophie':'Anne-Sophie EYANGO','Hugo':'Hugo BOURBIER','Clémence':'Clémence'};
+function consLabel(name){return CONS_COMPAT[name]||name;}
+function consAvatar(name){
+  const u=_usersCache.find(x=>x.id===name||x.label===name);
+  if(u?.photo)return `<img src="${u.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:5px">`;
+  const ini=(name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;margin-right:5px;vertical-align:middle">${ini}</span>`;
 }
-function writeJSON(file, data) {
-  // Write to temp then rename = atomic write, prevents corruption
-  const full = path.join(DATA_DIR, file);
-  const tmp = full + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
-  fs.renameSync(tmp, full);
+
+// ── LinkedIn logo base64 ─────────────────────────────────
+const LI_LOGO='data:image/png;base64,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';
+function liBtn(url){
+  if(!url)return'';
+  const href=url.startsWith('http')?url:'https://'+url;
+  return `<a href="${href}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;margin-left:5px;vertical-align:middle;flex-shrink:0" title="Voir le profil LinkedIn"><img src="${LI_LOGO}" style="width:20px;height:20px;border-radius:50%;object-fit:cover"></a>`;
+}
+// Helper réutilisable : affiche photo (ou initiales) + nom consultant
+function renderCons(name,size){
+  if(!name)return '—';
+  size=size||20;
+  const u=_usersCache.find(x=>x.id===name||x.label===name);
+  const display=name;
+  if(u?.photo)return `<span style="display:inline-flex;align-items:center;gap:5px"><img src="${u.photo}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0">${esc(display)}</span>`;
+  const ini=(name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-flex;width:${size}px;height:${size}px;border-radius:50%;background:var(--acc);color:white;font-size:${Math.round(size*0.45)}px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${ini}</span>${esc(display)}</span>`;
+}
+const TODAY=new Date().toISOString().slice(0,10);
+const AV_COLORS=[['#e8f4f8','#1e6080'],['#ddeef5','#165068'],['#ecfdf5','#065f46'],['#fff7ed','#9a3412'],['#fef3c7','#92400e'],['#f0f4f8','#2c5282'],['#f0fdf4','#166534'],['#fef2f2','#991b1b']];
+const ACT_TYPES=['Appel','Rendez-vous','Email','Relance'];
+const ACT_ICO={Appel:'📞','Rendez-vous':'🤝',Email:'✉️',Relance:'🔔'};
+const EFFECTIFS=['0 à 9 salariés','10 à 19 salariés','20 à 49 salariés','50 à 99 salariés','100 à 249 salariés','250 à 499 salariés','500 à 999 salariés','1000 salariés et plus'];
+const PIPE_ETAPES=[
+  {id:'preq',label:'Préqualification',color:'#1e6080',bg:'#e8f4f8',br:'#b0d4e4'},
+  {id:'entr',label:'Entretien',color:'#165068',bg:'#ddeef5',br:'#96c4d6'},
+  {id:'envc',label:'Envoyé au client',color:'#ea580c',bg:'#fff7ed',br:'#fed7aa'},
+  {id:'recr',label:'Recruté',color:'#16a34a',bg:'#f0fdf4',br:'#bbf7d0'},
+  {id:'refc',label:'Refus candidat',color:'#dc2626',bg:'#fef2f2',br:'#fecaca'},
+  {id:'refcl',label:'Refus client',color:'#b91c1c',bg:'#fff1f2',br:'#fecaca'},
+  {id:'emb',label:'Embauché',color:'#065f46',bg:'#ecfdf5',br:'#6ee7b7'},
+  {id:'nrc',label:'Non retenu cabinet',color:'#475569',bg:'#f8fafc',br:'#e2e8f0'},
+];
+const getEtape=id=>PIPE_ETAPES.find(e=>e.id===id)||PIPE_ETAPES[0];
+const DEFAULT_REFS={
+  // ── ANCIEN référentiel (conservé pour rétrocompat) ──
+  regions:[{id:'reg1',label:'Normandie'},{id:'reg2',label:'Hauts-de-France'},{id:'reg3',label:'Île-de-France'},{id:'reg4',label:'Pays de la Loire'},{id:'reg5',label:'Bretagne'}],
+  villes:[{id:'v1',label:'Rouen',region_id:'reg1'},{id:'v2',label:'Le Havre',region_id:'reg1'},{id:'v3',label:'Caen',region_id:'reg1'},{id:'v4',label:'Évreux',region_id:'reg1'},{id:'v5',label:'Amiens',region_id:'reg2'},{id:'v6',label:'Lille',region_id:'reg2'},{id:'v7',label:'Beauvais',region_id:'reg2'},{id:'v8',label:'Paris',region_id:'reg3'},{id:'v9',label:'Nantes',region_id:'reg4'},{id:'v10',label:'Rennes',region_id:'reg5'}],
+  secteurs:[{id:'sec1',label:'BTP — Gros Œuvre'},{id:'sec2',label:'BTP — Second Œuvre'},{id:'sec3',label:'BTP — TCE / Tertiaire'},{id:'sec4',label:'BTP — Génie Civil'},{id:'sec5',label:'BTP — Industrie'},{id:'sec6',label:'Promotion immobilière'},{id:'sec7',label:"Bureau d'études structure"},{id:'sec8',label:"Bureau d'études fluides"},{id:'sec9',label:'Ingénierie & MOE'}],
+  familles:[{id:'fam1',label:'Encadrement chantier'},{id:'fam2',label:'Conduite de travaux'},{id:'fam3',label:'Direction travaux'},{id:'fam4',label:"Bureau d'études"},{id:'fam5',label:'Commercial & Affaires'},{id:'fam6',label:"Maîtrise d'œuvre"}],
+  postes:[{id:'p1',label:'Chef de chantier GO',famille_id:'fam1'},{id:'p2',label:'Chef de chantier TCE',famille_id:'fam1'},{id:'p3',label:'Chef de chantier GC',famille_id:'fam1'},{id:'p4',label:'Conducteur de travaux',famille_id:'fam2'},{id:'p5',label:'CDT TCE',famille_id:'fam2'},{id:'p6',label:'CDT GO',famille_id:'fam2'},{id:'p7',label:'Directeur de travaux',famille_id:'fam3'},{id:'p8',label:'Responsable travaux',famille_id:'fam3'},{id:'p9',label:'Ingénieur structure',famille_id:'fam4'},{id:'p10',label:'Ingénieur fluides',famille_id:'fam4'},{id:'p11',label:"Chargé d'affaires",famille_id:'fam5'},{id:'p12',label:'CA second œuvre',famille_id:'fam5'},{id:'p13',label:"Architecte MOE",famille_id:'fam6'},{id:'p14',label:"Maître d'œuvre",famille_id:'fam6'}],
+  specialites:[
+    {id:'spec_tp1',label:'Terrassement',sous_secteur_id:'ss1',actif:true},
+    {id:'spec_tp2',label:'Enrobés',sous_secteur_id:'ss1',actif:true},
+    {id:'spec_tp3',label:'Réseaux électriques',sous_secteur_id:'ss1',actif:true},
+  ],
+  // ── NOUVEAU référentiel ──
+  familles_metier:[
+    {id:'fm1',label:'Conduite & Direction de travaux',actif:true},
+    {id:'fm2',label:'Encadrement chantier',actif:true},
+    {id:'fm3',label:'Bureau d\'études & Ingénierie',actif:true},
+    {id:'fm4',label:'Maîtrise d\'œuvre & Architecture',actif:true},
+    {id:'fm5',label:'Commercial & Développement',actif:true},
+    {id:'fm6',label:'Supply Chain / Achats / Logistique',actif:true},
+    {id:'fm7',label:'IT / Digital',actif:true},
+    {id:'fm8',label:'Management & Direction',actif:true},
+    {id:'fm9',label:'HSE & Qualité',actif:true},
+    {id:'fm10',label:'RH & Formation',actif:true},
+    {id:'fm11',label:'Finance & Gestion',actif:true},
+    {id:'fm12',label:'Immobilier & Promotion',actif:true},
+  ],
+  metiers:[
+    // Conduite & Direction de travaux
+    {id:'m1',label:'Conducteur de travaux',famille_id:'fm1',actif:true},
+    {id:'m2',label:'Conducteur de travaux GO',famille_id:'fm1',actif:true},
+    {id:'m3',label:'Conducteur de travaux TCE',famille_id:'fm1',actif:true},
+    {id:'m4',label:'Conducteur de travaux GC',famille_id:'fm1',actif:true},
+    {id:'m5',label:'Directeur de travaux',famille_id:'fm1',actif:true},
+    {id:'m6',label:'Responsable travaux',famille_id:'fm1',actif:true},
+    {id:'m7',label:'Directeur de projet',famille_id:'fm1',actif:true},
+    // Encadrement chantier
+    {id:'m8',label:'Chef de chantier GO',famille_id:'fm2',actif:true},
+    {id:'m9',label:'Chef de chantier TCE',famille_id:'fm2',actif:true},
+    {id:'m10',label:'Chef de chantier GC',famille_id:'fm2',actif:true},
+    {id:'m11',label:'Chef de chantier VRD',famille_id:'fm2',actif:true},
+    {id:'m12',label:'Chef de chantier Industrie',famille_id:'fm2',actif:true},
+    {id:'m13',label:'Chef de chantier CVC',famille_id:'fm2',actif:true},
+    {id:'m14',label:'Chef de chantier Électricité',famille_id:'fm2',actif:true},
+    // Bureau d'études & Ingénierie
+    {id:'m15',label:'Ingénieur structure',famille_id:'fm3',actif:true},
+    {id:'m16',label:'Ingénieur fluides',famille_id:'fm3',actif:true},
+    {id:'m17',label:'Ingénieur électricité',famille_id:'fm3',actif:true},
+    {id:'m18',label:'Ingénieur géotechnique',famille_id:'fm3',actif:true},
+    {id:'m19',label:'Ingénieur procédés',famille_id:'fm3',actif:true},
+    {id:'m20',label:'Projeteur / Dessinateur',famille_id:'fm3',actif:true},
+    {id:'m21',label:'Chargé d\'études',famille_id:'fm3',actif:true},
+    {id:'m22',label:'Électromécanicien',famille_id:'fm3',actif:true},
+    // MOE & Architecture
+    {id:'m23',label:'Architecte',famille_id:'fm4',actif:true},
+    {id:'m24',label:'Maître d\'œuvre',famille_id:'fm4',actif:true},
+    {id:'m25',label:'Chef de projet MOE',famille_id:'fm4',actif:true},
+    {id:'m26',label:'Coordinateur OPC',famille_id:'fm4',actif:true},
+    // Commercial
+    {id:'m27',label:'Chargé d\'affaires',famille_id:'fm5',actif:true},
+    {id:'m28',label:'Responsable commercial',famille_id:'fm5',actif:true},
+    {id:'m29',label:'Business Developer',famille_id:'fm5',actif:true},
+    {id:'m30',label:'Technico-commercial',famille_id:'fm5',actif:true},
+    // Supply Chain
+    {id:'m31',label:'Acheteur',famille_id:'fm6',actif:true},
+    {id:'m32',label:'Responsable achats',famille_id:'fm6',actif:true},
+    {id:'m33',label:'Responsable logistique',famille_id:'fm6',actif:true},
+    {id:'m34',label:'Supply chain manager',famille_id:'fm6',actif:true},
+    // IT / Digital
+    {id:'m35',label:'Développeur',famille_id:'fm7',actif:true},
+    {id:'m36',label:'Chef de projet IT',famille_id:'fm7',actif:true},
+    {id:'m37',label:'Data scientist',famille_id:'fm7',actif:true},
+    {id:'m38',label:'Responsable SI',famille_id:'fm7',actif:true},
+    // Management
+    {id:'m39',label:'Directeur général',famille_id:'fm8',actif:true},
+    {id:'m40',label:'Directeur d\'agence',famille_id:'fm8',actif:true},
+    {id:'m41',label:'Directeur de région',famille_id:'fm8',actif:true},
+    // HSE
+    {id:'m42',label:'Responsable HSE',famille_id:'fm9',actif:true},
+    {id:'m43',label:'Coordinateur SPS',famille_id:'fm9',actif:true},
+    {id:'m44',label:'Responsable Qualité',famille_id:'fm9',actif:true},
+    // Immobilier
+    {id:'m45',label:'Responsable de programmes',famille_id:'fm12',actif:true},
+    {id:'m46',label:'Directeur de programmes',famille_id:'fm12',actif:true},
+    {id:'m47',label:'Monteur en opérations',famille_id:'fm12',actif:true},
+  ],
+  secteurs_act:[
+    {id:'sa1',label:'BTP / Construction',actif:true},
+    {id:'sa2',label:'Industrie',actif:true},
+    {id:'sa3',label:'Supply Chain / Logistique',actif:true},
+    {id:'sa4',label:'IT / Digital',actif:true},
+    {id:'sa5',label:'Commerce / Vente',actif:true},
+    {id:'sa6',label:'Énergie',actif:true},
+    {id:'sa7',label:'Services',actif:true},
+  ],
+  sous_secteurs:[
+    // BTP / Construction
+    {id:'ss1',label:'Travaux publics / VRD',secteur_id:'sa1',actif:true},
+    {id:'ss2',label:'Gros œuvre',secteur_id:'sa1',actif:true},
+    {id:'ss3',label:'Second œuvre',secteur_id:'sa1',actif:true},
+    {id:'ss4',label:'Génie civil',secteur_id:'sa1',actif:true},
+    {id:'ss5',label:'Charpente',secteur_id:'sa1',actif:true},
+    {id:'ss6',label:'Couverture',secteur_id:'sa1',actif:true},
+    {id:'ss7',label:'Étanchéité',secteur_id:'sa1',actif:true},
+    {id:'ss8',label:'CVC / Plomberie',secteur_id:'sa1',actif:true},
+    {id:'ss9',label:'Électricité bâtiment',secteur_id:'sa1',actif:true},
+    {id:'ss10',label:'Menuiserie',secteur_id:'sa1',actif:true},
+    {id:'ss11',label:'Maîtrise d\'œuvre',secteur_id:'sa1',actif:true},
+    {id:'ss12',label:'Architecture',secteur_id:'sa1',actif:true},
+    {id:'ss13',label:'Promotion immobilière',secteur_id:'sa1',actif:true},
+    {id:'ss14',label:'Rénovation',secteur_id:'sa1',actif:true},
+    {id:'ss15',label:'Construction neuve',secteur_id:'sa1',actif:true},
+    // Industrie
+    {id:'ss16',label:'Agroalimentaire',secteur_id:'sa2',actif:true},
+    {id:'ss17',label:'Textile',secteur_id:'sa2',actif:true},
+    {id:'ss18',label:'Automobile',secteur_id:'sa2',actif:true},
+    {id:'ss19',label:'Aéronautique',secteur_id:'sa2',actif:true},
+    {id:'ss20',label:'Naval',secteur_id:'sa2',actif:true},
+    {id:'ss21',label:'Métallurgie',secteur_id:'sa2',actif:true},
+    {id:'ss22',label:'Mécanique',secteur_id:'sa2',actif:true},
+    {id:'ss23',label:'Plasturgie',secteur_id:'sa2',actif:true},
+    {id:'ss24',label:'Chimie',secteur_id:'sa2',actif:true},
+    {id:'ss25',label:'Pétrochimie',secteur_id:'sa2',actif:true},
+    {id:'ss26',label:'Pharmaceutique',secteur_id:'sa2',actif:true},
+    {id:'ss27',label:'Cosmétique',secteur_id:'sa2',actif:true},
+    {id:'ss28',label:'Électronique',secteur_id:'sa2',actif:true},
+    {id:'ss29',label:'Bois / Papier',secteur_id:'sa2',actif:true},
+    // Supply Chain / Logistique
+    {id:'ss30',label:'Transport',secteur_id:'sa3',actif:true},
+    {id:'ss31',label:'Logistique',secteur_id:'sa3',actif:true},
+    {id:'ss32',label:'Entreposage',secteur_id:'sa3',actif:true},
+    {id:'ss33',label:'Distribution',secteur_id:'sa3',actif:true},
+    {id:'ss34',label:'Affrètement',secteur_id:'sa3',actif:true},
+    {id:'ss35',label:'Import / Export',secteur_id:'sa3',actif:true},
+    {id:'ss36',label:'Douane',secteur_id:'sa3',actif:true},
+    {id:'ss37',label:'Achats / Approvisionnement',secteur_id:'sa3',actif:true},
+    // IT / Digital
+    {id:'ss38',label:'ESN',secteur_id:'sa4',actif:true},
+    {id:'ss39',label:'Éditeur logiciel',secteur_id:'sa4',actif:true},
+    {id:'ss40',label:'SaaS',secteur_id:'sa4',actif:true},
+    {id:'ss41',label:'Client final',secteur_id:'sa4',actif:true},
+    {id:'ss42',label:'E-commerce',secteur_id:'sa4',actif:true},
+    {id:'ss43',label:'Data / IA',secteur_id:'sa4',actif:true},
+    {id:'ss44',label:'Cybersécurité',secteur_id:'sa4',actif:true},
+    {id:'ss45',label:'Cloud / Infrastructure',secteur_id:'sa4',actif:true},
+    {id:'ss46',label:'Développement logiciel',secteur_id:'sa4',actif:true},
+    // Commerce / Vente
+    {id:'ss47',label:'Commerce BtoB',secteur_id:'sa5',actif:true},
+    {id:'ss48',label:'Commerce BtoC',secteur_id:'sa5',actif:true},
+    {id:'ss49',label:'Grande distribution',secteur_id:'sa5',actif:true},
+    {id:'ss50',label:'Distribution spécialisée',secteur_id:'sa5',actif:true},
+    {id:'ss51',label:'Négoce',secteur_id:'sa5',actif:true},
+    {id:'ss52',label:'Retail',secteur_id:'sa5',actif:true},
+    {id:'ss53',label:'Business development',secteur_id:'sa5',actif:true},
+    {id:'ss54',label:'Relation client',secteur_id:'sa5',actif:true},
+    // Énergie
+    {id:'ss55',label:'Énergies renouvelables',secteur_id:'sa6',actif:true},
+    {id:'ss56',label:'Nucléaire',secteur_id:'sa6',actif:true},
+    {id:'ss57',label:'Oil & Gas',secteur_id:'sa6',actif:true},
+    {id:'ss58',label:'Électricité',secteur_id:'sa6',actif:true},
+    {id:'ss59',label:'Réseaux énergétiques',secteur_id:'sa6',actif:true},
+    {id:'ss60',label:'Photovoltaïque',secteur_id:'sa6',actif:true},
+    {id:'ss61',label:'Éolien',secteur_id:'sa6',actif:true},
+    {id:'ss62',label:'Hydrogène',secteur_id:'sa6',actif:true},
+    // Services
+    {id:'ss63',label:'Conseil',secteur_id:'sa7',actif:true},
+    {id:'ss64',label:'Ingénierie',secteur_id:'sa7',actif:true},
+    {id:'ss65',label:'Services aux entreprises',secteur_id:'sa7',actif:true},
+    {id:'ss66',label:'Facility management',secteur_id:'sa7',actif:true},
+    {id:'ss67',label:'Formation',secteur_id:'sa7',actif:true},
+    {id:'ss68',label:'Immobilier',secteur_id:'sa7',actif:true},
+    {id:'ss69',label:'Banque / Assurance',secteur_id:'sa7',actif:true},
+    {id:'ss70',label:'Recrutement / Intérim',secteur_id:'sa7',actif:true},
+  ],
+};
+
+let DB={candidats:[],clients:[],contacts:[],commandes:[],relances:[],actions:[]},REF={};
+let currentUser=null,EID=null,showDone=false,clFilter='Tous',cmdFilter='Toutes';
+let vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:'',showArchived:false};
+let _vivierNav=[]; // IDs des candidats dans l'ordre de la liste filtrée active
+let _clientsNav=[]; // IDs des clients dans l'ordre de la liste filtrée active
+let _cmdsNav=[]; // IDs des commandes dans l'ordre de la liste filtrée active
+let dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};
+const genId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+
+async function api(method,url,data){
+  try{
+    const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});
+    if(r.status===401){showLogin();return null;}
+    const j=await r.json();if(!r.ok)throw new Error(j.error||'Erreur');return j;
+  }catch(e){if(e.message!=='Session invalide')console.error(e);return null;}
+}
+async function saveKey(k){
+  if(k==='refs') _ssItems={};
+  if(k==='settings'&&DB._notifs)DB._settings._notifs=DB._notifs;
+  const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];
+  if(v!==undefined){
+    const res=await api('PUT',`/api/data/${k}`,v);
+    if(!res)console.warn('⚠️ Échec sauvegarde:',k);
+    return res;
+  }
+}
+async function save(keys){
+  // Parallèle = beaucoup plus rapide (toutes les requêtes partent en même temps)
+  const toSave=keys||['candidats','clients','contacts','commandes','relances','actions','refs','settings'];
+  await Promise.all(toSave.map(k=>saveKey(k)));
+}
+// Helpers pour save ciblé (évite les conflits de requêtes)
+async function saveCands(){await save(['candidats']);}
+async function saveClients(){await save(['clients']);}
+async function saveCmds(){await save(['commandes']);}
+
+function showLogin(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.remove('visible');}
+function showApp(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.add('hidden');document.getElementById('app').classList.add('visible');}
+async function doLogin(){
+  const username=document.getElementById('l-user').value.trim(),password=document.getElementById('l-pass').value;
+  const err=document.getElementById('l-err');err.textContent='';
+  if(!username||!password){err.textContent='Remplis les deux champs.';return;}
+  const user=await api('POST','/api/auth/login',{username,password});
+  if(!user){err.textContent='Identifiant ou mot de passe incorrect.';return;}
+  currentUser=user;await loadData();setupUI();showApp();
+  G('dash');
+}
+async function doLogout(){await api('POST','/api/auth/logout');currentUser=null;showLogin();}
+function setupUI(){
+  if(!currentUser)return;
+  const ini=(currentUser.display_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  document.getElementById('user-av').textContent=ini;document.getElementById('user-name').textContent=currentUser.display_name;
+  const an=document.getElementById('admin-nav');if(an)an.style.display=currentUser.role==='admin'?'block':'none';
+}
+async function loadData(){
+  const [ca,cl,co,cm,re,rf,ac,st]=await Promise.all(['candidats','clients','contacts','commandes','relances','refs','actions','settings'].map(k=>api('GET',`/api/data/${k}`)));
+  DB.candidats=Array.isArray(ca)?ca:[];DB.clients=Array.isArray(cl)?cl:[];DB.contacts=Array.isArray(co)?co:[];DB.commandes=Array.isArray(cm)?cm:[];DB.relances=Array.isArray(re)?re:[];DB.actions=Array.isArray(ac)?ac:[];
+  REF=(rf&&typeof rf==='object'&&!Array.isArray(rf))?rf:JSON.parse(JSON.stringify(DEFAULT_REFS));
+  if(!REF.regions)REF.regions=DEFAULT_REFS.regions;if(!REF.villes)REF.villes=DEFAULT_REFS.villes;
+  if(!REF.secteurs)REF.secteurs=DEFAULT_REFS.secteurs;if(!REF.familles)REF.familles=DEFAULT_REFS.familles;
+  if(!REF.postes)REF.postes=DEFAULT_REFS.postes;
+  if(!REF.specialites)REF.specialites=[];
+  // Init nouveaux référentiels si absents
+  if(!REF.familles_metier)REF.familles_metier=DEFAULT_REFS.familles_metier;
+  if(!REF.metiers)REF.metiers=DEFAULT_REFS.metiers;
+  // Migration : si l'ancien référentiel secteurs_act contient des sous-catégories BTP (structure incorrecte), on le remplace
+  const oldStructure=REF.secteurs_act&&REF.secteurs_act.length>0&&(REF.secteurs_act[0]?.label||'').includes('BTP —');
+  if(!REF.secteurs_act||oldStructure){REF.secteurs_act=DEFAULT_REFS.secteurs_act;}
+  const oldSS=REF.sous_secteurs&&REF.sous_secteurs.length>0&&(REF.sous_secteurs[0]?.label||'').includes('Logements collectifs');
+  if(!REF.sous_secteurs||oldSS){REF.sous_secteurs=DEFAULT_REFS.sous_secteurs;}
+  // Migration familles_metier : si l'ancien contient des familles trop spécifiques BTP
+  const oldFM=REF.familles_metier&&REF.familles_metier.length>0&&(REF.familles_metier[0]?.label||'').includes('Gros Œuvre');
+  if(oldFM){REF.familles_metier=DEFAULT_REFS.familles_metier;REF.metiers=DEFAULT_REFS.metiers;}
+  DB.candidats.forEach(c=>{if(!c.notes)c.notes=[];if(!c.prequalif)c.prequalif={};if(!c.entretien)c.entretien={};if(!c.entretiens)c.entretiens=[];if(!c.controles_ref)c.controles_ref=[];if(!c.mots_cles)c.mots_cles=[];if(!c.pieces_jointes)c.pieces_jointes=[];});
+  // Charger les consultants pour les selects (endpoint accessible à tous)
+  try{
+    const usrs=await api('GET','/api/consultants');
+    if(usrs&&Array.isArray(usrs))_usersCache=usrs;
+  }catch(e){console.warn('Consultants non chargés',e);}
+  DB._settings=(st&&typeof st==='object'&&!Array.isArray(st))?st:{};
+  // Charger les notifications depuis _settings
+  if(!DB._notifs)DB._notifs=DB._settings._notifs||{};
+  setTimeout(()=>updateNotifBadge(),100);
+  applyLogoSettings();
+  DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
 
-// ── Init users ────────────────────────────────────────
-let users = readJSON('users.json', []);
-const adminExists = users.find(u => u.username === 'jeremy');
-if (!adminExists) {
-  users.push({ id: genId(), username: 'jeremy', password_hash: bcrypt.hashSync(ADMIN_PASSWORD, 10), display_name: 'Jérémy', role: 'admin', created_at: new Date().toISOString() });
-  writeJSON('users.json', users);
-  console.log('✅ Admin créé : jeremy / ' + ADMIN_PASSWORD);
-} else {
-  // Toujours resynchroniser le mot de passe avec la variable d'environnement
-  users = users.map(u => u.username === 'jeremy' ? { ...u, password_hash: bcrypt.hashSync(ADMIN_PASSWORD, 10) } : u);
-  writeJSON('users.json', users);
-  console.log('🔄 Mot de passe admin synchronisé');
+const VTITLES={dash:'Tableau de bord',vivier:'Vivier de candidats',commandes:'Commandes',clients:'Prospects / Clients',contacts:'Contacts','dashboard-crm':'Dashboard commercial',agenda:'Agenda & Relances',objectifs:'Objectifs commerciaux'};
+let CV='dash';
+function G(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.sb-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  const nb=document.getElementById('nav-'+name);if(nb)nb.classList.add('active');
+  document.getElementById('vtitle').textContent=VTITLES[name];CV=name;
+  try{localStorage.setItem('upsearch_last_view',name);}catch(e){}
+  R(name);
+}
+function R(n){
+  switch(n){
+    case 'dash':rDash();break;case 'vivier':rVivier();break;case 'commandes':rCommandes();break;
+    case 'clients':rClients();break;case 'contacts':rContacts();break;case 'agenda':rAgenda();break;
+    case 'dashboard-crm':rDashCRM();break;
+  }
+  updBadges();
+}
+function updBadges(){
+  document.getElementById('cnt-vivier').textContent=DB.candidats.length;
+  document.getElementById('cnt-cmds').textContent=DB.commandes.filter(c=>c.statut==='Active').length;
+  document.getElementById('cnt-clients').textContent=DB.clients.length;
+  document.getElementById('cnt-contacts').textContent=DB.contacts.length;
+  const dc=document.getElementById('cnt-dash-acts');if(dc)dc.textContent=DB.actions.length;
+  const ov=DB.relances.filter(r=>!r.fait&&r.date<=TODAY).length;
+  const b=document.getElementById('badge-ag');ov>0?(b.textContent=ov,b.style.display='inline'):b.style.display='none';
 }
 
-// ── Init collections ──────────────────────────────────
-['candidats','clients','contacts','commandes','relances','refs'].forEach(k => {
-  const p = path.join(DATA_DIR, k + '.json');
-  if (!fs.existsSync(p)) writeJSON(k + '.json', k === 'refs' ? {} : []);
-});
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const getClient=id=>DB.clients.find(c=>c.id===id);const getContact=id=>DB.contacts.find(c=>c.id===id);
+const getCand=id=>DB.candidats.find(c=>c.id===id);
+const getRef=(arr,id)=>(REF[arr]||[]).find(x=>x.id===id);const refLbl=(arr,id)=>getRef(arr,id)?.label||'';
+const formatSize=b=>{if(!b)return '';if(b<1024)return b+'o';if(b<1048576)return Math.round(b/1024)+'Ko';return (b/1048576).toFixed(1)+'Mo';};
+function av(nom,photo,idx,size=42,clickable=false){
+  const [bg,txt]=AV_COLORS[(idx||0)%AV_COLORS.length];
+  const ini=(nom||'').split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const sz=`width:${size}px;height:${size}px;border-radius:50%;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*.35)}px;font-weight:600;`;
+  if(photo){
+    const clickAttr=clickable?`onclick="previewPhoto('${photo}')" style="${sz}cursor:pointer"`:` style="${sz}"`;
+    return `<div${clickAttr}><img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.parentNode.innerHTML='<span style=color:${txt}>${ini}</span>';this.parentNode.style.background='${bg}'"></div>`;
+  }
+  return `<div style="${sz}background:${bg};color:${txt}">${ini}</div>`;
+}
+function previewPhoto(src){
+  OM('Photo',`<div style="text-align:center;padding:8px"><img src="${src}" style="max-width:100%;max-height:70vh;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,.2)"></div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+}
 
-// ── Middleware ────────────────────────────────────────
-// ── Compression gzip pour accélérer les transferts ───
-app.use((req, res, next) => {
-  const ae = req.headers['accept-encoding'] || '';
-  if (!ae.includes('gzip')) return next();
-  const _json = res.json.bind(res);
-  res.json = (data) => {
-    const str = JSON.stringify(data);
-    if (str.length < 1024) return _json(data); // pas la peine pour les petites réponses
-    const buf = zlib.gzipSync(Buffer.from(str, 'utf8'));
-    res.set({ 'Content-Encoding': 'gzip', 'Content-Type': 'application/json', 'Content-Length': buf.length });
-    res.end(buf);
-  };
-  next();
-});
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', etag: true }));
-app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } }));
+function rDash(){
+  const me=currentUser?.display_name||'';
+  const isAdmin=currentUser?.role==='admin';
+  const thisMonth=TODAY.slice(0,7);
 
-const auth  = (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Non authentifié' }); next(); };
-const admin = (req, res, next) => { if (!req.session.userId || req.session.role !== 'admin') return res.status(403).json({ error: 'Accès refusé' }); next(); };
+  // ── Commandes du consultant ────────────────────────────────────────────────
+  const allActiveCmds=DB.commandes.filter(c=>c.statut==='Active');
+  const myCmds=isAdmin?allActiveCmds:allActiveCmds.filter(c=>c.cons===me);
 
-// ── Auth ──────────────────────────────────────────────
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'Champs manquants' });
-  users = readJSON('users.json', []);
-  const user = users.find(u => u.username === username.toLowerCase().trim());
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({ error: 'Identifiant ou mot de passe incorrect' });
-  req.session.userId = user.id; req.session.role = user.role;
-  res.json({ id: user.id, username: user.username, display_name: user.display_name, role: user.role });
-});
-app.post('/api/auth/logout', (req, res) => { req.session.destroy(() => res.json({ ok: true })); });
-app.get('/api/auth/me', auth, (req, res) => {
-  users = readJSON('users.json', []);
-  const user = users.find(u => u.id === req.session.userId);
-  if (!user) return res.status(401).json({ error: 'Session invalide' });
-  res.json({ id: user.id, username: user.username, display_name: user.display_name, role: user.role });
-});
-
-// ── Data ──────────────────────────────────────────────
-app.get('/api/data/:key', auth, (req, res) => res.json(readJSON(req.params.key + '.json', [])));
-app.put('/api/data/:key', auth, (req, res) => { writeJSON(req.params.key + '.json', req.body); res.json({ ok: true }); });
-
-// ── CV Parsing (Claude API) ───────────────────────────
-app.post('/api/parse-cv', auth, async (req, res) => {
-  if (!ANTHROPIC_API_KEY) return res.json({ error: 'Clé API non configurée. Ajoutez ANTHROPIC_API_KEY dans Railway.', parsed: null });
-  const { data, type, name } = req.body;
-  if (!data) return res.status(400).json({ error: 'Fichier manquant', parsed: null });
-  const isPDF = type === 'application/pdf' || (name || '').toLowerCase().endsWith('.pdf');
-  if (!isPDF) return res.json({ error: 'Parsing automatique disponible pour les PDF uniquement', parsed: null });
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5', max_tokens: 300,
-        messages: [{ role: 'user', content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
-          { type: 'text', text: 'Extrais ces informations du CV. Réponds UNIQUEMENT en JSON sans texte avant/après : {"nom":"...","prenom":"...","tel":"...","email":"..."}. Mets null si introuvable.' }
-        ]}]
-      })
+  // ── Candidats EN PROCESS dans les commandes du consultant ─────────────────
+  // Un candidat "en process" = présent dans au moins une commande active du consultant
+  // (pas refusé/embauché selon les étapes terminales)
+  const ETAPES_TERMINEES=['refus_client','refus_cand','embauche'];
+  const candIdsInProcess=new Set();
+  myCmds.forEach(cmd=>{
+    (cmd.candidats||[]).forEach(cc=>{
+      if(!ETAPES_TERMINEES.includes(cc.etape))candIdsInProcess.add(cc.candidat_id);
     });
-    if (!response.ok) return res.json({ error: 'Extraction impossible — erreur API', parsed: null });
-    const result = await response.json();
-    const text = result.content?.[0]?.text || '';
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return res.json({ error: 'Réponse inattendue de l\'API', parsed: null });
-    const raw = JSON.parse(m[0]);
-    const clean = {
-      nom: raw.nom && raw.nom !== 'null' ? String(raw.nom).trim() : null,
-      prenom: raw.prenom && raw.prenom !== 'null' ? String(raw.prenom).trim() : null,
-      tel: raw.tel && raw.tel !== 'null' ? String(raw.tel).trim() : null,
-      email: raw.email && raw.email !== 'null' ? String(raw.email).trim() : null,
-    };
-    res.json({ parsed: clean });
-  } catch(e) {
-    console.error('Parse CV error:', e);
-    res.json({ error: 'Erreur lors de l\'extraction', parsed: null });
-  }
-});
-
-app.post('/api/parse-prequalif', auth, async (req, res) => {
-  if (!ANTHROPIC_API_KEY) return res.json({ error: 'Clé API non configurée.', parsed: null });
-  const { data, type, name } = req.body;
-  if (!data) return res.status(400).json({ error: 'Fichier manquant', parsed: null });
-  const isPDF = type === 'application/pdf' || (name || '').toLowerCase().endsWith('.pdf');
-  if (!isPDF) return res.json({ error: 'PDF uniquement supporté', parsed: null });
-  try {
-    const prompt = `Tu analyses une trame de préqualification de recrutement déjà remplie. Extrais les informations saisies par le recruteur et retourne UNIQUEMENT un objet JSON valide, sans texte avant ou après, avec exactement ces clés (valeur "" si non trouvée ou vide) :
-{
-  "en_poste": false,
-  "preavis": "",
-  "disponible": false,
-  "raisons_dispo": "",
-  "raisons_ecoute": "",
-  "type_poste": "",
-  "rem_actuelle": "",
-  "rem_souhaitee": "",
-  "refus_secteurs": "",
-  "souhaits": "",
-  "processus_en_cours": "",
-  "motivation_note": 0,
-  "motivation_comment": "",
-  "exp1_entreprise": "", "exp1_poste": "", "exp1_duree": "", "exp1_depart": "", "exp1_missions": "",
-  "exp2_entreprise": "", "exp2_poste": "", "exp2_duree": "", "exp2_depart": "", "exp2_missions": "",
-  "exp3_entreprise": "", "exp3_poste": "", "exp3_duree": "", "exp3_depart": "", "exp3_missions": "",
-  "logiciels": "",
-  "dispo_format": "",
-  "dispo_date": "",
-  "dispo_heure": "",
-  "ressenti": ""
-}
-Pour en_poste et disponible: utilise true/false. Pour motivation_note: utilise un entier entre 0 et 5. Retourne UNIQUEMENT le JSON.`;
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5', max_tokens: 2000,
-        messages: [{ role: 'user', content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
-          { type: 'text', text: prompt }
-        ]}]
-      })
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      return res.json({ error: 'Erreur API: ' + response.status, parsed: null });
-    }
-    const result = await response.json();
-    const text = result.content?.[0]?.text || '';
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return res.json({ error: 'Réponse inattendue', parsed: null });
-    const parsed = JSON.parse(m[0]);
-    res.json({ parsed });
-  } catch(e) {
-    console.error('Parse prequalif error:', e);
-    res.json({ error: 'Erreur: ' + e.message, parsed: null });
-  }
-});
-
-// ── Users (admin) ─────────────────────────────────────
-// Endpoint consultants accessible à tous les utilisateurs connectés (pas seulement admin)
-app.get('/api/consultants', auth, (req, res) => {
-  const users = readJSON('users.json', []);
-  res.json(users.map(u => ({ id: u.display_name, label: u.display_name, photo: u.photo||null })));
-});
-
-app.get('/api/users', admin, (req, res) => res.json(readJSON('users.json', []).map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, photo: u.photo||null, created_at: u.created_at }))));
-app.post('/api/users', admin, (req, res) => {
-  const { username, password, display_name, role, photo } = req.body;
-  if (!username || !password || !display_name) return res.status(400).json({ error: 'Champs manquants' });
-  users = readJSON('users.json', []);
-  if (users.find(u => u.username === username.toLowerCase().trim())) return res.status(400).json({ error: 'Identifiant déjà utilisé' });
-  users.push({ id: genId(), username: username.toLowerCase().trim(), password_hash: bcrypt.hashSync(password, 10), display_name, role: role || 'user', photo: photo||null, created_at: new Date().toISOString() });
-  writeJSON('users.json', users); res.json({ ok: true });
-});
-app.put('/api/users/:id', admin, (req, res) => {
-  const { display_name, role, password, photo, username } = req.body;
-  let usersData = readJSON('users.json', []);
-  if(username){
-    const conflict=usersData.find(u=>u.id!==req.params.id&&u.username===username.toLowerCase().trim());
-    if(conflict)return res.status(409).json({error:'Identifiant déjà utilisé'});
-  }
-  users = usersData.map(u => {
-    if (u.id !== req.params.id) return u;
-    const up = { ...u, display_name, role };
-    if (username) up.username = username.toLowerCase().trim();
-    if (photo !== undefined) up.photo = photo;
-    if (password && password.length >= 4) up.password_hash = bcrypt.hashSync(password, 10);
-    return up;
   });
-  writeJSON('users.json', users); res.json({ ok: true });
-});
-app.delete('/api/users/:id', admin, (req, res) => {
-  if (req.params.id === req.session.userId) return res.status(400).json({ error: 'Impossible de supprimer son propre compte' });
-  writeJSON('users.json', readJSON('users.json', []).filter(u => u.id !== req.params.id));
-  res.json({ ok: true });
-});
+  const candsInProcess=Array.from(candIdsInProcess)
+    .map(id=>getCand(id)).filter(Boolean).filter(c=>!c.archived);
 
-app.post('/api/parse-brief', auth, async (req, res) => {
-  if (!ANTHROPIC_API_KEY) return res.json({ error: 'Clé API non configurée.', parsed: null });
-  const { data, type, name } = req.body;
-  if (!data) return res.status(400).json({ error: 'Fichier manquant', parsed: null });
-  const isPDF = type === 'application/pdf' || (name || '').toLowerCase().endsWith('.pdf');
-  if (!isPDF) return res.json({ error: 'PDF uniquement supporté', parsed: null });
-  try {
-    const prompt = `Tu analyses un brief de poste de recrutement déjà rempli. Extrais les informations saisies et retourne UNIQUEMENT un objet JSON valide, sans texte avant ou après, avec exactement ces clés (valeur "" si non trouvée) :
-{"interlocuteur":"","coords_interlo":"","activite_ent":"","effectif_ent":"","concurrents":"","habitudes_recru":"","ouvert_depuis":"","contexte":"","intitule_poste":"","rattachement":"","urgence_date":"","passation":"","qui_travaille":"","process_recru":"","no_approche":"","recru_echoue":"","missions_princ":"","missions_sec":"","journee_type":"","defis":"","objectifs":"","diplomes":"","compe_tech":"","savoir_etre":"","logiciels":"","localisation":"","deplacements":"","horaires":"","teletravail":"","equipe":"","contrat":"","statut_contrat":"","remuneration":"","avantages":"","must_have":"","should_have":"","nice_have":"","commentaires":""}
-Retourne UNIQUEMENT le JSON.`;
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5', max_tokens: 3000,
-        messages: [{ role: 'user', content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
-          { type: 'text', text: prompt }
-        ]}]
-      })
-    });
-    if (!response.ok) return res.json({ error: 'Erreur API: ' + response.status, parsed: null });
-    const result = await response.json();
-    const text = result.content?.[0]?.text || '';
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return res.json({ error: 'Réponse inattendue', parsed: null });
-    res.json({ parsed: JSON.parse(m[0]) });
-  } catch(e) {
-    console.error('Parse brief error:', e);
-    res.json({ error: 'Erreur: ' + e.message, parsed: null });
+  // ── Clients & Prospects du consultant ─────────────────────────────────────
+  const myClients=isAdmin?DB.clients.filter(c=>c.type==='Client'):DB.clients.filter(c=>c.cons===me&&c.type==='Client');
+  const myProspects=isAdmin?DB.clients.filter(c=>c.type==='Prospect'):DB.clients.filter(c=>c.cons===me&&c.type==='Prospect');
+  // ── CA potentiel + objectifs ──────────────────────────────────────────────
+  const caTot=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_potentiel)||0),0);
+  const myObj=(DB._settings?._objectifs||{})[me]||{};
+  const thisWeek=typeof getWeekKey==='function'?getWeekKey(TODAY):'';
+  const weekActs=DB.actions.filter(a=>(isAdmin||a.cons===me)&&(typeof getWeekKey==='function'?getWeekKey(a.date):a.date?.slice(0,10))===thisWeek);
+  const appels_sem_done=weekActs.filter(a=>a.type==='Appel').length;
+  const rdv_sem_done=weekActs.filter(a=>a.type==='Rendez-vous').length;
+
+  // ── Relances & actions du consultant ──────────────────────────────────────
+  // Tâches assignées au consultant connecté et non terminées
+  const myTasks=DB.relances.filter(r=>{
+    if(r.fait)return false;
+    // Assigné via assigned_to (nouveau) ou via cons (ancien)
+    const assigned=r.assigned_to||[r.cons];
+    return assigned.includes(me)||isAdmin;
+  }).sort((a,b)=>(a.date+a.heure)>(b.date+b.heure)?1:-1);
+  const overdueT=myTasks.filter(r=>r.date<TODAY).length;
+  const todayT=myTasks.filter(r=>r.date===TODAY).length;
+  const myActs=isAdmin?DB.actions.filter(a=>a.date?.startsWith(thisMonth)):DB.actions.filter(a=>a.cons===me&&a.date?.startsWith(thisMonth));
+
+  // ── Bandeau ────────────────────────────────────────────────────────────────
+  const u=_usersCache.find(x=>x.id===me||x.label===me);
+  const photoHtml=u?.photo
+    ?`<img src="${u.photo}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+    :`<div style="width:44px;height:44px;border-radius:50%;background:var(--acc);color:white;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${(me||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</div>`;
+
+  let h=`<div style="display:flex;align-items:center;gap:14px;padding:12px 18px;background:var(--card);border-radius:12px;margin-bottom:20px;border:1px solid var(--br)">
+    ${photoHtml}
+    <div style="flex:1">
+      <div style="font-size:15px;font-weight:700">Bonjour ${esc(me.split(' ')[0])} 👋</div>
+      <div style="font-size:12px;color:var(--ts)">${TODAY} · ${myCmds.length} commande${myCmds.length!==1?'s':''} · ${candIdsInProcess.size} candidat${candIdsInProcess.size!==1?'s':''} en process · ${myClients.length} client${myClients.length!==1?'s':''}</div>
+    </div>
+    ${isAdmin?`<span style="background:var(--acc-light);color:var(--acc2);border-radius:20px;padding:3px 12px;font-size:11px;font-weight:600">👑 Admin</span>`:''}
+  </div>`;
+
+  // ── KPIs 100% personnalisés ────────────────────────────────────────────────
+  h+=`<div class="kpi-grid">
+    <div class="kpi-card" style="cursor:pointer" onclick="showCandsInProcess()">
+      <div class="kpi-val">${candIdsInProcess.size}</div>
+      <div class="kpi-lbl">Candidats en process</div>
+      <div class="kpi-ico" style="background:#e8f4f8"><svg width="14" height="14" fill="none" stroke="#1e6080" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="23 6 16 13 13 10"/></svg></div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer" onclick="G('commandes')">
+      <div class="kpi-val">${myCmds.length}</div>
+      <div class="kpi-lbl">Mes commandes actives</div>
+      <div class="kpi-ico" style="background:#fff7ed"><svg width="14" height="14" fill="none" stroke="#ea580c" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/></svg></div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer" onclick="G('clients')">
+      <div class="kpi-val">${myClients.length}</div>
+      <div class="kpi-lbl">Mes clients</div>
+      <div class="kpi-ico" style="background:#ecfdf5"><svg width="14" height="14" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer" onclick="G('clients')">
+      <div class="kpi-val">${myProspects.length}</div>
+      <div class="kpi-lbl">Mes prospects</div>
+      <div class="kpi-ico" style="background:#e8f4f8"><svg width="14" height="14" fill="none" stroke="#1e6080" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer" onclick="G('objectifs')">
+      <div class="kpi-val">${caTot>0?caTot.toLocaleString('fr-FR')+' €':'—'}</div>
+      <div class="kpi-lbl">CA potentiel</div>
+      <div class="kpi-ico" style="background:#fdf4ff"><svg width="14" height="14" fill="none" stroke="#7c3aed" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+    </div>
+  </div>
+  ${(myObj.appels_sem>0||myObj.rdv_sem>0)?`<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:600">🎯 Objectifs de la semaine</div>
+      <button class="btn btn-s btn-sm" onclick="G('objectifs')">Voir tout →</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      ${myObj.appels_sem>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:4px">📞 Appels</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:8px;background:var(--br);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.min(100,Math.round(appels_sem_done/myObj.appels_sem*100))}%;background:${appels_sem_done>=myObj.appels_sem?'#16a34a':'var(--acc)'};border-radius:4px;transition:width .3s"></div></div>
+          <span style="font-size:12px;font-weight:600;color:${appels_sem_done>=myObj.appels_sem?'#16a34a':'var(--tp)'};white-space:nowrap">${appels_sem_done}/${myObj.appels_sem}</span>
+        </div></div>`:''}
+      ${myObj.rdv_sem>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:4px">🤝 Rendez-vous</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:8px;background:var(--br);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.min(100,Math.round(rdv_sem_done/myObj.rdv_sem*100))}%;background:${rdv_sem_done>=myObj.rdv_sem?'#16a34a':'#7c3aed'};border-radius:4px;transition:width .3s"></div></div>
+          <span style="font-size:12px;font-weight:600;color:${rdv_sem_done>=myObj.rdv_sem?'#16a34a':'var(--tp)'};white-space:nowrap">${rdv_sem_done}/${myObj.rdv_sem}</span>
+        </div></div>`:''}
+    </div>
+  </div>`:''}`;
+  h+=`<div class="dash-grid">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+      <div style="font-size:14px;font-weight:600">Tâches planifiées</div>
+      <div style="display:flex;gap:5px">
+        ${todayT>0?`<span style="background:var(--amber-bg);color:var(--amber);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${todayT} aujourd'hui</span>`:''}
+        ${overdueT>0?`<span style="background:var(--red-bg);color:var(--red);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:500">${overdueT} en retard</span>`:''}
+        <button class="btn btn-p btn-sm" onclick="openAgendaForm()">+ Tâche</button>
+      </div>
+    </div>
+    ${myTasks.length===0
+      ?`<div style="text-align:center;padding:16px 0;color:var(--tm);font-size:13px">🎉 Aucune tâche en attente</div>`
+      :myTasks.slice(0,6).map(r=>{
+        const isLate=r.date<TODAY;const isToday=r.date===TODAY;
+        const ico=r.planif_type==='Rendez-vous'?'🤝':'🔔';
+        const dateColor=isLate?'var(--red)':isToday?'var(--amber)':'var(--ts)';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg)">
+          <button onclick="toggleRel('${r.id}')" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--br);background:var(--bg);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px" title="Marquer comme fait">✓</button>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ico} ${esc(r.obj||r.nom||'—')}</div>
+            <div style="font-size:11px;color:${dateColor}">${r.date}${r.heure?' à '+r.heure:''} · ${esc(r.nom||'')}</div>
+            ${r.created_by&&r.created_by!==me?`<div style="font-size:10px;color:var(--tm)">Planifié par ${esc(r.created_by)}</div>`:''}
+          </div>
+          <button class="ic-btn" onclick="openAgendaForm('${r.id}')" title="Modifier">✏️</button>
+        </div>`;
+      }).join('')}
+    ${myTasks.length>6?`<div style="text-align:center;margin-top:8px"><button class="btn btn-s btn-sm" onclick="G('agenda')">Voir les ${myTasks.length} tâches →</button></div>`:''}
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+      <div style="font-size:14px;font-weight:600">Mes commandes actives</div>
+      <button class="btn btn-s btn-sm" onclick="G('commandes')">Toutes →</button>
+    </div>
+    ${myCmds.length===0?'<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucune commande active</div>':myCmds.slice(0,5).map(cmd=>{
+      const cl=getClient(cmd.client_id);
+      const nc=(cmd.candidats||[]).filter(cc=>!ETAPES_TERMINEES.includes(cc.etape)).length;
+      const pr=cmd.priority;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);cursor:pointer" onclick="openCmdDetail('${cmd.id}')">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cmd.titre)}</div>
+          <div style="font-size:11px;color:var(--ts)">${esc(cl?.nom||'—')}${pr?` · ⭐${pr}/5`:''}</div>
+        </div>
+        <span style="font-size:11px;color:var(--tm);flex-shrink:0;background:var(--bg);border-radius:12px;padding:2px 8px">${nc} en process</span>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+
+  h+=`<div class="dash-grid">
+  <div class="card">
+    <div style="font-size:14px;font-weight:600;margin-bottom:13px">Mon activité (ce mois)</div>
+    ${myActs.length===0?'<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucune action ce mois</div>':myActs.sort((a,b)=>b.date>a.date?1:-1).slice(0,6).map(a=>{
+      const cl=getClient(a.client_id);
+      return `<div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div><div style="font-size:12px;font-weight:500;color:var(--tp)">${esc(a.type)} — ${esc(cl?.nom||a.client_nom||'—')}</div><div style="font-size:11px;color:var(--tm)">${a.date}${a.commentaire?' · '+esc(a.commentaire.slice(0,55)):''}</div></div></div>`;
+    }).join('')}
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
+      <div style="font-size:14px;font-weight:600">Candidats en process (${candIdsInProcess.size})</div>
+      <button class="btn btn-s btn-sm" onclick="showCandsInProcess()">Voir tout →</button>
+    </div>
+    ${candsInProcess.length===0
+      ?'<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucun candidat en process</div>'
+      :candsInProcess.slice(0,5).map((c,i)=>{
+        // Trouver l'étape actuelle dans les commandes
+        let etapeLabel='—';
+        for(const cmd of myCmds){
+          const cc=(cmd.candidats||[]).find(x=>x.candidat_id===c.id&&!ETAPES_TERMINEES.includes(x.etape));
+          if(cc){etapeLabel=cc.etape_label||cc.etape||'En cours';break;}
+        }
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bg);cursor:pointer" onclick="openCandDetail('${c.id}')">
+          ${av(c.prenom+' '+c.nom,c.photo,i,32)}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;color:var(--acc)">${esc(c.prenom)} ${esc(c.nom)}</div>
+            <div style="font-size:11px;color:var(--ts)">${c.metier1_id?esc(refLbl('metiers',c.metier1_id)):esc(c.poste||'—')}</div>
+          </div>
+          <span style="font-size:10px;background:var(--acc-light);color:var(--acc2);border-radius:10px;padding:2px 7px;flex-shrink:0;white-space:nowrap">${esc(etapeLabel)}</span>
+        </div>`;
+      }).join('')}
+  </div></div>`;
+
+  document.getElementById('body-dash').innerHTML=h;
+}
+
+function showCandsInProcess(){
+  // Naviguer vers le vivier en filtrant par consultant
+  G('vivier');
+}
+
+function rVivier(){rVivierSidebar();applyVivierF();}
+let _vivierDebTimer=null;
+function vivierDebounce(){clearTimeout(_vivierDebTimer);_vivierDebTimer=setTimeout(applyVivierF,350);}
+
+function rVivierSidebar(){
+  const f=vivierF;
+  const famOpts=`<option value="">Toutes familles</option>`+alphaSort((REF.familles_metier||[]).filter(x=>x.actif!==false)).map(x=>`<option value="${x.id}"${f.famille_metier_id===x.id?' selected':''}>${esc(x.label)}</option>`).join('');
+  const metiersList=f.famille_metier_id?(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===f.famille_metier_id):(REF.metiers||[]).filter(m=>m.actif!==false);
+  const metOpts=`<option value="">Tous métiers</option>`+alphaSort(metiersList).map(m=>`<option value="${m.id}"${f.metier_id===m.id?' selected':''}>${esc(m.label)}</option>`).join('');
+  const saOpts=`<option value="">Tous secteurs</option>`+alphaSort((REF.secteurs_act||[]).filter(x=>x.actif!==false)).map(x=>`<option value="${x.id}"${f.secteur_act_new_id===x.id?' selected':''}>${esc(x.label)}</option>`).join('');
+  const ssList=f.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===f.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
+  const ssOpts=`<option value="">Tous sous-secteurs</option>`+alphaSort(ssList).map(s=>`<option value="${s.id}"${f.sous_secteur_id===s.id?' selected':''}>${esc(s.label)}</option>`).join('');
+
+  // Ne reconstruire la sidebar QUE si elle n'existe pas encore → préserve le focus des inputs texte
+  const sb=document.getElementById('vivier-sidebar');
+  if(sb.dataset.built==='1'){
+    // Mise à jour partielle : juste les selects dépendants
+    const sel_fm=document.getElementById('vs-sel-fm');if(sel_fm)sel_fm.innerHTML=famOpts;
+    const sel_mt=document.getElementById('vs-sel-mt');if(sel_mt)sel_mt.innerHTML=metOpts;
+    const sel_sa=document.getElementById('vs-sel-sa');if(sel_sa)sel_sa.innerHTML=saOpts;
+    const sel_ss=document.getElementById('vs-sel-ss');if(sel_ss)sel_ss.innerHTML=ssOpts;
+    return;
   }
-});
+  sb.dataset.built='1';
+  sb.innerHTML=`
+    <div class="vs-title">Filtres de recherche</div>
+    <div class="vs-sect">Vue</div>
+    <div class="vs-field" style="display:flex;gap:5px">
+      <button class="fb${!f.showArchived?' on':''}" id="vs-btn-actif" onclick="vivierF.showArchived=false;document.getElementById('vs-btn-actif').classList.add('on');document.getElementById('vs-btn-arch').classList.remove('on');applyVivierF()">Actifs</button>
+      <button class="fb${f.showArchived?' on':''}" id="vs-btn-arch" onclick="vivierF.showArchived=true;document.getElementById('vs-btn-arch').classList.add('on');document.getElementById('vs-btn-actif').classList.remove('on');applyVivierF()">📦 Archivés</button>
+    </div>
+    <div class="vs-sect">Recherche booléenne</div>
+    <div class="vs-field">
+      <input id="vivier-bool-search" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder='ex: "chef chantier" AND VRD' oninput="vivierDebounce()">
+      <div style="font-size:10px;color:var(--tm);margin-top:3px">AND · OR · NOT · "expression exacte"</div>
+    </div>
+    <div class="vs-sect">Identité</div>
+    <div class="vs-field"><label>Prénom</label><input id="vs-inp-prenom" value="${esc(f.prenom)}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Rechercher..." oninput="vivierF.prenom=this.value;vivierDebounce()"></div>
+    <div class="vs-field"><label>Nom</label><input id="vs-inp-nom" value="${esc(f.nom)}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Rechercher..." oninput="vivierF.nom=this.value;vivierDebounce()"></div>
+    <div class="vs-sect">Métier</div>
+    <div class="vs-field"><label>Famille métier</label><select id="vs-sel-fm" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.famille_metier_id=this.value;vivierF.metier_id='';rVivierSidebar();applyVivierF()">${famOpts}</select></div>
+    <div class="vs-field"><label>Métier</label><select id="vs-sel-mt" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.metier_id=this.value;applyVivierF()">${metOpts}</select></div>
+    <div class="vs-sect">Localisation</div>
+    <div class="vs-field"><label>Ville</label>
+      <div style="position:relative">
+        <input id="vs-inp-ville" value="${esc(f.ville||'')}" autocomplete="off" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Taper une ville..." oninput="vivierGeoType(this.value)" onblur="setTimeout(()=>{const d=document.getElementById('vs-geo-drop');if(d)d.style.display='none';},200)">
+        <div id="vs-geo-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--br);border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:9000;max-height:200px;overflow-y:auto;margin-top:2px"></div>
+      </div>
+    </div>
+    <div class="vs-field"><label>Département</label><input id="vs-inp-dept" value="${esc(f.departement||'')}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="ex: Seine-Maritime" oninput="vivierF.departement=this.value;vivierDebounce()"></div>
+    <div class="vs-field"><label>Région</label><input id="vs-inp-region" value="${esc(f.region||'')}" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="ex: Normandie" oninput="vivierF.region=this.value;vivierDebounce()"></div>
+    <div class="vs-sect">Secteur</div>
+    <div class="vs-field"><label>Secteur d'activité</label><select id="vs-sel-sa" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.secteur_act_new_id=this.value;vivierF.sous_secteur_id='';rVivierSidebar();applyVivierF()">${saOpts}</select></div>
+    <div class="vs-field"><label>Sous-secteur</label><select id="vs-sel-ss" style="width:100%;border:1px solid var(--br);border-radius:6px;padding:6px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" onchange="vivierF.sous_secteur_id=this.value;applyVivierF()">${ssOpts}</select></div>
+    <div style="display:flex;gap:6px;margin-top:12px">
+      <button class="vs-reset" style="flex:1" onclick="resetVivierF()">↺ Réinitialiser</button>
+      <button class="btn btn-p btn-sm" style="flex:1" onclick="applyVivierF()">🔍 Rechercher</button>
+    </div>`;
+}
 
-app.listen(PORT, () => console.log(`🚀 UpSearch CRM démarré sur le port ${PORT}`));
+// Autocomplete géo pour le vivier sidebar
+let _vsGeoTimer=null;
+async function vivierGeoType(q){
+  vivierF.ville=q;
+  clearTimeout(_vsGeoTimer);
+  const drop=document.getElementById('vs-geo-drop');if(!drop)return;
+  if(!q||q.length<2){drop.style.display='none';vivierDebounce();return;}
+  _vsGeoTimer=setTimeout(async()=>{
+    const results=await geoSearch(q);
+    if(!results.length){drop.style.display='none';vivierDebounce();return;}
+    drop.innerHTML=results.map((r,i)=>`<div style="padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--bg)" onmousedown="event.preventDefault()" onclick="vivierGeoSelect(${i})">
+      <span style="font-weight:500">${esc(r.nom)}</span>
+      <span style="color:var(--tm);margin-left:6px;font-size:11px">${esc(r.departement)} · ${esc(r.region)}</span>
+    </div>`).join('');
+    drop._results=results;
+    drop.style.display='block';
+    vivierDebounce();
+  },300);
+}
+function vivierGeoSelect(idx){
+  const drop=document.getElementById('vs-geo-drop');if(!drop||!drop._results)return;
+  const r=drop._results[idx];if(!r)return;
+  vivierF.ville=r.nom;vivierF.departement=r.departement;vivierF.region=r.region;
+  const vi=document.getElementById('vs-inp-ville');if(vi)vi.value=r.nom;
+  const di=document.getElementById('vs-inp-dept');if(di)di.value=r.departement;
+  const ri=document.getElementById('vs-inp-region');if(ri)ri.value=r.region;
+  drop.style.display='none';
+  applyVivierF();
+}
+
+function vf(k,v){vivierF[k]=v;if(k==='famille_metier_id')vivierF.metier_id='';if(k==='secteur_act_new_id')vivierF.sous_secteur_id='';rVivierSidebar();applyVivierF();}
+function resetVivierF(){vivierF={nom:'',prenom:'',famille_metier_id:'',metier_id:'',secteur_act_new_id:'',sous_secteur_id:'',ville:'',departement:'',region:'',showArchived:false};const sb=document.getElementById('vivier-sidebar');if(sb)sb.dataset.built='';rVivier();}
+function applyVivierF(){
+  const f=vivierF;let res=DB.candidats;
+  // Archive filter: by default only show active
+  if(f.showArchived){res=res.filter(c=>c.archived===true);}
+  else{res=res.filter(c=>!c.archived);}
+  if(f.prenom)res=res.filter(c=>c.prenom?.toLowerCase().includes(f.prenom.toLowerCase()));
+  if(f.nom)res=res.filter(c=>c.nom?.toLowerCase().includes(f.nom.toLowerCase()));
+  if(f.ville)res=res.filter(c=>(c.ville||c.loc||'').toLowerCase().includes(f.ville.toLowerCase()));
+  if(f.departement)res=res.filter(c=>{
+    const dep=(c.departement||c.departement_code||'').toLowerCase();
+    const depCode=(c.departement_code||'').toLowerCase();
+    const q=f.departement.toLowerCase();
+    return dep.includes(q)||depCode.includes(q);
+  });
+  if(f.region)res=res.filter(c=>(c.region||'').toLowerCase().includes(f.region.toLowerCase()));
+  if(f.famille_metier_id)res=res.filter(c=>c.famille_metier_id===f.famille_metier_id);
+  if(f.metier_id)res=res.filter(c=>c.metier1_id===f.metier_id||c.metier2_id===f.metier_id||c.metier3_id===f.metier_id);
+  if(f.secteur_act_new_id)res=res.filter(c=>c.secteur_act_new_id===f.secteur_act_new_id||c.secteur_act_id===f.secteur_act_new_id);
+  if(f.sous_secteur_id)res=res.filter(c=>c.sous_secteur_id===f.sous_secteur_id);
+  let h=`<div style="font-size:12px;color:var(--ts);margin-bottom:14px">${res.length} profil${res.length!==1?'s':''} trouvé${res.length!==1?'s':''}</div>`;
+  // Boolean search
+  const boolQ=(document.getElementById('vivier-bool-search')?.value||'').trim();
+  if(boolQ)res=vivierBoolSearch(boolQ,res);
+  res.sort((a,b)=>{const na=(a.nom+a.prenom).toLowerCase(),nb=(b.nom+b.prenom).toLowerCase();return na.localeCompare(nb,'fr');});
+  if(!res.length){h+='<div class="empty">Aucun candidat correspondant aux filtres</div>';}
+  else{
+    _vivierNav=res.map(c=>c.id); // Stocker les IDs pour navigation ← →
+    res.forEach((c,i)=>{
+    const locTag=c.ville?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">📍 ${esc(c.ville)}${c.departement_code?' ('+esc(c.departement_code)+')':''}</span>`:'';
+    const sectLabel=c.secteur_act_new_id?refLbl('secteurs_act',c.secteur_act_new_id):(refLbl('secteurs',c.secteur_act_id)||'');
+    const ssLabel=c.sous_secteur_id?refLbl('sous_secteurs',c.sous_secteur_id):'';
+    const metierLabel=c.metier1_id?refLbl('metiers',c.metier1_id):'';
+    const specLabels=[c.spec1_id,c.spec2_id,c.spec3_id,c.spec4_id,c.spec5_id].filter(Boolean).map(id=>refLbl('specialites',id)).filter(Boolean);
+    const posteLabel=metierLabel||c.poste||'';
+    h+=`<div class="vrow" onclick="openCandDetail('${c.id}')">
+      ${av(c.prenom+' '+c.nom,c.photo,i,46)}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600;margin-bottom:2px">${esc(c.nom)} ${esc(c.prenom)}${c.cv?` <span style="font-size:10px;background:var(--acc-light);color:var(--acc);border-radius:4px;padding:1px 5px">CV</span>`:''}</div>
+        ${posteLabel?`<div style="font-size:13px;color:var(--ts);margin-bottom:2px">${esc(posteLabel)}${c.ent?' · '+esc(c.ent):''}</div>`:''}
+        ${c.ville?`<div style="font-size:12px;color:var(--tm);margin-bottom:5px">📍 ${esc(c.ville)}</div>`:''}
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${sectLabel?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(sectLabel)}</span>`:''}
+          ${ssLabel?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(ssLabel)}</span>`:''}
+          ${specLabels.map(s=>`<span style="font-size:11px;background:var(--acc-light);border:1px solid var(--br2);border-radius:5px;padding:1px 7px;color:var(--acc2)">${esc(s)}</span>`).join('')}
+          ${c.sal?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">💰 ${esc(c.sal)}</span>`:''}
+          ${(c.notes||[]).length>0?`<span style="font-size:11px;color:var(--tm)">📝 ${c.notes.length} note${c.notes.length>1?'s':''}</span>`:''}
+          ${c.prequalif?.motivation_note?`<span style="font-size:11px;color:var(--amber)">⭐ ${c.prequalif.motivation_note}/5</span>`:''}
+        </div>
+      </div>
+      <div style="flex-shrink:0;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+        <div style="font-size:11px;color:var(--tm)">${esc(c.email||'')}</div>
+        <div style="display:flex;gap:4px">
+          <button class="ic-btn" onclick="event.stopPropagation();openCandForm('${c.id}')">✏️</button>
+          <button class="ic-btn" onclick="event.stopPropagation();delCand('${c.id}')">🗑</button>
+        </div>
+      </div>
+    </div>`;
+    });
+  }
+  document.getElementById('vivier-list').innerHTML=h;
+}
+
+function rCommandes(){
+  const s=(document.getElementById('s-cmds')?.value||'').toLowerCase();
+  const consFilter=document.getElementById('s-cmds-cons')?.value||'';
+  // Peupler le select consultant si vide
+  const sel=document.getElementById('s-cmds-cons');
+  if(sel&&sel.options.length<=1){
+    const cons=[...new Set(DB.commandes.map(c=>c.cons).filter(Boolean))].sort();
+    cons.forEach(cn=>{const o=document.createElement('option');o.value=cn;o.textContent=cn;sel.appendChild(o);});
+    if(consFilter)sel.value=consFilter;
+  }
+  const fltrs=['Toutes','Active','Suspendue','Pourvue'];
+  document.getElementById('cmd-filters').innerHTML=fltrs.map(f=>`<button class="fb${cmdFilter===f?' on':''}" onclick="cmdFilter='${f}';rCommandes()">${f}</button>`).join('');
+  let res=DB.commandes;
+  if(cmdFilter!=='Toutes')res=res.filter(c=>c.statut===cmdFilter);
+  if(consFilter)res=res.filter(c=>c.cons===consFilter);
+  if(s)res=res.filter(c=>{const cl=getClient(c.client_id);return [c.titre,cl?.nom||''].join(' ').toLowerCase().includes(s);});
+  res.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const sc={Active:'background:#ecfdf5;color:#065f46',Suspendue:'background:var(--amber-bg);color:var(--amber)',Pourvue:'background:var(--acc-light);color:var(--acc2)'};
+  let h='';
+  if(!res.length){h='<div class="empty">Aucune commande</div>';}
+  else{
+    _cmdsNav=res.map(c=>c.id);
+    res.forEach(cmd=>{
+    const cl=getClient(cmd.client_id),ct=getContact(cmd.contact_id),nc=cmd.candidats?.length||0;
+    h+=`<div class="cmd-row" style="cursor:pointer" onclick="openCmdDetail('${cmd.id}')"><div style="flex:1;min-width:0">
+      <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center"><span style="font-size:14px;font-weight:600">${esc(cmd.titre)}</span><span style="${sc[cmd.statut]||sc.Active};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(cmd.statut)}</span>${cmd.priority?`<span style="${PRIORITY_COLORS[cmd.priority]};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">⭐ ${cmd.priority}/5</span>`:''}</div>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--ts);flex-wrap:wrap;margin-bottom:6px"><span>🏢 ${esc(cl?.nom||'—')}</span>${ct?`<span>👤 ${esc(ct.prenom)} ${esc(ct.nom)}</span>`:''}<span>📋 ${esc(cmd.cons)}</span><span>📅 ${cmd.date_cmd||cmd.date||''}</span>${cmd.ca_potentiel?`<span style="color:var(--acc2);font-weight:500">💰 ${parseFloat(cmd.ca_potentiel).toLocaleString('fr-FR')} €</span>`:''}</div>
+      ${cmd.desc?`<div style="font-size:12px;color:var(--tm);line-height:1.5">${esc(cmd.desc.length>100?cmd.desc.slice(0,100)+'…':cmd.desc)}</div>`:''}
+      ${nc>0?`<div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">${(cmd.candidats||[]).slice(0,4).map(cc=>{const cand=getCand(cc.candidat_id);const e=getEtape(cc.etape);return cand?`<span style="font-size:11px;background:${e.bg};color:${e.color};border:1px solid ${e.br};border-radius:5px;padding:2px 8px">${esc(cand.prenom)} ${esc(cand.nom)}</span>`:'';}).join('')}${nc>4?`<span style="font-size:11px;color:var(--tm)">+${nc-4}</span>`:''}</div>`:''}
+    </div>
+    <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px" onclick="event.stopPropagation()">
+      <span style="font-size:11px;color:var(--tm)">${nc} candidat${nc!==1?'s':''}</span>
+      <div style="display:flex;gap:4px"><button class="ic-btn" onclick="openCmdForm('${cmd.id}')">✏️</button><button class="ic-btn" onclick="delCmd('${cmd.id}')">🗑</button></div>
+    </div></div>`;
+    });
+  }
+  document.getElementById('body-cmds').innerHTML=h;
+}
+
+function rClients(){
+  const s=(document.getElementById('s-clients')?.value||'').toLowerCase();
+  const consF=document.getElementById('cl-cons-f')?.value||'';
+  const sectF=document.getElementById('cl-sect-f')?.value||'';
+  const archF=document.getElementById('cl-arch-f')?.value||'active';
+  const fltrs=['Tous','Client','Prospect'];
+  document.getElementById('cl-filters').innerHTML=fltrs.map(f=>`<button class="fb${clFilter===f?' on':''}" onclick="clFilter='${f}';rClients()">${f}</button>`).join('')
+    +`<select id="cl-cons-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les consultants</option>${getCONS().map(u=>`<option value="${u.id}"${consF===u.id?' selected':''}>${u.label}</option>`).join('')}</select>`
+    +`<select id="cl-sect-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="">Tous les secteurs</option>${(REF.secteurs_act||[]).filter(x=>x.actif!==false).map(s=>`<option value="${s.id}"${sectF===s.id?' selected':''}>${esc(s.label)}</option>`).join('')}</select>`
+    +`<select id="cl-arch-f" onchange="rClients()" style="border:1px solid var(--br);border-radius:7px;padding:5px 9px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="active"${archF==='active'?' selected':''}>Actifs</option><option value="archived"${archF==='archived'?' selected':''}>📦 Archivés</option></select>`;
+  let res=DB.clients;
+  if(archF==='archived'){res=res.filter(c=>c.archived===true);}
+  else{res=res.filter(c=>!c.archived);}
+  if(clFilter!=='Tous')res=res.filter(c=>c.type===clFilter);
+  if(consF)res=res.filter(c=>c.cons===consF);
+  if(sectF)res=res.filter(c=>c.secteur_act_new_id===sectF||c.secteur_ref_id===sectF);
+  if(s)res=res.filter(c=>[c.nom,c.secteur,c.ville||c.loc,c.departement,c.region,c.cons].join(' ').toLowerCase().includes(s));
+  res.sort((a,b)=>esc(a.nom||'').toLowerCase().localeCompare(esc(b.nom||'').toLowerCase(),'fr'));
+  const totalTxt=`<div style="font-size:12px;color:var(--ts);margin-bottom:14px">${res.length} résultat${res.length!==1?'s':''}</div>`;
+  if(clientsView==='kanban'){document.getElementById('body-clients').innerHTML=totalTxt+rClientsKanban(res);return;}
+  let h=totalTxt+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:13px">';
+  if(!res.length){document.getElementById('body-clients').innerHTML=totalTxt+'<div class="empty">Aucun client / prospect</div>';return;}
+  _clientsNav=res.map(c=>c.id);
+  res.forEach((c,i)=>{
+    const [bg,txt]=AV_COLORS[i%AV_COLORS.length];
+    const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const avatarHtml=c.logo?`<img src="${c.logo}" style="width:42px;height:42px;border-radius:10px;object-fit:contain;background:white;border:1px solid var(--br);flex-shrink:0">`:`<div style="width:42px;height:42px;border-radius:10px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0">${ini}</div>`;
+    const nbA=DB.actions.filter(a=>a.client_id===c.id).length,nbC=DB.commandes.filter(cmd=>cmd.client_id===c.id).length,nbCt=DB.contacts.filter(ct=>ct.client_id===c.id).length;
+    h+=`<div class="cl-card" style="cursor:pointer" onclick="openClientDetail('${c.id}')">
+      <div style="display:flex;gap:11px;align-items:center">${avatarHtml}<div style="min-width:0"><div style="font-size:14px;font-weight:600">${esc(c.nom)}</div><div style="font-size:12px;color:var(--ts)">${esc(c.secteur||'—')}</div></div></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">📦 Archivé</span>`:''}${c.effectif?`<span style="font-size:11px;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;color:var(--ts)">${esc(c.effectif)}</span>`:''}<span style="font-size:11px;color:var(--tm)">${renderCons(c.cons||'')}</span></div>
+      <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:3px">
+        <div>📍 ${esc(c.ville||c.loc||'—')}${c.departement?' · '+esc(c.departement):''}</div>
+        <div>📞 ${esc(c.phone||'—')}</div>
+        ${c.site_web?`<div onclick="event.stopPropagation()"><a href="${esc(c.site_web)}" target="_blank" class="btn btn-s btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;font-size:11px">🌐 Voir le site</a></div>`:''}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--br);padding-top:8px" onclick="event.stopPropagation()">
+        <div style="font-size:11px;color:var(--tm)">${nbC} cmd · ${nbCt} contact${nbCt!==1?'s':''} · ${nbA} action${nbA!==1?'s':''}</div>
+        <div style="display:flex;gap:5px"><button class="ic-btn" onclick="openClientForm('${c.id}')">✏️</button><button class="ic-btn" onclick="delClient('${c.id}')">🗑</button></div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('body-clients').innerHTML=h+'</div>';
+}
+
+function rContacts(){
+  const s=(document.getElementById('s-contacts')?.value||'').toLowerCase();
+  let res=DB.contacts;
+  if(s)res=res.filter(c=>{const cl=getClient(c.client_id);return [c.prenom,c.nom,c.fonction,c.email,cl?.nom||''].join(' ').toLowerCase().includes(s);});
+  if(!res.length){document.getElementById('body-contacts').innerHTML='<div class="empty">Aucun contact</div>';return;}
+  let h='<div style="overflow-y:auto;max-height:calc(100vh - 160px)"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Entreprise</th><th>Email</th><th>Téléphone</th><th></th></tr></thead><tbody>';
+  res.forEach(ct=>{
+    const cl=getClient(ct.client_id);
+    h+=`<tr><td style="font-weight:500">${esc(ct.prenom)} ${esc(ct.nom)}</td><td style="color:var(--ts)">${esc(ct.fonction||'—')}</td><td>${cl?`<span style="font-size:12px;background:${cl.type==='Client'?'#ecfdf5':'var(--acc-light)'};color:${cl.type==='Client'?'#065f46':'var(--acc2)'};border-radius:5px;padding:2px 8px">${esc(cl.nom)}</span>`:'—'}</td><td style="color:var(--ts);font-size:12px">${esc(ct.email||'—')}</td><td style="color:var(--ts);font-size:12px">${esc(ct.phone||'—')}</td><td><div style="display:flex;gap:4px"><button class="ic-btn" onclick="openContactForm('${ct.id}')">✏️</button><button class="ic-btn" onclick="delContact('${ct.id}')">🗑</button></div></td></tr>`;
+  });
+  document.getElementById('body-contacts').innerHTML=h+'</tbody></table></div>';
+}
+
+function toggleDone(){showDone=!showDone;const b=document.getElementById('btn-done');b.classList.toggle('on',showDone);b.textContent=showDone?'Masquer les faites':'Voir les faites';rAgenda();}
+function rAgenda(){
+  const shown=DB.relances.filter(r=>showDone||!r.fait).sort((a,b)=>(a.date+a.heure)>(b.date+b.heure)?1:-1);
+  const grouped={};
+  shown.forEach(r=>{const k=r.date<TODAY?'En retard':r.date===TODAY?"Aujourd'hui":r.date;if(!grouped[k])grouped[k]=[];grouped[k].push(r);});
+  if(!shown.length){document.getElementById('body-agenda').innerHTML='<div class="empty">✓ Agenda vide</div>';return;}
+  let h='';
+  Object.entries(grouped).forEach(([date,items])=>{
+    const cls=date==='En retard'?'late':date==="Aujourd'hui"?'today':'future';
+    h+=`<div class="ag-sect"><div class="ag-date ${cls}">${date==='En retard'?'⚠ ':date==="Aujourd'hui"?'🔔 ':''}${esc(date)}</div>`;
+    items.forEach(r=>{
+      const tc=r.type==='Candidat'?'background:var(--acc-light);color:var(--acc2)':'background:#f5f3ff;color:#6d28d9';
+      h+=`<div class="ag-row${r.fait?' done':''}">
+        <div class="rchk${r.fait?' on':''}" onclick="toggleRel('${r.id}')">${r.fait?'<svg width="11" height="11" fill="none" stroke="var(--green)" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;display:flex;gap:7px;flex-wrap:wrap;margin-bottom:2px">${esc(r.nom)}<span style="${tc};border-radius:20px;padding:1px 8px;font-size:11px">${esc(r.type)}</span></div><div style="font-size:12px;color:var(--ts)">${esc(r.obj)}</div>${r.notes?`<div style="font-size:11px;color:var(--tm);margin-top:2px">${esc(r.notes)}</div>`:''}</div>
+        <div style="flex-shrink:0;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span style="font-size:12px;color:var(--ts)">${esc(r.heure)}</span><span style="font-size:11px;color:var(--tm)">${esc(r.cons)}</span><div style="display:flex;gap:3px"><button class="btn btn-g" onclick="openAgendaForm('${r.id}')">✏️</button><button class="btn btn-g" onclick="delRel('${r.id}')">🗑</button></div></div>
+      </div>`;
+    });
+    h+='</div>';
+  });
+  document.getElementById('body-agenda').innerHTML=h;
+}
+
+function OM(title,body,size){
+  const titleEl=document.getElementById('mtitle');const mh=document.querySelector('.mh');
+  if(titleEl)titleEl.textContent=title;
+  if(mh)mh.style.display=title?'':'none';
+  document.getElementById('mbody').innerHTML=body;
+  document.getElementById('mb').className=size||'n';
+  document.getElementById('ov').classList.add('open');
+}
+function CM(){document.getElementById('ov').classList.remove('open');EID=null;}
+function handleOv(e){/* désactivé - fermeture uniquement via bouton */}
+
+function handleDrop(e,type){e.preventDefault();e.stopPropagation();const f=e.dataTransfer?.files[0];if(f)readFile(f,type);}
+function handleSel(inp,type){const f=inp.files[0];if(f)readFile(f,type);}
+function readFile(file,type){
+  const maxMo=type==='photo'?2:4;
+  if(file.size>maxMo*1000000){alert(`Max ${maxMo}Mo.`);return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    if(type==='photo'){
+      window._pPhoto=e.target.result;
+      const z=document.getElementById('photo-zone');
+      if(z)z.innerHTML=`<div style="position:relative;width:70px;height:70px"><img src="${e.target.result}" style="width:70px;height:70px;border-radius:50%;object-fit:cover"><button onclick="clearFile('photo')" style="position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:12px;line-height:20px;text-align:center;padding:0" title="Supprimer la photo">✕</button></div>`;
+    }else{
+      const base64=e.target.result.split(',')[1];
+      window._pCV={name:file.name,type:file.type,size:file.size,data:base64};
+      const z=document.getElementById('cv-zone');
+      if(z)z.innerHTML=`<div class="cv-file"><span>📄</span><span style="flex:1;font-size:13px;font-weight:500">${esc(file.name)}</span><span style="font-size:11px;color:var(--tm)">${formatSize(file.size)}</span><button class="btn btn-g btn-sm" onclick="clearFile('cv')">✕</button></div>`;
+      // Manual extraction only — show button
+      const banner=document.getElementById('parse-banner');
+      if(banner){banner.className='parse-banner loading';banner.style.display='flex';banner.innerHTML=`<span style="flex:1">✓ CV ajouté avec succès</span><button class="btn btn-s btn-sm" onclick="parseCV(window._pCV?.name,window._pCV?.type,window._pCV?.data)">🔍 Lancer l'extraction auto</button>`;}
+    }
+  };
+  r.readAsDataURL(file);
+}
+async function parseCV(name,type,data){
+  const banner=document.getElementById('parse-banner');
+  if(!banner)return;
+  banner.className='parse-banner loading';banner.innerHTML='<span style="animation:spin .6s linear infinite;display:inline-block;border:2px solid rgba(37,99,235,.3);border-top-color:var(--acc);border-radius:50%;width:14px;height:14px"></span> Extraction des informations en cours...';
+  const res=await api('POST','/api/parse-cv',{name,type,data});
+  if(!res||res.error){
+    banner.className='parse-banner error';banner.innerHTML=`⚠️ ${esc(res?.error||'Extraction impossible')} — merci de compléter manuellement.`;return;
+  }
+  const p=res.parsed;let filled=0;
+  if(p.nom){const f=document.getElementById('f-nom');if(f&&!f.value){f.value=p.nom;filled++;}}
+  if(p.prenom){const f=document.getElementById('f-prenom');if(f&&!f.value){f.value=p.prenom;filled++;}}
+  if(p.email){const f=document.getElementById('f-email');if(f&&!f.value){f.value=p.email;filled++;}}
+  if(p.tel){const f=document.getElementById('f-phone');if(f&&!f.value){f.value=p.tel;filled++;}}
+  if(filled>0){banner.className='parse-banner success';banner.innerHTML=`✓ ${filled} information${filled>1?'s':''} extraite${filled>1?'s':''} automatiquement`;}
+  else{banner.className='parse-banner error';banner.innerHTML='⚠️ Aucune information trouvée — merci de compléter manuellement.';}
+}
+function openBulkImport(files){
+  if(!files||!files.length)return;
+  const arr=Array.from(files).filter(f=>f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf'));
+  if(!arr.length){alert('Aucun PDF sélectionné.');return;}
+
+  // Build initial modal
+  const rows=arr.map((f,i)=>`
+    <div class="bi-row" id="bi-row-${i}">
+      <div class="bi-icon" style="background:var(--acc-light);color:var(--acc)">📄</div>
+      <div class="bi-name">${esc(f.name)}</div>
+      <div class="bi-status" id="bi-st-${i}" style="color:var(--tm)">En attente...</div>
+    </div>`).join('');
+
+  OM('Import de CVs en masse',`
+    <div style="margin-bottom:14px">
+      <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${arr.length} PDF sélectionné${arr.length>1?'s':''}. L'import démarre automatiquement.</div>
+      <div class="bi-progress"><div class="bi-bar" id="bi-bar" style="width:0%"></div></div>
+      <div style="font-size:12px;color:var(--tm);margin-bottom:12px" id="bi-counter">0 / ${arr.length} traité${arr.length>1?'s':''}</div>
+      <div style="max-height:340px;overflow-y:auto">${rows}</div>
+    </div>
+    <div class="fa">
+      <button class="btn btn-s" id="bi-close-btn" onclick="CM();R('vivier')" disabled>Fermer</button>
+      <div id="bi-summary" style="font-size:13px;color:var(--ts)"></div>
+    </div>`,'w');
+
+  // Start processing
+  processBulkImport(arr);
+
+  // Reset input so same files can be re-imported if needed
+  document.getElementById('bulk-cv-inp').value='';
+}
+
+async function processBulkImport(files){
+  let ok=0,partial=0,failed=0;
+
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    const stEl=document.getElementById('bi-st-'+i);
+    const rowEl=document.getElementById('bi-row-'+i);
+    if(stEl)stEl.innerHTML='<span style="color:var(--acc)">⏳ Traitement...</span>';
+
+    try{
+      // Read file as base64
+      const base64=await new Promise((res,rej)=>{
+        const r=new FileReader();
+        r.onload=e=>res(e.target.result.split(',')[1]);
+        r.onerror=rej;
+        r.readAsDataURL(file);
+      });
+
+      // Parse via Claude API
+      const parsed=await api('POST','/api/parse-cv',{name:file.name,type:file.type,data:base64});
+
+      // Build candidate object
+      const p=parsed?.parsed||{};
+      const hasInfo=p.nom||p.prenom||p.email||p.tel;
+      const cand={
+        id:genId(),
+        nom:p.nom||'',
+        prenom:p.prenom||'',
+        email:p.email||'',
+        phone:p.tel||'',
+        poste:'',statut_cand:'Candidat',
+        cv:{name:file.name,type:file.type,size:file.size,data:base64},
+        notes:[],prequalif:{},entretien:{},controles_ref:[],
+        _imported:true,_import_date:TODAY
+      };
+
+      DB.candidats.push(cand);
+      await saveKey('candidats');
+
+      if(hasInfo){
+        ok++;
+        if(stEl)stEl.innerHTML=`<span style="color:var(--green)">✓ ${esc((p.prenom||'')+' '+(p.nom||'')).trim()||'Créé'}</span>`;
+        if(rowEl)rowEl.style.background='var(--green-bg)';
+      }else{
+        partial++;
+        if(stEl)stEl.innerHTML=`<span style="color:var(--amber)">⚠ Créé — à compléter</span>`;
+        if(rowEl)rowEl.style.background='var(--amber-bg)';
+      }
+
+    }catch(e){
+      failed++;
+      if(stEl)stEl.innerHTML=`<span style="color:var(--red)">✗ Erreur</span>`;
+      if(rowEl)rowEl.style.background='var(--red-bg)';
+    }
+
+    // Update progress
+    const done=i+1;
+    const pct=Math.round(done/files.length*100);
+    const bar=document.getElementById('bi-bar');if(bar)bar.style.width=pct+'%';
+    const ctr=document.getElementById('bi-counter');
+    if(ctr)ctr.textContent=`${done} / ${files.length} traité${files.length>1?'s':''}`;
+  }
+
+  // Final summary
+  const sum=document.getElementById('bi-summary');
+  if(sum){
+    const parts=[];
+    if(ok)parts.push(`<span style="color:var(--green);font-weight:500">✓ ${ok} fiche${ok>1?'s':''} créée${ok>1?'s':''}</span>`);
+    if(partial)parts.push(`<span style="color:var(--amber);font-weight:500">⚠ ${partial} à compléter</span>`);
+    if(failed)parts.push(`<span style="color:var(--red);font-weight:500">✗ ${failed} en erreur</span>`);
+    sum.innerHTML=parts.join(' · ');
+  }
+  const closeBtn=document.getElementById('bi-close-btn');
+  if(closeBtn)closeBtn.disabled=false;
+  updBadges();
+}
+// Ouvre une fiche candidat depuis le kanban d'une commande
+// Le bouton Fermer dans le header candidat rouvre la commande via _fromCmd
+function openCandDetailFromCmd(candId, cmdId){
+  window._lastFromCmd=cmdId;
+  openCandDetail(candId);
+}
+
+function previewCandPhoto(candId){
+  const c=getCand(candId);if(!c?.photo)return;
+  OM('',`<div style="text-align:center;padding:10px"><img src="${c.photo}" style="max-width:100%;max-height:70vh;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+}
+function confirmDeletePhoto(){
+  if(confirm('Supprimer la photo de ce candidat ?'))clearFile('photo');
+}
+function clearFile(type){
+  if(type==='photo'){window._pPhoto=null;const z=document.getElementById('photo-zone');if(z)z.innerHTML=pzE();}
+  else{window._pCV=null;const z=document.getElementById('cv-zone');if(z)z.innerHTML=cvzE();}
+}
+function pzE(){return `<div style="width:70px;height:70px;border-radius:50%;border:2px dashed var(--br);display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--bg);font-size:22px;transition:all .15s" ondragover="event.preventDefault()" ondrop="handleDrop(event,'photo')" onclick="document.getElementById('photo-inp').click()" onmouseover="this.style.borderColor='var(--acc)'" onmouseout="this.style.borderColor='var(--br)'">📷</div><input type="file" id="photo-inp" style="display:none" accept="image/*" onchange="handleSel(this,'photo')">`;}
+function cvzE(){return `<div class="dropzone" ondragover="event.preventDefault()" ondrop="handleDrop(event,'cv')" onclick="document.getElementById('cv-inp').click()"><div style="font-size:22px;margin-bottom:6px">📎</div><div style="font-size:12px;color:var(--ts);font-weight:500">Glisser-déposer ou cliquer pour sélectionner</div><div style="font-size:11px;color:var(--tm);margin-top:3px">PDF uniquement pour l'extraction auto · max 4Mo</div></div><input type="file" id="cv-inp" style="display:none" accept=".pdf,.doc,.docx" onchange="handleSel(this,'cv')">`;}
+function dlCV(e,id){e.stopPropagation();const c=getCand(id);if(!c?.cv)return;const a=document.createElement('a');a.href=`data:${c.cv.type};base64,${c.cv.data}`;a.download=c.cv.name;a.click();}
+function toggleCV(candId){
+  const c=getCand(candId);if(!c?.cv)return;
+  const w=document.getElementById('cv-wrap'),btn=document.getElementById('cv-tbtn');if(!w)return;
+  if(w.style.display==='none'){
+    w.style.display='block';if(btn)btn.textContent='🙈 Masquer';
+    const fr=document.getElementById('cv-frame');
+    if(fr&&fr.src==='about:blank'){try{const b=atob(c.cv.data);const ar=new Uint8Array(b.length);for(let i=0;i<b.length;i++)ar[i]=b.charCodeAt(i);fr.src=URL.createObjectURL(new Blob([ar],{type:c.cv.type}));}catch(e){w.innerHTML='<div style="padding:16px;text-align:center;color:var(--tm);font-size:13px">Aperçu indisponible.</div>';}}
+  }else{w.style.display='none';if(btn)btn.textContent='👁 Afficher';}
+}
+
+// Utilise l'API officielle geo.api.gouv.fr (gratuite, sans clé)
+let _geoCache={};
+async function geoSearch(q){
+  if(!q||q.length<2)return[];
+  const key=q.toLowerCase();
+  if(_geoCache[key])return _geoCache[key];
+  try{
+    const r=await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(q)}&fields=nom,codesPostaux,codeDepartement,nomDepartement,codeRegion,nomRegion&boost=population&limit=8`);
+    if(!r.ok)return[];
+    const data=await r.json();
+    const results=data.map(c=>({
+      nom:c.nom,
+      code_postal:c.codesPostaux?.[0]||'',
+      departement:c.nomDepartement||'',
+      departement_code:c.codeDepartement||'',
+      region:c.nomRegion||'',
+    }));
+    _geoCache[key]=results;
+    return results;
+  }catch(e){return[];}
+}
+
+function geoWidget(fieldPrefix, currentVille, currentDept, currentRegion, currentCP){
+  const vid=fieldPrefix+'-ville';const did=fieldPrefix+'-drop';
+  return `
+  <div class="geo-wrap">
+    <input class="geo-input" id="${vid}" placeholder="Tapez une ville..." value="${esc(currentVille||'')}" autocomplete="off"
+      oninput="geoType('${fieldPrefix}',this.value)"
+      onblur="setTimeout(()=>geoClose('${did}'),200)">
+    <div class="geo-drop" id="${did}"></div>
+    ${currentVille?`<div class="geo-tags">
+      ${currentVille?`<span class="geo-tag">🏙 ${esc(currentVille)}${currentCP?' ('+esc(currentCP)+')':''}</span>`:''}
+      ${currentDept?`<span class="geo-tag">📍 ${esc(currentDept)}</span>`:''}
+      ${currentRegion?`<span class="geo-tag">🗺 ${esc(currentRegion)}</span>`:''}
+    </div>`:''}
+  </div>
+  <input type="hidden" id="${fieldPrefix}-code_postal" value="${esc(currentCP||'')}">
+  <input type="hidden" id="${fieldPrefix}-departement" value="${esc(currentDept||'')}">
+  <input type="hidden" id="${fieldPrefix}-departement_code" value="">
+  <input type="hidden" id="${fieldPrefix}-region" value="${esc(currentRegion||'')}">`;
+}
+
+async function geoType(prefix, q){
+  const drop=document.getElementById(prefix+'-drop');if(!drop)return;
+  if(!q||q.length<2){drop.classList.remove('open');drop.innerHTML='';return;}
+  drop.innerHTML=`<div class="geo-opt" style="color:var(--tm);cursor:default">Recherche...</div>`;
+  drop.classList.add('open');
+  const results=await geoSearch(q);
+  if(!results.length){drop.innerHTML=`<div class="geo-opt" style="color:var(--tm);cursor:default">Aucun résultat</div>`;return;}
+  drop.innerHTML=results.map((r,i)=>`<div class="geo-opt" onclick="geoSelect('${prefix}',${i})">
+    <span class="geo-opt-name">${esc(r.nom)}${r.code_postal?' ('+esc(r.code_postal)+')':''}</span>
+    <span class="geo-opt-info">${esc(r.departement)} · ${esc(r.region)}</span>
+  </div>`).join('');
+  drop._results=results;
+}
+function geoSelect(prefix,idx){
+  const drop=document.getElementById(prefix+'-drop');if(!drop||!drop._results)return;
+  const r=drop._results[idx];if(!r)return;
+  const inp=document.getElementById(prefix+'-ville');
+  if(inp)inp.value=r.nom;
+  const setH=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  setH(prefix+'-code_postal',r.code_postal);
+  setH(prefix+'-departement',r.departement);
+  setH(prefix+'-departement_code',r.departement_code);
+  setH(prefix+'-region',r.region);
+  // Update tags display
+  const wrap=drop.closest('.geo-wrap');
+  let tags=wrap.querySelector('.geo-tags');
+  if(!tags){tags=document.createElement('div');tags.className='geo-tags';wrap.appendChild(tags);}
+  tags.innerHTML=`<span class="geo-tag">🏙 ${esc(r.nom)} (${esc(r.code_postal)})</span><span class="geo-tag">📍 ${esc(r.departement)}</span><span class="geo-tag">🗺 ${esc(r.region)}</span>`;
+  drop.classList.remove('open');drop.innerHTML='';
+}
+function geoClose(dropId){const d=document.getElementById(dropId);if(d)d.classList.remove('open');}
+function geoGetVal(prefix){
+  const g=id=>document.getElementById(id)?.value||'';
+  return {ville:g(prefix+'-ville'),code_postal:g(prefix+'-code_postal'),departement:g(prefix+'-departement'),departement_code:g(prefix+'-departement_code'),region:g(prefix+'-region')};
+}
+function bOpts(arr,pf,pv,sel,ph){let it=REF[arr]||[];if(pf&&pv)it=it.filter(x=>x[pf]===pv);return `<option value="">${ph}</option>`+it.map(x=>`<option value="${x.id}"${sel===x.id?' selected':''}>${esc(x.label)}</option>`).join('');}
+function bGrp(pA,cA,pId,sel,ph){let h=`<option value="">${ph}</option>`;(REF[pA]||[]).forEach(p=>{const ch=(REF[cA]||[]).filter(c=>c[pId]===p.id);if(ch.length)h+=`<optgroup label="${esc(p.label)}">`+ch.map(c=>`<option value="${c.id}"${sel===c.id?' selected':''}>${esc(c.label)}</option>`).join('')+'</optgroup>';});return h;}
+
+// Searchable select widget
+// Indexed items cache for searchSel (avoids HTML encoding bugs with apostrophes & special chars)
+const _ssItems={};
+function searchSel(id,items,selVal,placeholder){
+  const filtered=alphaSort((items||[]).filter(x=>x.actif!==false));
+  _ssItems[id]=filtered;
+  const selItem=filtered.find(x=>x.id===selVal);
+  const selLabel=selItem?.label||'';
+  const renderOpt=(x,i)=>{
+    const av=x.photo?`<img src="${x.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;margin-right:6px;flex-shrink:0">`
+      :'';
+    return `<div class="geo-opt" data-idx="${i}" data-ssid="${esc(id)}" onmousedown="event.preventDefault()" onclick="ssPickIdx('${id}',${i})" style="display:flex;align-items:center">
+      ${av}<span class="geo-opt-name">${esc(x.label)}</span>
+    </div>`;
+  };
+  const selAv=selItem?.photo?`<img src="${selItem.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:none" id="${id}-av">`:'<span id="${id}-av"></span>';
+  return `<div class="search-sel-wrap" style="position:relative">
+    ${selAv}
+    <input class="geo-input" id="${id}-inp" placeholder="${esc(placeholder)}" autocomplete="off" value="${esc(selLabel)}"
+      style="${selItem?.photo?'padding-left:36px':''}"
+      oninput="ssFilter('${id}',this.value)" onfocus="ssOpen('${id}')" onblur="setTimeout(()=>ssClose('${id}'),200)">
+    <input type="hidden" id="${id}-val" value="${esc(selVal||'')}">
+    <div class="geo-drop" id="${id}-drop" style="max-height:220px">
+      ${filtered.map((x,i)=>renderOpt(x,i)).join('')}
+    </div>
+  </div>`;
+}
+function ssPickIdx(id,idx){
+  const items=_ssItems[id]||[];
+  const x=items[idx];if(!x)return;
+  ssPick(id,x.id,x.label);
+}
+function ssFilter(id,q){
+  const drop=document.getElementById(id+'-drop');if(!drop)return;
+  const ql=q.toLowerCase().trim();
+  let visible=0;
+  drop.querySelectorAll('.geo-opt:not(.ss-create-btn)').forEach(o=>{const show=!ql||o.textContent.toLowerCase().includes(ql);o.style.display=show?'':'none';if(show)visible++;});
+  const existing=drop.querySelector('.ss-create-btn');if(existing)existing.remove();
+  if(ql&&ql.length>1&&visible===0){
+    const btn=document.createElement('div');
+    btn.className='ss-create-btn geo-opt';
+    btn.style.cssText='padding:8px 12px;cursor:pointer;color:var(--acc);font-weight:600;font-size:12px;border-top:1px solid var(--br)';
+    btn.textContent='+ Créer "'+q+'"';
+    btn.onmousedown=e=>e.preventDefault();
+    btn.onclick=()=>ssQuickCreate(id,q);
+    drop.appendChild(btn);
+  }
+  drop.classList.add('open');
+}
+function ssQuickCreate(selId,label){
+  const REF_MAP={'f-sa':'secteurs_act','cl-sa':'secteurs_act','f-ss':'sous_secteurs','cl-ss':'sous_secteurs','f-spec1':'specialites','f-spec2':'specialites','f-spec3':'specialites','f-spec4':'specialites','f-spec5':'specialites','cl-spec1':'specialites','cl-spec2':'specialites','cl-spec3':'specialites','cl-spec4':'specialites','cl-spec5':'specialites','f-fm':'familles_metier','f-m1':'metiers','f-m2':'metiers','f-m3':'metiers'};
+  const arr=REF_MAP[selId];
+  if(!arr){alert('Création rapide non disponible pour ce champ.');return;}
+  let parentId='',parentKey='';
+  if(arr==='sous_secteurs'){parentId=ssGet('f-sa')||ssGet('cl-sa');parentKey='secteur_id';}
+  if(arr==='specialites'){parentId=ssGet('f-ss')||ssGet('cl-ss');parentKey='sous_secteur_id';}
+  if(arr==='metiers'){parentId=ssGet('f-fm');parentKey='famille_id';}
+  if((arr==='sous_secteurs'||arr==='specialites'||arr==='metiers')&&!parentId){
+    alert(`Sélectionnez d'abord le ${arr==='metiers'?'famille métier':arr==='specialites'?'sous-secteur':'secteur'} parent avant de créer.`);return;
+  }
+  const newId=genId();
+  const item={id:newId,label:label.trim(),actif:true};
+  if(parentKey&&parentId)item[parentKey]=parentId;
+  if(!REF[arr])REF[arr]=[];
+  REF[arr].push(item);
+  saveKey('refs');
+  if(!_ssItems[selId])_ssItems[selId]=[];
+  _ssItems[selId].push(item);
+  ssPick(selId,newId,label.trim());
+  showToast('✓ "'+label.trim()+'" créé et sélectionné');
+}
+function ssOpen(id){
+  const drop=document.getElementById(id+'-drop');if(!drop)return;
+  drop.querySelectorAll('.geo-opt').forEach(o=>o.style.display='');
+  drop.classList.add('open');
+}
+function ssClose(id){const d=document.getElementById(id+'-drop');if(d)d.classList.remove('open');}
+function ssPick(id,val,label){
+  const inp=document.getElementById(id+'-inp');const hidden=document.getElementById(id+'-val');
+  if(inp){inp.value=label||'';}if(hidden)hidden.value=val||'';
+  // Update avatar preview if item has photo
+  const item=(_ssItems[id]||[]).find(x=>x.id===val);
+  const avEl=document.getElementById(id+'-av');
+  if(avEl){
+    if(item?.photo){avEl.outerHTML=`<img src="${item.photo}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:none" id="${id}-av">`;if(inp)inp.style.paddingLeft='36px';}
+    else{avEl.outerHTML=`<span id="${id}-av"></span>`;if(inp)inp.style.paddingLeft='';}
+  }
+  ssClose(id);
+  if(id==='f-fm')refreshMetiersForm(val);
+  if(id==='f-sa')refreshSousSectForm(val,'f-ss','cand');
+  if(id==='f-ss')refreshSpecsForm(val);
+  if(id==='cl-sa')refreshSousSectForm(val,'cl-ss','client');
+  if(id==='cl-ss')refreshClientSpecsForm(val);
+  if(id==='f-client_id'){
+    // Rafraîchir les contacts filtrés par le client sélectionné
+    const wrap=document.getElementById('f-contact_id-wrap');
+    if(wrap){
+      const cts=val?DB.contacts.filter(c=>c.client_id===val):DB.contacts;
+      const items=cts.map(c=>{const cl=getClient(c.client_id);return{id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}`};});
+      wrap.innerHTML=searchSel('f-contact_id',items,'','— Contact —');
+    }
+  }
+}
+function ssGet(id){return document.getElementById(id+'-val')?.value||'';}
+function refreshMetiersForm(famId){
+  const c=document.getElementById('metiers-wrap');if(!c)return;
+  const metiers=(REF.metiers||[]).filter(m=>m.actif!==false&&(!famId||m.famille_id===famId));
+  c.innerHTML=[1,2,3].map(n=>`<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em">Métier ${n}${n===1?' (principal)':''}</label>${searchSel('f-m'+n,metiers,ssGet('f-m'+n)||'','— Métier —')}</div>`).join('');
+}
+function refreshSousSectForm(sectId,prefix){
+  const c=document.getElementById(prefix+'-wrap');if(!c)return;
+  const ss=(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&(!sectId||s.secteur_id===sectId));
+  c.innerHTML=searchSel(prefix,ss,ssGet(prefix)||'','— Sous-secteur —');
+  refreshSpecsForm(''); // Reset specs when sector changes
+}
+function buildSpecSelects(ssId,cand){
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  // Compter combien de spécialités sont déjà renseignées (min 1 affiché, max 5)
+  let count=1;
+  for(let n=1;n<=5;n++){if(cand?.['spec'+n+'_id'])count=Math.min(n+1,5);}
+  window._specCount=Math.max(count,window._specCount||1);
+  let h='';
+  for(let n=1;n<=window._specCount;n++){
+    h+=`<div class="fld" id="spec-slot-${n}" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${n}</label>${searchSel('f-spec'+n,specs,cand?.['spec'+n+'_id']||'','— Spécialité —')}</div>
+      ${n>1?`<button type="button" onclick="removeSpec(${n})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._specCount<5){
+    h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  }
+  return h;
+}
+function addSpecSlot(){
+  if((window._specCount||1)>=5)return;
+  // Lire les valeurs actuellement saisies dans le DOM AVANT de reconstruire
+  const currentVals={};
+  for(let n=1;n<=window._specCount;n++){
+    currentVals[n]=document.getElementById('f-spec'+n+'-val')?.value||'';
+  }
+  window._specCount=(window._specCount||1)+1;
+  const ssId=ssGet('f-ss')||ssGet('f-sa')||'';
+  const wrap=document.getElementById('specs-wrap');if(!wrap)return;
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  let h='';
+  for(let n=1;n<=window._specCount;n++){
+    // Utiliser la valeur DOM (pas la valeur base)
+    const val=currentVals[n]||'';
+    h+=`<div class="fld" id="spec-slot-${n}" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${n}</label>${searchSel('f-spec'+n,specs,val,'— Spécialité —')}</div>
+      ${n>1?`<button type="button" onclick="removeSpec(${n})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._specCount<5)h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  wrap.innerHTML=h;
+}
+function removeSpec(n){
+  // Décaler les valeurs vers le haut
+  for(let i=n;i<5;i++){
+    const curr=document.getElementById('f-spec'+i+'-val');
+    const next=document.getElementById('f-spec'+(i+1)+'-val');
+    if(curr&&next)curr.value=next.value;
+    const currInp=document.getElementById('f-spec'+i+'-inp');
+    const nextInp=document.getElementById('f-spec'+(i+1)+'-inp');
+    if(currInp&&nextInp)currInp.value=nextInp.value;
+  }
+  window._specCount=Math.max(1,(window._specCount||1)-1);
+  const ssId=ssGet('f-ss')||ssGet('f-sa')||'';
+  const wrap=document.getElementById('specs-wrap');if(!wrap)return;
+  // Rebuild avec les nouvelles valeurs
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  let h='';
+  for(let i=1;i<=window._specCount;i++){
+    const curVal=document.getElementById('f-spec'+i+'-val')?.value||'';
+    h+=`<div class="fld" id="spec-slot-${i}" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${i}</label>${searchSel('f-spec'+i,specs,curVal,'— Spécialité —')}</div>
+      ${i>1?`<button type="button" onclick="removeSpec(${i})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._specCount<5)h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  wrap.innerHTML=h;
+}
+function refreshSpecsForm(ssId){
+  const wrap=document.getElementById('specs-wrap');if(!wrap)return;
+  window._specCount=1; // reset count on sector change
+  const c=EID?getCand(EID):{};
+  wrap.innerHTML=buildSpecSelects(ssId,c);
+}
+
+function buildClientSpecSelects(ssId,cl){
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  let count=1;
+  for(let n=1;n<=5;n++){if(cl?.['cl_spec'+n+'_id'])count=Math.min(n+1,5);}
+  window._clSpecCount=Math.max(count,window._clSpecCount||1);
+  let h='';
+  for(let n=1;n<=window._clSpecCount;n++){
+    h+=`<div class="fld" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${n}</label>${searchSel('cl-spec'+n,specs,cl?.['cl_spec'+n+'_id']||'','— Spécialité —')}</div>
+      ${n>1?`<button type="button" onclick="removeClientSpec(${n})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._clSpecCount<5)h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addClientSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  return h;
+}
+function addClientSpecSlot(){
+  if((window._clSpecCount||1)>=5)return;
+  // Lire les valeurs DOM actuelles AVANT rebuild
+  const currentVals={};
+  for(let n=1;n<=window._clSpecCount;n++){
+    currentVals[n]=document.getElementById('cl-spec'+n+'-val')?.value||'';
+  }
+  window._clSpecCount=(window._clSpecCount||1)+1;
+  const wrap=document.getElementById('cl-specs-wrap');if(!wrap)return;
+  const ssId=ssGet('cl-ss')||'';
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  let h='';
+  for(let n=1;n<=window._clSpecCount;n++){
+    const val=currentVals[n]||'';
+    h+=`<div class="fld" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${n}</label>${searchSel('cl-spec'+n,specs,val,'— Spécialité —')}</div>
+      ${n>1?`<button type="button" onclick="removeClientSpec(${n})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._clSpecCount<5)h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addClientSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  wrap.innerHTML=h;
+}
+function removeClientSpec(n){
+  for(let i=n;i<5;i++){
+    const curr=document.getElementById('cl-spec'+i+'-val');const next=document.getElementById('cl-spec'+(i+1)+'-val');
+    if(curr&&next)curr.value=next.value;
+    const ci=document.getElementById('cl-spec'+i+'-inp');const ni=document.getElementById('cl-spec'+(i+1)+'-inp');
+    if(ci&&ni)ci.value=ni.value;
+  }
+  window._clSpecCount=Math.max(1,(window._clSpecCount||1)-1);
+  const ssId=ssGet('cl-ss')||'';
+  const specs=(REF.specialites||[]).filter(s=>s.actif!==false&&(!ssId||s.sous_secteur_id===ssId));
+  const wrap=document.getElementById('cl-specs-wrap');if(!wrap)return;
+  let h='';
+  for(let i=1;i<=window._clSpecCount;i++){
+    const cv=document.getElementById('cl-spec'+i+'-val')?.value||'';
+    h+=`<div class="fld" style="display:flex;align-items:flex-end;gap:6px">
+      <div style="flex:1"><label>Spécialité ${i}</label>${searchSel('cl-spec'+i,specs,cv,'— Spécialité —')}</div>
+      ${i>1?`<button type="button" onclick="removeClientSpec(${i})" style="width:28px;height:32px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:15px;flex-shrink:0;margin-bottom:1px">✕</button>`:''}
+    </div>`;
+  }
+  if(window._clSpecCount<5)h+=`<div style="margin-top:6px"><button type="button" class="btn btn-s btn-sm" onclick="addClientSpecSlot()">+ Ajouter une spécialité</button></div>`;
+  wrap.innerHTML=h;
+}
+function refreshClientSpecsForm(ssId){
+  const wrap=document.getElementById('cl-specs-wrap');if(!wrap)return;
+  window._clSpecCount=1;
+  const c=EID?getClient(EID):{};
+  wrap.innerHTML=buildClientSpecSelects(ssId,c);
+}
+function openCandForm(id){
+  EID=id||null;window._pPhoto=null;window._pCV=null;window._specCount=1;
+  const c=id?getCand(id):{};const v=f=>esc(c[f]||'');
+  const photoHtml=c.photo?`<div style="position:relative;width:70px;height:70px"><img src="${c.photo}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;cursor:pointer" onclick="previewPhoto('${id}')" title="Cliquer pour agrandir"><button onclick="confirmDeletePhoto()" style="position:absolute;top:-4px;right:-4px;width:20px;height:20px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:12px;line-height:20px;text-align:center;padding:0" title="Supprimer la photo">✕</button></div>`:pzE();
+  const cvHtml=c.cv?`<div class="cv-file"><span>📄</span><span style="flex:1;font-size:13px;font-weight:500">${esc(c.cv.name)}</span><span style="font-size:11px;color:var(--tm)">${formatSize(c.cv.size)}</span><button class="btn btn-g btn-sm" onclick="clearFile('cv')">✕</button></div>`:cvzE();
+  const famMetiers=(REF.familles_metier||[]).filter(x=>x.actif!==false);
+  const metiersFam=c.famille_metier_id?(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===c.famille_metier_id):(REF.metiers||[]).filter(m=>m.actif!==false);
+  const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
+  const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
+  const isPDF=c.cv&&(c.cv.type==='application/pdf'||c.cv.name?.toLowerCase().endsWith('.pdf'));
+  const cvPanelHtml=c.cv?`
+    <div class="split-right">
+      <div class="split-right-title">📄 CV — ${esc(c.cv.name)}</div>
+      ${isPDF?`<iframe src="data:application/pdf;base64,${c.cv.data}" width="100%" height="700" style="border:1px solid var(--br);border-radius:8px;display:block"></iframe>`
+        :`<div style="text-align:center;padding:20px"><img src="data:${c.cv.type};base64,${c.cv.data}" style="max-width:100%;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.1)"></div>`}
+    </div>`:'';
+  const formHtml=`
+    <div id="doublon-cand-alert"></div>
+    <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px">
+      <div><div class="fld" style="margin:0"><label style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px;display:block">Photo</label><div id="photo-zone">${photoHtml}</div></div></div>
+      <div style="flex:1">
+        <div class="fr"><div class="fld"><label>Prénom</label><input id="f-prenom" value="${v('prenom')}" oninput="checkCandDoublons()"></div><div class="fld"><label>Nom</label><input id="f-nom" value="${v('nom')}" oninput="checkCandDoublons()"></div></div>
+        <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}" oninput="checkCandDoublons()"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}" oninput="checkCandDoublons()"></div></div>
+      </div>
+    </div>
+    <div class="fld"><label>CV — Ajoutez un PDF pour l'extraction automatique</label><div id="cv-zone">${cvHtml}</div><div id="parse-banner" class="parse-banner"></div></div>
+    <div class="section-title" style="margin-top:8px">Secteur d'activité</div>
+    <div class="fr">
+      <div class="fld"><label>Secteur d'activité</label>${searchSel('f-sa',saItems,c.secteur_act_new_id||'','— Secteur —')}</div>
+      <div class="fld"><label>Sous-secteur d'activité</label><div id="f-ss-wrap">${searchSel('f-ss',ssItems,c.sous_secteur_id||'','— Sous-secteur —')}</div></div>
+    </div>
+    <div class="section-title">Famille métier & Poste</div>
+    <div class="fld"><label>Famille métier</label>${searchSel('f-fm',famMetiers,c.famille_metier_id||'','— Famille métier —')}</div>
+    <div id="metiers-wrap">${[1,2,3].map(n=>`<div style="margin-bottom:6px"><label style="font-size:10px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em">Métier ${n}${n===1?' (principal)':''}</label>${searchSel('f-m'+n,metiersFam,c['metier'+n+'_id']||'','— Métier —')}</div>`).join('')}</div>
+    <div class="fr"><div class="fld"><label>Statut candidat</label><select id="f-statut_cand"><option value="Candidat"${(c.statut_cand||'Candidat')==='Candidat'?' selected':''}>Candidat</option><option value="Embauché"${c.statut_cand==='Embauché'?' selected':''}>Embauché</option><option value="Indisponible"${c.statut_cand==='Indisponible'?' selected':''}>Indisponible</option></select></div></div>
+    <div class="section-title">Spécialités</div>
+    <div style="font-size:11px;color:var(--ts);margin-bottom:8px">Spécialités rattachées au sous-secteur sélectionné</div>
+    <div class="fr" id="specs-wrap">
+      ${buildSpecSelects(c.sous_secteur_id||ssGet('f-ss')||'',c)}
+    </div>
+    <div class="section-title">Localisation & Expérience</div>
+    <div class="fld"><label>Localisation</label>${geoWidget('geo-c',c.ville||c.loc||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
+    <div class="fr"><div class="fld"><label>Entreprise actuelle</label><input id="f-ent" value="${v('ent')}"></div><div class="fld"><label>Prétentions salariales</label><input id="f-sal" value="${v('sal')}"></div></div>
+    <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="f-linkedin" value="${v('linkedin')}" placeholder="https://linkedin.com/in/..." oninput="checkCandDoublons()"></div>
+    <div class="fr">
+      <div class="fld"><label>Source ${!EID?'<span style="color:var(--red)">*</span>':''}</label><select id="f-source_type"><option value="">— Type de source —</option>${SOURCES_TYPE.map(s=>`<option value="${s}"${c.source_type===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fld"><label>Canal ${!EID?'<span style="color:var(--red)">*</span>':''}</label><select id="f-source_canal"><option value="">— Canal / Plateforme —</option>${SOURCES_CANAL.map(s=>`<option value="${s}"${c.source_canal===s?' selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="fa"><button class="btn btn-s" onclick="candFormCancel('${id||''}')">Annuler</button><button class="btn btn-p" onclick="saveCand()">Enregistrer</button></div>`;
+  const html=c.cv?`<div class="split-panel"><div class="split-left">${formHtml}</div>${cvPanelHtml}</div>`:formHtml;
+  OM(id?'Modifier le candidat':'Nouveau candidat',html,c.cv?'xxl':'w');
+}
+function candFormCancel(candId){CM();if(candId)openCandDetail(candId);}
+async function saveCand(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const geo=geoGetVal('geo-c');
+  const existing=EID?getCand(EID):{};
+  const prenom=g('prenom'),nom=g('nom'),email=g('email'),phone=g('phone'),linkedin=g('linkedin');
+  const source_type=g('source_type'),source_canal=g('source_canal');
+  // Validation AVANT de toucher _pCV/_pPhoto (sinon lost on retry)
+  if(!EID&&(!source_type||!source_canal)){alert('Merci de renseigner la source du candidat (type et canal).');return;}
+  // Capture photo + CV après validation
+  let photo=EID?existing.photo||null:null;if(window._pPhoto)photo=window._pPhoto;
+  let cv=EID?existing.cv||null:null;if(window._pCV)cv=window._pCV;
+  const doSave=async()=>{
+    window._pPhoto=null;window._pCV=null; // effacés seulement après save réussi
+    const form={
+      prenom,nom,email,phone:formatPhone(phone),
+      poste:g('poste'),statut_cand:g('statut_cand')||'Candidat',
+      source_type:source_type||existing.source_type||'',
+      source_canal:source_canal||existing.source_canal||'',
+      famille_metier_id:ssGet('f-fm'),
+      metier1_id:ssGet('f-m1'),metier2_id:ssGet('f-m2'),metier3_id:ssGet('f-m3'),
+      spec1_id:ssGet('f-spec1'),spec2_id:ssGet('f-spec2'),spec3_id:ssGet('f-spec3'),
+      spec4_id:ssGet('f-spec4'),spec5_id:ssGet('f-spec5'),
+      secteur_act_new_id:ssGet('f-sa'),sous_secteur_id:ssGet('f-ss'),
+      secteur_act_id:existing.secteur_act_id||'',secteur_poste_id:existing.secteur_poste_id||'',
+      famille_id:existing.famille_id||'',poste_ref_id:existing.poste_ref_id||'',
+      poste_ref_id2:existing.poste_ref_id2||'',poste_ref_id3:existing.poste_ref_id3||'',
+      ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,
+      loc:geo.ville||(existing.loc||''),ent:g('ent'),sal:g('sal'),linkedin,
+      photo,cv,
+      mots_cles:existing.mots_cles||[],pieces_jointes:existing.pieces_jointes||[],
+      cv_anonymise:existing.cv_anonymise||null,
+      notes:existing.notes||[],prequalif:existing.prequalif||{},entretien:existing.entretien||{},
+      entretiens:existing.entretiens||[],controles_ref:existing.controles_ref||[]
+    };
+    const savedId=EID;
+    EID?DB.candidats=DB.candidats.map(c=>c.id===savedId?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
+    // CRITIQUE : attendre la sauvegarde avant de fermer
+    const saveBtn=document.querySelector('.mbody .btn-p');
+    if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Enregistrement...';}
+    await save(['candidats']);
+    CM();R(CV);
+    showToast('✓ Candidat enregistré');
+    if(savedId){setTimeout(()=>openCandDetail(savedId),30);}
+  };
+  if(!EID){
+    const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
+    if(dupes.length){showDuplicatesAlert(dupes,'cand',doSave);return;}
+  }
+  doSave();
+}
+
+function closeCandDetail(){
+  const fromCmd=window._lastFromCmd;
+  window._lastFromCmd=null;
+  CM();
+  if(fromCmd){activeCmdTab[fromCmd]='cands';setTimeout(()=>openCmdDetail(fromCmd),30);}
+}
+function openCandDetail(id){
+  const c=getCand(id);if(!c)return;
+  const sAct=refLbl('secteurs',c.secteur_act_id),sPoste=refLbl('secteurs',c.secteur_poste_id);
+  // Nouveaux champs
+  const famMetierLbl=refLbl('familles_metier',c.famille_metier_id);
+  const m1=refLbl('metiers',c.metier1_id),m2=refLbl('metiers',c.metier2_id),m3=refLbl('metiers',c.metier3_id);
+  // Rétrocompat anciens postes
+  const pRef=refLbl('postes',c.poste_ref_id),pRef2=c.poste_ref_id2?refLbl('postes',c.poste_ref_id2):'',pRef3=c.poste_ref_id3?refLbl('postes',c.poste_ref_id3):'';
+  const allPostes=[m1||c.poste||pRef,m2||pRef2,m3||pRef3].filter(Boolean);
+  const statutColors={Candidat:'background:var(--acc-light);color:var(--acc2)',Embauché:'background:#ecfdf5;color:#065f46',Indisponible:'background:#fef3c7;color:#92400e'};
+  const statutStyle=statutColors[c.statut_cand||'Candidat']||statutColors.Candidat;
+  const locParts=[c.ville,c.departement?`(${c.departement_code||''}) ${c.departement}`:'',c.region].filter(Boolean);
+  const loc=locParts.length?locParts.join(' · '):(c.loc||'—');
+  const isPDF=c.cv&&(c.cv.type==='application/pdf'||c.cv.name?.toLowerCase().endsWith('.pdf'));
+  const cvS=c.cv?`<div style="margin-bottom:14px"><div class="dl" style="margin-bottom:7px">CV joint</div>
+    <div class="cv-file" style="margin-bottom:7px"><span>📄</span><span style="flex:1;font-size:13px;font-weight:500">${esc(c.cv.name)}</span><span style="font-size:11px;color:var(--tm)">${formatSize(c.cv.size)}</span>
+    ${isPDF?`<button class="cv-badge" id="cv-tbtn" onclick="toggleCV('${id}')">👁 Afficher</button>`:'<span style="font-size:11px;color:var(--tm)">Aperçu indispo (Word)</span>'}
+    <button class="cv-badge" onclick="dlCV(event,'${id}')">⬇ Télécharger</button></div>
+    <div id="cv-wrap" style="display:none;border:1px solid var(--br);border-radius:9px;overflow:hidden"><iframe id="cv-frame" src="about:blank" width="100%" height="560" style="display:block;border:none"></iframe></div></div>`:'';
+  const notesH=(c.notes||[]).length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune note</div>':[...(c.notes||[])].reverse().map(n=>`<div class="note-item"><div class="note-meta">📝 <b>${esc(n.cons)}</b> · ${n.date}</div><div class="note-content">${esc(n.content)}</div></div>`).join('');
+
+  const [avBg,avTxt]=AV_COLORS[0];
+  const avIni=(c.prenom+' '+c.nom).split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
+  const photoEl=c.photo
+    ?`<div style="width:70px;height:70px;border-radius:50%;overflow:hidden;flex-shrink:0;cursor:zoom-in" onclick="previewCandPhoto('${id}')"><img src="${c.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+    :`<div style="width:70px;height:70px;border-radius:50%;background:${avBg};color:${avTxt};display:flex;align-items:center;justify-content:center;font-size:25px;font-weight:700;flex-shrink:0">${avIni}</div>`;
+
+  const html=`
+    <div style="display:flex;gap:18px;align-items:flex-start;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br)">
+      ${photoEl}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:5px">
+          <div style="font-size:20px;font-weight:700;color:var(--tp)">${esc(c.prenom)} ${esc(c.nom)}</div>
+          <span style="${statutStyle};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(c.statut_cand||'Candidat')}</span>
+          ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé · ${esc(c.archive_motif||'')}</span>`:''}
+        </div>
+        <div style="font-size:13px;color:var(--ts);margin-bottom:10px">${allPostes.join(' · ')||'—'}${c.ent?' · '+esc(c.ent):''}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-s btn-sm" onclick="openAgendaForm(null,'cand','${id}')">📋 Tâche</button>
+          <button class="btn btn-p btn-sm" onclick="CM();openCandForm('${id}')">✏️ Modifier la fiche</button>
+          ${buildNavArrows(id,_vivierNav,'candNav')}
+        </div>
+      </div>
+      <button onclick="closeCandDetail()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this,'tab-infos')">Infos</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-preq')">Préqualification</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-entr')">Entretien</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-ref')">Contrôle de référence</button>
+    </div>
+
+    <!-- TAB: INFOS -->
+    <div id="tab-infos" class="tab-panel active">
+      <div class="dg2">
+        <div>
+          <div class="dg"><div class="dl">Contact</div><div class="dv">✉ ${esc(c.email||'—')}</div><div class="dv">📞 ${esc(formatPhone(c.phone)||'—')}</div></div>
+          <div class="dg"><div class="dl">Localisation</div><div class="dv">${esc(loc)}</div></div>
+          <div class="dg"><div class="dl">Prétentions</div><div class="dv">${esc(c.sal||'—')}</div></div>
+          ${c.linkedin?`<div class="dg"><div class="dl" style="display:flex;align-items:center;gap:4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</div><div class="dv"><a href="${esc(c.linkedin)}" target="_blank" style="color:var(--acc);text-decoration:none;font-size:12px">${esc(c.linkedin)}</a></div></div>`:''}
+        </div>
+        <div>
+          <div class="dg"><div class="dl">Secteur d'activité</div><div class="dv">${esc(c.secteur_act_new_id?refLbl('secteurs_act',c.secteur_act_new_id):(refLbl('secteurs',c.secteur_act_id)||'—'))}</div></div>
+          <div class="dg"><div class="dl">Sous-secteur</div><div class="dv">${esc(refLbl('sous_secteurs',c.sous_secteur_id)||'—')}</div></div>
+          <div class="dg"><div class="dl">Famille métier</div><div class="dv">${esc(refLbl('familles_metier',c.famille_metier_id)||'—')}</div></div>
+          <div class="dg"><div class="dl">Postes</div><div class="dv">${allPostes.map(p=>`<span style="display:inline-block;background:var(--bg);border:1px solid var(--br);border-radius:5px;padding:1px 7px;font-size:12px;margin:0 3px 3px 0">${esc(p)}</span>`).join('')||'—'}</div></div>
+        </div>
+      </div>
+      ${cvS}
+      ${c.cv_anonymise?`<div style="margin-bottom:14px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:600;color:#065f46">✅ CV Anonymisé disponible</div>
+          <div style="font-size:11px;color:var(--tm)">${esc(c.cv_anonymise.cons)} · ${c.cv_anonymise.date}</div>
+        </div>
+        <div class="cv-file" style="background:white">
+          <span>📄</span><span style="flex:1;font-size:13px;font-weight:500">${esc(c.cv_anonymise.name)}</span>
+          <button class="cv-badge" onclick="dlAnonCV('${id}')">⬇ Télécharger</button>
+          <button class="btn btn-s btn-sm" onclick="openAnonymize('${id}')">🔄 Réanonymiser</button>
+        </div>
+      </div>`:`<div style="margin-bottom:8px">${c.cv?`<button class="btn btn-s btn-sm" onclick="openAnonymize('${id}')">🔒 Anonymiser le CV</button>`:''}</div>`}
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pièces jointes (${(c.pieces_jointes||[]).length}/${PJ_MAX})</div>
+        <div id="pj-list-${id}">${pjListHtml(id,c.pieces_jointes||[])}</div>
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Mots-clés</div>
+        ${mkTagsHtml(id,c.mots_cles||[])}
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="dl">Notes (${(c.notes||[]).length})</div>
+          <button class="btn btn-s btn-sm" onclick="openAddNote('${id}')">+ Note</button>
+        </div>
+        ${notesH}
+      </div>
+      ${buildCandCmdsSection(id)}
+    </div>
+
+    <!-- TAB: PRÉQUALIFICATION -->
+    <div id="tab-preq" class="tab-panel">
+      ${c.prequalif?._saved_by?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--ts)"><svg width="13" height="13" fill="none" stroke="var(--acc)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Dernière saisie par <b style="color:var(--tp)">${esc(c.prequalif._saved_by)}</b> le ${esc(c.prequalif._saved_at)}</div>`:''}
+      <div style="padding:10px 14px;background:var(--acc-light);border:1px solid var(--br2);border-radius:9px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+        <div style="flex:1;font-size:13px;color:var(--acc2)">📎 Importez une trame de préqualification remplie pour remplir automatiquement les champs ci-dessous.</div>
+        <label class="btn btn-p btn-sm" style="cursor:pointer;flex-shrink:0">
+          📥 Importer la fiche
+          <input type="file" style="display:none" accept=".pdf,.doc,.docx" onchange="importPrequalifDoc(this,'${id}')">
+        </label>
+      </div>
+      ${buildPrequalifForm(id,c.prequalif||{})}
+    </div>
+
+    <!-- TAB: ENTRETIEN -->
+    <div id="tab-entr" class="tab-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:600">Entretiens (${(c.entretiens||[]).length + (c.entretien?.content?1:0)})</div>
+        <button class="btn btn-p btn-sm" onclick="openAddEntretien('${id}')">+ Ajouter un entretien</button>
+      </div>
+      <div id="entretiens-list-${id}">${buildEntretiensView(id, c)}</div>
+    </div>
+
+    <!-- TAB: CONTRÔLE DE RÉFÉRENCE -->
+    <div id="tab-ref" class="tab-panel">
+      <div id="controles-list-${id}">
+        ${buildControlesRefView(id, c.controles_ref||[])}
+      </div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--br)">
+        <button class="btn btn-s btn-sm" onclick="openAddControle('${id}')">+ Ajouter un contrôle de référence</button>
+      </div>
+    </div>
+
+    <div class="dact">
+      ${c.archived
+        ?`<button class="btn btn-s btn-sm" onclick="unarchiveFiche('cand','${id}')">♻️ Restaurer</button>`
+        :`<button class="btn btn-d btn-sm" onclick="archiveFiche('cand','${id}')">📦 Archiver</button>`
+      }
+      <button class="btn btn-d btn-sm" onclick="delCand('${id}')">🗑 Supprimer</button>
+      <button class="btn btn-s" onclick="CM()">Fermer</button>
+    </div>`;
+
+  // Si CV présent : affichage split (infos gauche, CV droite) — même logique que le mode modification
+  const cvViewPanel=isPDF?`
+    <div class="split-right">
+      <div class="split-right-title">📄 CV — ${esc(c.cv?.name||'')}</div>
+      <iframe src="data:application/pdf;base64,${c.cv?.data}" width="100%" height="700" style="border:1px solid var(--br);border-radius:8px;display:block"></iframe>
+    </div>`:
+    c.cv?`
+    <div class="split-right">
+      <div class="split-right-title">📄 CV — ${esc(c.cv?.name||'')}</div>
+      <div style="text-align:center;padding:20px"><img src="data:${c.cv?.type};base64,${c.cv?.data}" style="max-width:100%;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.1)"></div>
+    </div>`:'';
+
+  const finalHtml=c.cv?`<div class="split-panel"><div class="split-left">${html}</div>${cvViewPanel}</div>`:html;
+  OM('',finalHtml,c.cv?'xxl':'xl');
+}
+
+function switchTab(btn,panelId){
+  btn.closest('.mbody').querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.closest('.mbody').querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(panelId)?.classList.add('active');
+  // Store active tab for commands
+  const match=panelId.match(/^cmd-tab-(\w+)-([\w]+)$/);
+  if(match)activeCmdTab[match[2]]=match[1];
+}
+
+// ══ MULTI-ENTRETIENS ════════════════════════════════════
+function buildEntretiensView(candId, c){
+  const list=[];
+  // Migration: ancien champ unique → premier entretien
+  if(c.entretien?.content){
+    list.push({id:'legacy',date:c.entretien._saved_date||TODAY,cons:c.entretien._saved_by||'—',poste_label:'',content:c.entretien.content,_legacy:true});
+  }
+  (c.entretiens||[]).forEach(e=>list.push(e));
+  list.sort((a,b)=>b.date>a.date?1:-1);
+  if(!list.length)return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:16px 0">Aucun entretien enregistré</div>';
+  return list.map((e,i)=>`
+    <div style="background:var(--bg);border:1px solid var(--br);border-radius:9px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--tp)">Entretien du ${esc(e.date)}</div>
+          <div style="font-size:12px;color:var(--ts);margin-top:2px">
+            👤 <b>${esc(e.cons)}</b>${e.poste_label?' · 💼 '+esc(e.poste_label):''}
+            ${e._legacy?'<span style="font-size:10px;color:var(--tm);margin-left:6px">(migré)</span>':''}
+          </div>
+        </div>
+        ${!e._legacy?`<button class="ic-btn" style="color:var(--red)" onclick="delEntretien('${candId}','${e.id}')">🗑</button>`:''}
+      </div>
+      <div style="font-size:13px;color:var(--tp);line-height:1.7;white-space:pre-wrap">${esc(e.content)}</div>
+    </div>`).join('');
+}
+
+function openAddEntretien(candId){
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
+  const metierOpts=`<option value="">— Poste concerné —</option>`+(REF.metiers||[]).filter(m=>m.actif!==false).map(m=>`<option value="${m.id}">${esc(m.label)}</option>`).join('');
+  OM('Ajouter un entretien',`
+    <div class="fr"><div class="fld"><label>Date de l'entretien</label><input type="date" id="ei-date" value="${TODAY}"></div><div class="fld"><label>Consultant</label><select id="ei-cons">${cOpts}</select></div></div>
+    <div class="fld"><label>Poste concerné</label><select id="ei-poste">${metierOpts}</select></div>
+    <div class="fld"><label>Compte-rendu de l'entretien</label>${micWidget('ei-content')}<textarea id="ei-content" style="min-height:180px;line-height:1.7" placeholder="Impressions générales, points forts, points d'attention, échanges clés..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNewEntretien('${candId}')">Enregistrer</button></div>`,'w');
+}
+
+function saveNewEntretien(candId){
+  const date=document.getElementById('ei-date')?.value||TODAY;
+  const cons=document.getElementById('ei-cons')?.value||'—';
+  const poste_id=document.getElementById('ei-poste')?.value||'';
+  const poste_label=poste_id?refLbl('metiers',poste_id):'';
+  const content=(document.getElementById('ei-content')?.value||'').trim();
+  if(!content){alert('Le compte-rendu est obligatoire.');return;}
+  const entretien={id:genId(),date,cons,poste_id,poste_label,content,created_at:TODAY};
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,entretiens:[...(c.entretiens||[]),entretien]}:c);
+  save();CM();
+  const el=document.getElementById('entretiens-list-'+candId);
+  if(el)el.innerHTML=buildEntretiensView(candId,getCand(candId));
+  showToast('✓ Entretien enregistré');
+}
+
+function delEntretien(candId,entretienId){
+  if(!confirm('Supprimer cet entretien ?'))return;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,entretiens:(c.entretiens||[]).filter(e=>e.id!==entretienId)}:c);
+  save();
+  const el=document.getElementById('entretiens-list-'+candId);
+  if(el)el.innerHTML=buildEntretiensView(candId,getCand(candId));
+}
+
+// ══ ARCHIVAGE ════════════════════════════════════════════
+function archiveFiche(type,id){
+  const motifs=['Inactif','Refus candidat','Refus client','Doublon','Client perdu','Hors cible','Autre'];
+  const mOpts=motifs.map(m=>`<option value="${m}">${m}</option>`).join('');
+  OM('Archiver cette fiche',`
+    <div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:9px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--amber)">
+      ⚠️ La fiche sera archivée mais jamais supprimée. Elle restera accessible depuis le filtre "Archivés".
+    </div>
+    <div class="fld"><label>Motif d'archivage (obligatoire)</label><select id="arch-motif">${mOpts}</select></div>
+    <div class="fld"><label>Commentaire (optionnel)</label><textarea id="arch-comment" style="min-height:70px" placeholder="Précisez si nécessaire..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-d" onclick="confirmArchive('${type}','${id}')">Archiver</button></div>`,'n');
+}
+function confirmArchive(type,id){
+  const motif=document.getElementById('arch-motif')?.value;
+  const comment=(document.getElementById('arch-comment')?.value||'').trim();
+  if(!motif){alert('Sélectionnez un motif.');return;}
+  const archiveData={archived:true,archive_motif:motif,archive_comment:comment,archive_date:TODAY,archive_by:currentUser?.display_name||'—'};
+  if(type==='cand')DB.candidats=DB.candidats.map(c=>c.id===id?{...c,...archiveData}:c);
+  else DB.clients=DB.clients.map(c=>c.id===id?{...c,...archiveData}:c);
+  save();CM();R(CV);showToast('✓ Fiche archivée');
+  if(type==='cand')setTimeout(()=>openCandDetail(id),30);
+  else setTimeout(()=>openClientDetail(id),30);
+}
+function unarchiveFiche(type,id){
+  if(!confirm('Restaurer cette fiche ?'))return;
+  if(type==='cand')DB.candidats=DB.candidats.map(c=>c.id===id?{...c,archived:false,archive_motif:'',archive_date:'',archive_by:''}:c);
+  else DB.clients=DB.clients.map(c=>c.id===id?{...c,archived:false,archive_motif:'',archive_date:'',archive_by:''}:c);
+  save();CM();R(CV);showToast('✓ Fiche restaurée');
+  if(type==='cand')setTimeout(()=>openCandDetail(id),30);
+  else setTimeout(()=>openClientDetail(id),30);
+}
+
+// ══ LOGO CLIENT ══════════════════════════════════════════
+function clientAvatarHtml(c,size=50){
+  if(c.logo){
+    return `<img src="${c.logo}" style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.24)}px;object-fit:contain;background:white;padding:3px;border:1px solid var(--br);flex-shrink:0" alt="${esc(c.nom)}">`;
+  }
+  const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length];
+  const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<div style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.24)}px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.34)}px;font-weight:700;flex-shrink:0">${ini}</div>`;
+}
+function uploadClientLogo(inp,clientId){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>500*1024){alert('Image trop lourde (max 500Ko)');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    const logoData=e.target.result;
+    if(clientId){
+      // Existing client — save immediately
+      DB.clients=DB.clients.map(c=>c.id===clientId?{...c,logo:logoData}:c);
+      save();openClientDetail(clientId);
+    }else{
+      // New client — store temporarily, apply on save
+      window._pClientLogo=logoData;
+      // Show preview in form
+      const preview=document.getElementById('client-logo-preview');
+      if(preview)preview.innerHTML=`<img src="${logoData}" style="width:50px;height:50px;border-radius:10px;object-fit:contain;background:white;border:1px solid var(--br)"><span style="font-size:12px;color:var(--ts);margin-left:8px">Logo prêt à enregistrer</span>`;
+    }
+  };
+  r.readAsDataURL(file);
+}
+function removeClientLogo(clientId){
+  if(!confirm('Supprimer le logo ?'))return;
+  DB.clients=DB.clients.map(c=>c.id===clientId?{...c,logo:null}:c);
+  save();openClientDetail(clientId);
+}
+
+// ══ API SIRENE (INSEE) ═══════════════════════════════════
+let _sireneCache={};let _sireneTimer=null;
+async function sireneSearch(q){
+  if(!q||q.length<3)return[];
+  const key=q.toLowerCase();
+  if(_sireneCache[key])return _sireneCache[key];
+  try{
+    // Use recherche-entreprises.api.gouv.fr (no auth required, free)
+    const r=await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&page=1&per_page=8`);
+    if(!r.ok)return[];
+    const data=await r.json();
+    const results=(data.results||[]).map(e=>{
+      const etab=e.siege||{};
+      return {
+        nom:e.nom_complet||e.nom_raison_sociale||'',
+        siren:e.siren||'',
+        siret:etab.siret||'',
+        adresse:[etab.numero_voie,etab.type_voie,etab.libelle_voie,etab.code_postal,etab.libelle_commune].filter(Boolean).join(' '),
+        ville:etab.libelle_commune||'',
+        code_postal:etab.code_postal||'',
+        naf:e.activite_principale||'',
+        naf_label:e.libelle_activite_principale||'',
+        statut:e.etat_administratif==='A'?'Active':'Fermée',
+        date_creation:e.date_creation||'',
+      };
+    });
+    _sireneCache[key]=results;
+    return results;
+  }catch(e){return [];}
+}
+
+function sireneDrop(id){const d=document.getElementById(id+'-sirene-drop');if(d)d.classList.remove('open');}
+async function sireneType(q){
+  clearTimeout(_sireneTimer);
+  const drop=document.getElementById('sirene-drop');if(!drop)return;
+  if(!q||q.length<2){drop.classList.remove('open');drop.innerHTML='';return;}
+  drop.innerHTML=`<div class="geo-opt" style="color:var(--tm);cursor:default">Recherche...</div>`;
+  drop.classList.add('open');
+  _sireneTimer=setTimeout(async()=>{
+    const results=await sireneSearch(q);
+    if(!results.length){drop.innerHTML=`<div class="geo-opt" style="color:var(--tm);cursor:default">Aucune entreprise trouvée</div>`;return;}
+    drop.innerHTML=results.map((r,i)=>`<div class="geo-opt" onmousedown="event.preventDefault()" onclick="sireneSelect(${i})">
+      <div><span class="geo-opt-name">${esc(r.nom)}</span><span style="font-size:10px;color:var(--tm);margin-left:8px">${esc(r.naf_label)}</span></div>
+      <span class="geo-opt-info">${esc(r.ville)} · ${esc(r.siren)}</span>
+    </div>`).join('');
+    drop._results=results;
+  },300);
+}
+
+function sireneSelect(idx){
+  const drop=document.getElementById('sirene-drop');if(!drop||!drop._results)return;
+  const r=drop._results[idx];if(!r)return;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  set('f-nom',r.nom);set('f-siren',r.siren);set('f-siret',r.siret);
+  set('f-adresse_sirene',r.adresse);set('f-naf',r.naf);set('f-naf_label',r.naf_label);
+  set('f-statut_sirene',r.statut);set('f-date_creation_sirene',r.date_creation);
+  set('f-source_sirene','API SIRENE');
+  const geoInp=document.getElementById('geo-cl-ville');if(geoInp&&r.ville){geoInp.value=r.ville;}
+  const sireneInp=document.getElementById('sirene-inp');if(sireneInp)sireneInp.value=r.nom;
+  drop.classList.remove('open');
+  if(r.siren)showToast('✓ Données INSEE importées');
+}
+
+function buildControlesRefView(candId, controles){
+  if(!controles||!controles.length) return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:16px 0">Aucun contrôle de référence saisi</div>';
+  return controles.map((ctrl,i)=>`
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:10px;border:1px solid var(--br)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--acc)">Contrôle ${i+1} — ${esc(ctrl.entreprise||'Entreprise')}</div>
+        <div style="display:flex;gap:5px;align-items:center">
+          <span style="font-size:11px;color:var(--tm)">${esc(ctrl._saved_by||'')} · ${esc(ctrl._saved_date||'')}</span>
+          <button class="ic-btn" onclick="delControle('${candId}',${i})" style="color:var(--red)">🗑</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><div class="dl">Entreprise</div><div class="dv">${esc(ctrl.entreprise||'—')}</div></div>
+        <div><div class="dl">Interlocuteur</div><div class="dv">${esc(ctrl.interlocuteur||'—')}</div></div>
+        <div><div class="dl">Coordonnées</div><div class="dv">${esc(ctrl.coordonnees||'—')}</div></div>
+      </div>
+      ${ctrl.retour?`<div><div class="dl" style="margin-bottom:4px">Retour du contrôle</div><div style="font-size:13px;color:var(--tp);line-height:1.6;white-space:pre-wrap">${esc(ctrl.retour)}</div></div>`:''}
+    </div>`).join('');
+}
+function openAddControle(candId){
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
+  OM('Nouveau contrôle de référence',`
+    <div class="fr"><div class="fld"><label>Entreprise</label><input id="cr-ent" placeholder="Nom de l'entreprise"></div><div class="fld"><label>Interlocuteur</label><input id="cr-inter" placeholder="Prénom Nom, Fonction"></div></div>
+    <div class="fld"><label>Coordonnées</label><input id="cr-coord" placeholder="Téléphone, email..."></div>
+    <div class="fld"><label>Consultant</label><select id="cr-cons">${cOpts}</select></div>
+    <div class="fld"><label>Retour du contrôle de référence</label><textarea id="cr-retour" style="min-height:150px" placeholder="Saisissez ici le compte-rendu du contrôle de référence..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveControle('${candId}')">Enregistrer</button></div>`,'w');
+}
+function saveControle(candId){
+  const ctrl={
+    entreprise:document.getElementById('cr-ent')?.value||'',
+    interlocuteur:document.getElementById('cr-inter')?.value||'',
+    coordonnees:document.getElementById('cr-coord')?.value||'',
+    retour:(document.getElementById('cr-retour')?.value||'').trim(),
+    _saved_by:document.getElementById('cr-cons')?.value||currentUser?.display_name||'—',
+    _saved_date:TODAY
+  };
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,controles_ref:[...(c.controles_ref||[]),ctrl]}:c);
+  save();CM();openCandDetail(candId);
+}
+function delControle(candId,idx){
+  if(!confirm('Supprimer ce contrôle ?'))return;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,controles_ref:(c.controles_ref||[]).filter((_,i)=>i!==idx)}:c);
+  save();openCandDetail(candId);
+}
+
+// ══ IMPORT PRÉQUALIFICATION ══════════════════════════════
+async function importPrequalifDoc(inp,candId){
+  const file=inp.files[0];if(!file)return;
+  inp.value=''; // reset so same file can be re-imported
+  if(file.size>5*1024*1024){alert('Fichier trop lourd (max 5Mo)');return;}
+  const banner=document.createElement('div');
+  banner.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:9999';
+  banner.innerHTML='<div style="background:var(--card);border-radius:14px;padding:28px 36px;text-align:center;font-size:14px;font-weight:500;color:var(--tp)">⏳ Analyse de la trame en cours...</div>';
+  document.body.appendChild(banner);
+  try{
+    const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+    const result=await api('POST','/api/parse-prequalif',{name:file.name,type:file.type,data:base64});
+    banner.remove();
+    if(result?.error){
+      alert('⚠️ '+result.error);return;
+    }
+    const parsed=result?.parsed||{};
+    showPrequalifReview(candId,parsed);
+  }catch(e){
+    banner.remove();
+    alert('Erreur lors de l\'analyse : '+e.message+'\nVérifiez que votre clé API est configurée dans Railway.');
+  }
+}
+
+let _prequalifImportData=null; // stockage temporaire des données extraites
+
+function showPrequalifReview(candId,parsed){
+  const c=getCand(candId);
+  const pq=c?.prequalif||{};
+  const LABELS={
+    en_poste:'En poste',preavis:'Préavis',disponible:'Disponible',raisons_dispo:'Raisons disponibilité',
+    raisons_ecoute:'Raisons d\'écoute',type_poste:'Type de poste recherché',
+    rem_actuelle:'Rémunération actuelle',rem_souhaitee:'Rémunération souhaitée',
+    refus_secteurs:'Secteurs à éviter',souhaits:'Secteurs souhaités',
+    processus_en_cours:'Processus en cours',motivation_note:'Motivation (1-5)',motivation_comment:'Commentaire motivation',
+    exp1_entreprise:'Exp.1 Entreprise',exp1_poste:'Exp.1 Poste',exp1_duree:'Exp.1 Durée',exp1_depart:'Exp.1 Départ',exp1_missions:'Exp.1 Missions',
+    exp2_entreprise:'Exp.2 Entreprise',exp2_poste:'Exp.2 Poste',exp2_duree:'Exp.2 Durée',exp2_depart:'Exp.2 Départ',exp2_missions:'Exp.2 Missions',
+    exp3_entreprise:'Exp.3 Entreprise',exp3_poste:'Exp.3 Poste',exp3_duree:'Exp.3 Durée',exp3_depart:'Exp.3 Départ',exp3_missions:'Exp.3 Missions',
+    logiciels:'Logiciels',dispo_format:'Format entretien',dispo_date:'Date entretien',dispo_heure:'Heure entretien',ressenti:'Ressenti recruteur'
+  };
+
+  const hasData=Object.entries(parsed).some(([k,v])=>v!==''&&v!==0&&v!==false&&v!==null&&v!==undefined);
+  if(!hasData){
+    OM('Import préqualification',`<div style="padding:20px;text-align:center;color:var(--tm)">⚠️ Aucune information n'a pu être extraite du document.<br><br>Vérifiez que le document est bien rempli et lisible.</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+    return;
+  }
+
+  // Stocker dans variable globale pour éviter les problèmes d'échappement dans onclick
+  _prequalifImportData={candId,parsed};
+
+  const rows=Object.entries(LABELS).map(([k,lbl])=>{
+    const newVal=parsed[k];
+    const curVal=pq[k];
+    const hasNew=newVal!==undefined&&newVal!==''&&newVal!==0&&newVal!==false&&newVal!==null;
+    if(!hasNew)return '';
+    const hasCur=curVal!==undefined&&curVal!==''&&curVal!==0&&curVal!==false&&curVal!==null;
+    const conflict=hasCur&&String(curVal)!==String(newVal);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:10px">
+      <input type="checkbox" id="pqi-${k}" ${!conflict?'checked':''} style="margin-top:3px;accent-color:var(--acc);width:16px;height:16px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.04em">${lbl}</div>
+        <div style="font-size:13px;color:var(--tp);margin-top:2px">${esc(String(newVal))}</div>
+        ${conflict?`<div style="font-size:11px;color:var(--amber);margin-top:2px">⚠️ Valeur actuelle : ${esc(String(curVal))}</div>`:''}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  OM('Vérification — Données importées',`
+    <div style="background:var(--acc-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--acc2)">
+      ✅ Données extraites de la trame. Cochez les champs à importer, décochez ceux à ignorer.
+      Les champs avec ⚠️ contiennent déjà une valeur différente.
+    </div>
+    <div style="max-height:450px;overflow-y:auto;padding-right:4px">${rows}</div>
+    <div class="fa" style="margin-top:14px">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="applyPrequalifImport()">✅ Appliquer les champs cochés</button>
+    </div>`,'w');
+}
+
+function applyPrequalifImport(){
+  if(!_prequalifImportData)return;
+  const {candId,parsed}=_prequalifImportData;
+  const KEYS=['en_poste','preavis','disponible','raisons_dispo','raisons_ecoute','type_poste',
+    'rem_actuelle','rem_souhaitee','refus_secteurs','souhaits','processus_en_cours',
+    'motivation_note','motivation_comment',
+    'exp1_entreprise','exp1_poste','exp1_duree','exp1_depart','exp1_missions',
+    'exp2_entreprise','exp2_poste','exp2_duree','exp2_depart','exp2_missions',
+    'exp3_entreprise','exp3_poste','exp3_duree','exp3_depart','exp3_missions',
+    'logiciels','dispo_format','dispo_date','dispo_heure','ressenti'];
+  const toApply={};
+  KEYS.forEach(k=>{
+    const cb=document.getElementById('pqi-'+k);
+    if(cb&&cb.checked&&parsed[k]!==undefined&&parsed[k]!==''&&parsed[k]!==null)toApply[k]=parsed[k];
+  });
+  const c=getCand(candId);if(!c)return;
+  const newPq={...(c.prequalif||{}),...toApply};
+  DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,prequalif:newPq}:x);
+  save();_prequalifImportData=null;CM();
+  showToast('✓ '+Object.keys(toApply).length+' champ(s) importé(s)');
+  setTimeout(()=>{
+    openCandDetail(candId);
+    setTimeout(()=>{
+      const btn=document.querySelector('[onclick*="tab-preq"]');
+      if(btn)btn.click();
+    },150);
+  },30);
+}
+
+function buildPrequalifForm(candId,pq){
+  const v=k=>esc(pq[k]||'');const chk=(k,val)=>pq[k]===val?' checked':'';const bool=(k)=>pq[k]?'checked':'';
+  const expBlock=(n,exp={})=>`<div class="exp-block"><div class="exp-block-title">Expérience ${n}</div>
+    <div class="fr"><div class="fld"><label>Entreprise</label><input class="pq-inp" data-key="exp${n}_entreprise" value="${esc(exp.entreprise||'')}"></div><div class="fld"><label>Poste occupé</label><input class="pq-inp" data-key="exp${n}_poste" value="${esc(exp.poste||'')}"></div></div>
+    <div class="fr"><div class="fld"><label>Durée</label><input class="pq-inp" data-key="exp${n}_duree" value="${esc(exp.duree||'')}" placeholder="ex: 3 ans"></div><div class="fld"><label>Raison du départ</label><input class="pq-inp" data-key="exp${n}_depart" value="${esc(exp.depart||'')}"></div></div>
+    <div class="fld"><label>Missions réalisées</label><textarea class="pq-inp" data-key="exp${n}_missions" style="min-height:60px">${esc(exp.missions||'')}</textarea></div></div>`;
+  return `<div id="preq-form-${candId}">
+  <div class="section-title">A. Situation actuelle</div>
+  <div style="display:flex;gap:20px;margin-bottom:10px">
+    <label class="check-row"><input type="checkbox" class="pq-inp" data-key="en_poste" ${bool('en_poste')} onchange="togglePreqField('preavis_wrap','${candId}',this.checked)"> En poste</label>
+    <label class="check-row"><input type="checkbox" class="pq-inp" data-key="disponible" ${bool('disponible')} onchange="togglePreqField('dispo_wrap','${candId}',this.checked)"> Disponible</label>
+  </div>
+  <div id="preavis_wrap" style="display:${pq.en_poste?'block':'none'}"><div class="fld"><label>Durée du préavis</label><input class="pq-inp" data-key="preavis" value="${v('preavis')}" placeholder="ex: 3 mois"></div></div>
+  <div id="dispo_wrap" style="display:${pq.disponible?'block':'none'}"><div class="fld"><label>Raisons de disponibilité</label><input class="pq-inp" data-key="raisons_dispo" value="${v('raisons_dispo')}"></div></div>
+
+  <div class="section-title">B. Raisons d'écoute</div>
+  <div class="fld"><label>Pour quelles raisons êtes-vous à l'écoute d'opportunités ?</label><textarea class="pq-inp" data-key="raisons_ecoute" style="min-height:80px">${v('raisons_ecoute')}</textarea></div>
+
+  <div class="section-title">C. Type de poste recherché</div>
+  <div class="fld"><label>Vous recherchez quel type de poste ?</label>
+    <div class="fld-hint" style="margin-bottom:6px">Mission, titre, type d'entreprise, environnement de travail, projet professionnel...</div>
+    <textarea class="pq-inp" data-key="type_poste" style="min-height:80px">${v('type_poste')}</textarea></div>
+
+  <div class="section-title">D. Rémunération</div>
+  <div class="fr"><div class="fld"><label>Rémunération actuelle</label><input class="pq-inp" data-key="rem_actuelle" value="${v('rem_actuelle')}" placeholder="ex: 45 000€"></div><div class="fld"><label>Rémunération souhaitée</label><input class="pq-inp" data-key="rem_souhaitee" value="${v('rem_souhaitee')}" placeholder="ex: 50 000€"></div></div>
+  <div class="fr"><div class="fld"><label>Type</label><select class="pq-inp" data-key="rem_type"><option value="brut"${(pq.rem_type||'brut')==='brut'?' selected':''}>Brut</option><option value="net"${pq.rem_type==='net'?' selected':''}>Net</option></select></div><div class="fld"><label>Périodicité</label><select class="pq-inp" data-key="rem_mois"><option value="12"${(pq.rem_mois||'12')==='12'?' selected':''}>12 mois</option><option value="13"${pq.rem_mois==='13'?' selected':''}>13 mois</option></select></div></div>
+  <div class="fld"><label>Avantages</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      ${['primes','paniers_repas','tickets_restaurant','rtt','vehicule_service','vehicule_fonction'].map(k=>`<label class="check-row" style="font-size:12px"><input type="checkbox" class="pq-inp" data-key="av_${k}" ${pq['av_'+k]?'checked':''}> ${k.replace(/_/g,' ')}</label>`).join('')}
+    </div>
+  </div>
+
+  <div class="section-title">E. Souhaits et refus</div>
+  <div class="fld"><label>Sociétés / secteurs à éviter</label><textarea class="pq-inp" data-key="refus_secteurs" style="min-height:55px">${v('refus_secteurs')}</textarea></div>
+  <div class="fld"><label>Raisons</label><input class="pq-inp" data-key="refus_raisons" value="${v('refus_raisons')}"></div>
+  <div class="fld"><label>Secteurs / entreprises souhaités</label><textarea class="pq-inp" data-key="souhaits" style="min-height:55px">${v('souhaits')}</textarea></div>
+
+  <div class="section-title">F. Processus en cours</div>
+  <div class="fld"><label>En processus de recrutement actuellement ?</label><textarea class="pq-inp" data-key="processus_en_cours" style="min-height:55px">${v('processus_en_cours')}</textarea></div>
+
+  <div class="section-title">G. Motivation au changement</div>
+  <div class="fld"><label>Note de motivation (1 à 5)</label>
+    <div class="star-rating" id="stars-${candId}">
+      ${[1,2,3,4,5].map(i=>`<button class="star-btn${(pq.motivation_note||0)>=i?' on':''}" onclick="setMotivNote('${candId}',${i})">${(pq.motivation_note||0)>=i?'★':'☆'}</button>`).join('')}
+    </div>
+    <input type="hidden" id="motiv-note-${candId}" value="${pq.motivation_note||0}">
+  </div>
+  <div class="fld"><label>Commentaire recruteur (obligatoire)</label><textarea class="pq-inp" data-key="motivation_comment" style="min-height:70px" placeholder="Observations sur la motivation du candidat...">${v('motivation_comment')}</textarea></div>
+
+  <div class="section-title">H. 3 dernières expériences professionnelles</div>
+  ${expBlock(1,pq.exp1||{})}${expBlock(2,pq.exp2||{})}${expBlock(3,pq.exp3||{})}
+
+  <div class="section-title">I. Logiciels maîtrisés</div>
+  <div class="fld"><label>Logiciels utilisés et maîtrisés</label><input class="pq-inp" data-key="logiciels" value="${v('logiciels')}" placeholder="ex: AutoCAD, Revit, MS Project, Chorus..."></div>
+
+  <div class="section-title">J. Disponibilités entretien</div>
+  <div class="fr3">
+    <div class="fld"><label>Format</label><select class="pq-inp" data-key="dispo_format"><option value="physique"${(pq.dispo_format||'physique')==='physique'?' selected':''}>Physique</option><option value="visio"${pq.dispo_format==='visio'?' selected':''}>Visio</option></select></div>
+    <div class="fld"><label>Date</label><input type="date" class="pq-inp" data-key="dispo_date" value="${v('dispo_date')}"></div>
+    <div class="fld"><label>Heure</label><input type="time" class="pq-inp" data-key="dispo_heure" value="${v('dispo_heure')}"></div>
+  </div>
+
+  <div class="section-title">K. Ressenti recruteur</div>
+  <div class="fld"><label>Commentaire libre</label><textarea class="pq-inp" data-key="ressenti" style="min-height:80px" placeholder="Impressions générales, points d'attention, recommandations...">${v('ressenti')}</textarea></div>
+
+  <div style="display:flex;justify-content:flex-end;margin-top:8px">
+    <button class="btn btn-p" onclick="savePrequalif('${candId}')">💾 Enregistrer la préqualification</button>
+  </div>
+  </div>`;
+}
+
+function togglePreqField(wrapId,candId,show){
+  const w=document.getElementById(wrapId);if(w)w.style.display=show?'block':'none';
+}
+function setMotivNote(candId,note){
+  document.getElementById('motiv-note-'+candId).value=note;
+  const stars=document.getElementById('stars-'+candId)?.querySelectorAll('.star-btn');
+  stars?.forEach((s,i)=>{s.classList.toggle('on',i<note);s.textContent=i<note?'★':'☆';});
+}
+function savePrequalif(candId){
+  const form=document.getElementById('preq-form-'+candId);if(!form)return;
+  const pq={};
+  form.querySelectorAll('.pq-inp').forEach(el=>{
+    const k=el.dataset.key;
+    if(!k)return;
+    if(el.type==='checkbox')pq[k]=el.checked;
+    else pq[k]=el.value;
+  });
+  const noteInp=document.getElementById('motiv-note-'+candId);
+  if(noteInp)pq.motivation_note=parseInt(noteInp.value)||0;
+  pq._saved_by=currentUser?.display_name||'—';
+  pq._saved_at=TODAY;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,prequalif:pq}:c);
+  save();
+  const msg=document.createElement('div');msg.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';msg.textContent='✓ Préqualification enregistrée';document.body.appendChild(msg);setTimeout(()=>msg.remove(),2500);
+}
+function candNav(currentId,dir){
+  const idx=_vivierNav.indexOf(currentId);
+  if(idx===-1)return;
+  const nextIdx=idx+dir;
+  if(nextIdx<0||nextIdx>=_vivierNav.length)return;
+  openCandDetail(_vivierNav[nextIdx]);
+}
+function clientNav(currentId,dir){
+  const idx=_clientsNav.indexOf(currentId);
+  if(idx===-1)return;
+  const ni=idx+dir;
+  if(ni<0||ni>=_clientsNav.length)return;
+  openClientDetail(_clientsNav[ni]);
+}
+function cmdNav(currentId,dir){
+  const idx=_cmdsNav.indexOf(currentId);
+  if(idx===-1)return;
+  const ni=idx+dir;
+  if(ni<0||ni>=_cmdsNav.length)return;
+  openCmdDetail(_cmdsNav[ni]);
+}
+
+function buildNavArrows(id,nav,navFn){
+  const idx=nav.indexOf(id);
+  if(idx===-1||nav.length<=1)return '';
+  const hasPrev=idx>0,hasNext=idx<nav.length-1;
+  const btn=(active,dir,title)=>`<button ${active?`onclick="${navFn}('${id}',${dir})"`:'disabled'} style="width:30px;height:30px;border-radius:7px;border:1px solid var(--br);background:${active?'var(--card)':'var(--bg)'};color:${active?'var(--tp)':'var(--tm)'};cursor:${active?'pointer':'default'};font-size:18px;display:flex;align-items:center;justify-content:center" title="${title}">${dir<0?'‹':'›'}</button>`;
+  return `<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+    ${btn(hasPrev,-1,'Précédent')}
+    <span style="font-size:11px;color:var(--tm);white-space:nowrap">${idx+1}/${nav.length}</span>
+    ${btn(hasNext,1,'Suivant')}
+  </div>`;
+}
+function buildCandCmdsSection(candId){
+  // Toutes les commandes où ce candidat apparaît
+  const entries=[];
+  DB.commandes.forEach(cmd=>{
+    (cmd.candidats||[]).forEach(cc=>{
+      if(cc.candidat_id===candId)entries.push({cmd,cc});
+    });
+  });
+
+  const ETAPE_LABELS={
+    envc:'Envoyé au client',
+    entr_cl:'Entretien client',
+    prop:'Proposition envoyée',
+    refc:'Refus candidat',
+    refcl:'Refus client',
+    emb:'Embauché',
+    preq:'Préqualification',
+    entr:'Entretien cabinet',
+    recr:'Recruté',
+    nrc:'Non retenu cabinet',
+  };
+  const ETAPE_COLORS={
+    envc:'background:#e8f4f8;color:#1e6080',
+    entr_cl:'background:#f5f3ff;color:#7c3aed',
+    prop:'background:#fffbeb;color:#d97706',
+    refc:'background:#fef2f2;color:#dc2626',
+    refcl:'background:#fff1f2;color:#b91c1c',
+    emb:'background:#ecfdf5;color:#065f46',
+    preq:'background:#e8f4f8;color:#165068',
+    entr:'background:#ddeef5;color:#165068',
+    recr:'background:#ecfdf5;color:#16a34a',
+    nrc:'background:#f8fafc;color:#475569',
+  };
+
+  if(!entries.length){
+    return `<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br)">
+      <div class="dl" style="margin-bottom:6px">Commandes</div>
+      <div style="font-size:13px;color:var(--tm);font-style:italic">Ce candidat n'est rattaché à aucune commande</div>
+    </div>`;
+  }
+
+  const rows=entries.map(({cmd,cc})=>{
+    const cl=getClient(cmd.client_id);
+    const etapeLabel=ETAPE_LABELS[cc.etape]||cc.etape||'—';
+    const etapeStyle=ETAPE_COLORS[cc.etape]||'background:var(--bg);color:var(--ts)';
+    const infoTag=cc.etape_info?.date?`<span style="font-size:11px;color:var(--tm)">📅 ${esc(cc.etape_info.date)}</span>`:
+      cc.etape_info?.salaire?`<span style="font-size:11px;color:var(--tm)">💰 ${esc(cc.etape_info.salaire)}</span>`:
+      cc.etape_info?.motif?`<span style="font-size:11px;color:var(--red)">⚠️ ${esc(cc.etape_info.motif)}</span>`:'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bg)">
+      <div style="flex:1;min-width:0">
+        <a href="#" onclick="event.preventDefault();CM();openCmdDetail('${cmd.id}')" style="font-size:13px;font-weight:600;color:var(--acc);text-decoration:none">${esc(cmd.titre)}</a>
+        <div style="font-size:12px;color:var(--ts);margin-top:2px">🏢 ${esc(cl?.nom||'—')} · ${renderCons(cmd.cons,16)}</div>
+        ${infoTag?`<div style="margin-top:3px">${infoTag}</div>`:''}
+      </div>
+      <span style="${etapeStyle};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:500;flex-shrink:0">${esc(etapeLabel)}</span>
+    </div>`;
+  }).join('');
+
+  return `<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br)">
+    <div class="dl" style="margin-bottom:8px">Commandes (${entries.length})</div>
+    ${rows}
+  </div>`;
+}
+function openAddNote(candId){
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
+  OM('Ajouter une note',`<div class="fld"><label>Consultant</label><select id="nc">${cOpts}</select></div><div class="fld"><label>Note</label><textarea id="nn" style="min-height:100px" placeholder="Contenu de la note..."></textarea></div><div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNote('${candId}')">Ajouter</button></div>`,'n');
+}
+function saveNote(candId){
+  const cons=document.getElementById('nc')?.value,content=(document.getElementById('nn')?.value||'').trim();
+  if(!content)return;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,notes:[...(c.notes||[]),{id:genId(),cons,date:TODAY,content}]}:c);
+  save();CM();openCandDetail(candId);
+}
+function delCand(id){if(!confirm('Supprimer ce candidat ?'))return;DB.candidats=DB.candidats.filter(c=>c.id!==id);DB.commandes=DB.commandes.map(cmd=>({...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==id)}));save();CM();R(CV);}
+
+function openCmdFormForClient(clientId){
+  // Mémoriser le clientId pour saveCmd → après save, rouvrir la fiche client
+  window._cmdFromClientId=clientId;
+  openCmdForm(null,clientId);
+}
+function openCmdForm(id,preClientId){
+  EID=id||null;const cmd=id?DB.commandes.find(x=>x.id===id):{};const v=f=>esc(cmd[f]||'');
+  const preId=preClientId||cmd.client_id||'';
+  const clItems=alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
+  // Contacts filtrés par client sélectionné (ou tous si pas de client)
+  const ctForClient=(cid)=>alphaSort(DB.contacts.filter(c=>!cid||c.client_id===cid).map(c=>{const cl=getClient(c.client_id);return {id:c.id,label:`${c.prenom} ${c.nom}${cl?' ('+cl.nom+')':''}` };}));
+  const consItems=getCONS();
+  const sOpts=['Active','Suspendue','Pourvue'].map(s=>`<option value="${s}"${(cmd.statut||'Active')===s?' selected':''}>${s}</option>`).join('');
+  OM(id?'Modifier la commande':'Nouvelle commande',`
+    <div class="fld"><label>Titre du poste</label><input id="f-titre" value="${v('titre')}"></div>
+    <div class="fr">
+      <div class="fld"><label>Client</label>${searchSel('f-client_id',clItems,preId,'— Rechercher un client —')}</div>
+      <div class="fld"><label>Contact</label><div id="f-contact_id-wrap">${searchSel('f-contact_id',ctForClient(preId),cmd.contact_id||'','— Contact —')}</div></div>
+    </div>
+    <div class="fr3">
+      <div class="fld"><label>Consultant</label>${searchSel('f-cons',consItems,cmd.cons||currentUser?.display_name||'','— Consultant —')}</div>
+      <div class="fld"><label>Statut</label><select id="f-statut">${sOpts}</select></div>
+      <div class="fld"><label>Date de la commande</label><input type="date" id="f-date_cmd" value="${v('date_cmd')||TODAY}"></div>
+    </div>
+    <div class="fr">
+      <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
+      <div class="fld"><label>💰 CA potentiel (€)</label><input type="number" id="f-ca_potentiel" value="${v('ca_potentiel')}" placeholder="ex: 15000" min="0" style="width:100%"></div>
+    </div>
+    <div class="fa"><button class="btn btn-s" onclick="CM();if(window._cmdFromClientId){const cid=window._cmdFromClientId;window._cmdFromClientId=null;setTimeout(()=>openClientDetail(cid),30);}">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
+}
+async function saveCmd(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY,ca_potentiel:g('ca_potentiel')||''};
+  const savedId=EID;const fromClient=window._cmdFromClientId||null;window._cmdFromClientId=null;
+  let newCmdId=null;
+  if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
+  else{newCmdId=genId();const existing={id:newCmdId,date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
+  await save(['commandes']);CM();R(CV);
+  showToast('✓ Commande enregistrée');
+  if(fromClient)setTimeout(()=>openClientDetail(fromClient),30);
+  else setTimeout(()=>openCmdDetail(savedId||newCmdId),30);
+}
+function delCmd(id){if(!confirm('Supprimer ?'))return;DB.commandes=DB.commandes.filter(c=>c.id!==id);save();R(CV);}
+// ══ OBJECTIFS COMMERCIAUX ════════════════════════════════════════════════════
+function rObjectifs(){
+  const isAdmin=currentUser?.role==='admin';
+  const obj=DB._settings._objectifs||{};
+  const consuls=getCONS();
+  const thisWeek=getWeekKey(TODAY);
+  const thisMonth=TODAY.slice(0,7);
+
+  // Calcul des réalisations par consultant
+  function getStats(cons){
+    const weekActs=DB.actions.filter(a=>a.cons===cons&&getWeekKey(a.date)===thisWeek);
+    const monthActs=DB.actions.filter(a=>a.cons===cons&&a.date?.startsWith(thisMonth));
+    return {
+      appels_sem:weekActs.filter(a=>a.type==='Appel').length,
+      rdv_sem:weekActs.filter(a=>a.type==='Rendez-vous').length,
+      appels_mois:monthActs.filter(a=>a.type==='Appel').length,
+      rdv_mois:monthActs.filter(a=>a.type==='Rendez-vous').length,
+    };
+  }
+
+  function progressBar(val,target,color){
+    const pct=target>0?Math.min(100,Math.round(val/target*100)):0;
+    const col=pct>=100?'#16a34a':pct>=60?'#ca8a04':color||'var(--acc)';
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;height:7px;background:var(--br);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${col};border-radius:4px;transition:width .3s"></div>
+      </div>
+      <span style="font-size:11px;color:var(--tm);white-space:nowrap;min-width:40px;text-align:right">${val}/${target}</span>
+    </div>`;
+  }
+
+  // Vue admin : édition des objectifs
+  let adminSection='';
+  if(isAdmin){
+    const rows=consuls.map(u=>{
+      const o=obj[u.id]||{appels_sem:0,rdv_sem:0,appels_mois:0,rdv_mois:0};
+      return `<tr>
+        <td style="font-size:13px;font-weight:500;padding:8px 10px">${renderCons(u.id,20)}</td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.appels_sem||0}" id="obj-${u.id}-as" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.rdv_sem||0}" id="obj-${u.id}-rs" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.appels_mois||0}" id="obj-${u.id}-am" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.rdv_mois||0}" id="obj-${u.id}-rm" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+      </tr>`;
+    }).join('');
+    adminSection=`<div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:14px;font-weight:600">⚙️ Définir les objectifs</div>
+        <button class="btn btn-p btn-sm" onclick="saveObjectifs()">💾 Enregistrer</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="font-size:11px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em">
+            <th style="text-align:left;padding:6px 10px">Consultant</th>
+            <th style="padding:6px 8px">Appels / sem.</th>
+            <th style="padding:6px 8px">RDV / sem.</th>
+            <th style="padding:6px 8px">Appels / mois</th>
+            <th style="padding:6px 8px">RDV / mois</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // Vue suivi pour tous
+  const cardsHtml=consuls.map(u=>{
+    const o=obj[u.id]||{};
+    const s=getStats(u.id);
+    const hasObj=o.appels_sem||o.rdv_sem||o.appels_mois||o.rdv_mois;
+    if(!hasObj&&!isAdmin)return '';
+    // CA potentiel des commandes actives du consultant
+    const myCmds=DB.commandes.filter(c=>c.cons===u.id&&c.statut==='Active');
+    const caTot=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_potentiel)||0),0);
+    return `<div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        ${renderCons(u.id,32)}
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${esc(u.label)}</div>
+          <div style="font-size:12px;color:var(--ts)">${myCmds.length} commande${myCmds.length!==1?'s':''} active${myCmds.length!==1?'s':''}${caTot>0?` · CA potentiel : <b style="color:var(--acc2)">${caTot.toLocaleString('fr-FR')} €</b>`:''}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Cette semaine</div>
+          ${o.appels_sem>0?`<div style="margin-bottom:8px"><div style="font-size:12px;color:var(--tm);margin-bottom:3px">📞 Appels</div>${progressBar(s.appels_sem,o.appels_sem)}</div>`:''}
+          ${o.rdv_sem>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:3px">🤝 RDV</div>${progressBar(s.rdv_sem,o.rdv_sem,'#7c3aed')}</div>`:''}
+          ${!o.appels_sem&&!o.rdv_sem?'<div style="font-size:12px;color:var(--tm);font-style:italic">Aucun objectif</div>':''}
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ce mois</div>
+          ${o.appels_mois>0?`<div style="margin-bottom:8px"><div style="font-size:12px;color:var(--tm);margin-bottom:3px">📞 Appels</div>${progressBar(s.appels_mois,o.appels_mois)}</div>`:''}
+          ${o.rdv_mois>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:3px">🤝 RDV</div>${progressBar(s.rdv_mois,o.rdv_mois,'#7c3aed')}</div>`:''}
+          ${!o.appels_mois&&!o.rdv_mois?'<div style="font-size:12px;color:var(--tm);font-style:italic">Aucun objectif</div>':''}
+        </div>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  document.getElementById('body-objectifs').innerHTML=`
+    ${adminSection}
+    <div style="font-size:14px;font-weight:600;margin-bottom:14px">📊 Suivi des objectifs — semaine du ${getWeekLabel(TODAY)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+      ${cardsHtml||'<div style="color:var(--tm);font-size:13px">Aucun objectif défini.</div>'}
+    </div>`;
+}
+
+async function saveObjectifs(){
+  if(!DB._settings)DB._settings={};
+  if(!DB._settings._objectifs)DB._settings._objectifs={};
+  getCONS().forEach(u=>{
+    const as=parseInt(document.getElementById('obj-'+u.id+'-as')?.value)||0;
+    const rs=parseInt(document.getElementById('obj-'+u.id+'-rs')?.value)||0;
+    const am=parseInt(document.getElementById('obj-'+u.id+'-am')?.value)||0;
+    const rm=parseInt(document.getElementById('obj-'+u.id+'-rm')?.value)||0;
+    DB._settings._objectifs[u.id]={appels_sem:as,rdv_sem:rs,appels_mois:am,rdv_mois:rm};
+  });
+  await save(['settings']);
+  showToast('✓ Objectifs enregistrés');
+  rObjectifs();
+}
+
+function getWeekKey(dateStr){
+  if(!dateStr)return '';
+  const d=new Date(dateStr);const day=d.getDay()||7;
+  d.setDate(d.getDate()-day+1);
+  return d.toISOString().slice(0,10);
+}
+function getWeekLabel(dateStr){
+  const start=getWeekKey(dateStr);
+  const end=new Date(start);end.setDate(end.getDate()+6);
+  return `${start} → ${end.toISOString().slice(0,10)}`;
+}
+const PRIORITY_CRITERIA=[
+  {id:'engagement', label:'Engagement & réactivité client', coef:2,
+   opts:['Ne répond pas, aucun retour','Réponses très tardives, flou','Réactif irrégulier','Réactif, échanges clairs','Très réactif, proactif']},
+  {id:'brief_clarte', label:'Clarté du brief', coef:1,
+   opts:['Aucun brief, incohérent','Brief incomplet, flou','Besoin compris mais imprécis','Brief incomplet mais fiche de poste','Brief complété entièrement']},
+  {id:'faisabilite', label:'Faisabilité', coef:1,
+   opts:['Infaisable','Très difficile','Faisable avec effort','Faisable','Très facile à closer']},
+  {id:'rapidite_process', label:'Rapidité du processus', coef:2,
+   opts:['Process très long, incertain','Process lent, +1 mois sans avancée','Délais corrects mais variables','Process fluide et structuré','Décision rapide, cycle court']},
+  {id:'urgence', label:'Urgence', coef:1.5,
+   opts:['Aucun besoin réel','Besoin faible ou confort','Besoin existant sans pression','Besoin important identifié','Poste critique, urgence forte']},
+  {id:'vivier', label:'Disponibilité candidats dans le vivier', coef:1,
+   opts:['Aucun candidat identifié','Très peu de profils','Quelques profils exploitables','Vivier existant','Plusieurs candidats immédiatement activables']},
+  {id:'sourcing', label:'Temps estimé de sourcing', coef:1,
+   opts:['Plus de 2 mois','Plus d\'1 mois','Plus de 3 semaines','Moins de 2 semaines','Moins d\'1 semaine']},
+  {id:'anciennete', label:'Ancienneté de la commande', coef:1,
+   opts:['Plus de 6 mois sans avancée','3 à 6 mois','1 à 3 mois','Moins d\'1 mois','Moins de 2 semaines']},
+  {id:'rentabilite', label:'Rentabilité', coef:1.5,
+   opts:['Faible marge / facturation divisée','Peu rentable (<15%)','Correcte (15-18%)','Bonne (≥18%)','Très forte (≥20%) / récurrence']},
+];
+const PRIORITY_COLORS={1:'background:#fef2f2;color:#dc2626',2:'background:#fff7ed;color:#ea580c',3:'background:#fefce8;color:#ca8a04',4:'background:#f0fdf4;color:#16a34a',5:'background:#ecfdf5;color:#059669'};
+const PRIORITY_LABELS={1:'Faible',2:'Basse',3:'Moyenne',4:'Forte',5:'Très forte'};
+
+function calcPriority(scores){
+  if(!scores||!Object.keys(scores).length)return null;
+  let sumW=0,sumCoef=0;
+  PRIORITY_CRITERIA.forEach(c=>{const n=parseInt(scores[c.id])||0;if(n>0){sumW+=n*c.coef;sumCoef+=c.coef;}});
+  if(!sumCoef)return null;
+  const avg=sumW/sumCoef;
+  return Math.min(5,Math.max(1,Math.round(avg)));
+}
+
+function buildPriorityBadge(cmd){
+  const score=calcPriority(cmd.priority_scores);
+  const style=score?PRIORITY_COLORS[score]:'background:var(--bg);color:var(--tm)';
+  const label=score?`${score}/5 — ${PRIORITY_LABELS[score]}`:'Non évalué';
+  return `<button onclick="openPriorityScoring('${cmd.id}')" style="${style};border:none;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;cursor:pointer">⭐ Priorité : ${label}</button>`;
+}
+
+function openPriorityScoring(cmdId){
+  const cmd=DB.commandes.find(x=>x.id===cmdId);if(!cmd)return;
+  const scores=cmd.priority_scores||{};
+  const currentScore=calcPriority(scores);
+  const rows=PRIORITY_CRITERIA.map(c=>{
+    const cur=parseInt(scores[c.id])||0;
+    const btns=[1,2,3,4,5].map(n=>`<button type="button" id="ps-${c.id}-${n}" onclick="psBtnClick('${c.id}',${n})" style="width:34px;height:34px;border-radius:7px;border:2px solid ${cur===n?'var(--acc)':'var(--br)'};background:${cur===n?'var(--acc)':'var(--bg)'};color:${cur===n?'white':'var(--tp)'};cursor:pointer;font-size:13px;font-weight:600;transition:all .15s" title="${esc(c.opts[n-1])}">${n}</button>`).join('');
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--bg)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--tp)">${esc(c.label)}${c.coef>1?`<span style="font-size:11px;color:var(--acc2);margin-left:6px">×${c.coef}</span>`:''}</div>
+          ${cur?`<div style="font-size:11px;color:var(--ts);margin-top:2px">${esc(c.opts[cur-1])}</div>`:'<div style="font-size:11px;color:var(--tm);font-style:italic">Non évalué</div>'}
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">${btns}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  OM('⭐ Scoring de priorité',`
+    ${currentScore?`<div style="${PRIORITY_COLORS[currentScore]};border-radius:9px;padding:10px 14px;margin-bottom:14px;text-align:center;font-size:14px;font-weight:700">Priorité actuelle : ${currentScore}/5 — ${PRIORITY_LABELS[currentScore]}</div>`:''}
+    <div id="ps-preview" style="margin-bottom:12px;padding:8px 14px;background:var(--bg);border-radius:8px;text-align:center;font-size:13px;color:var(--ts)">Remplissez les critères pour calculer la priorité</div>
+    <div style="max-height:420px;overflow-y:auto;padding-right:4px">${rows}</div>
+    <div style="margin-top:14px;padding:10px 14px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--tm)">
+      ★ Certains critères ont plus de poids car ils impactent la probabilité de closing.<br>
+      <b>×2</b> : Engagement client, Rapidité process &nbsp;|&nbsp; <b>×1,5</b> : Urgence, Rentabilité &nbsp;|&nbsp; <b>×1</b> : autres
+    </div>
+    <div class="fa" style="margin-top:12px">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="savePriority('${cmdId}')">💾 Enregistrer la priorité</button>
+    </div>`,`w`);
+  // Store current scores in temp for live preview
+  window._psScores={...scores};
+  updatePsPreview();
+}
+
+function psBtnClick(critId,n){
+  window._psScores=window._psScores||{};
+  window._psScores[critId]=n;
+  // Update button styles
+  [1,2,3,4,5].forEach(i=>{
+    const b=document.getElementById(`ps-${critId}-${i}`);
+    if(b){b.style.border=i===n?'2px solid var(--acc)':'2px solid var(--br)';b.style.background=i===n?'var(--acc)':'var(--bg)';b.style.color=i===n?'white':'var(--tp)';}
+  });
+  // Update description text
+  const c=PRIORITY_CRITERIA.find(x=>x.id===critId);
+  if(c){
+    const row=document.getElementById(`ps-${critId}-1`)?.closest('[style*="padding:10px 0"]');
+    if(row){const desc=row.querySelector('div[style*="font-size:11px"]');if(desc)desc.textContent=c.opts[n-1];}
+  }
+  updatePsPreview();
+}
+
+function updatePsPreview(){
+  const score=calcPriority(window._psScores);
+  const el=document.getElementById('ps-preview');if(!el)return;
+  if(!score){el.textContent='Remplissez les critères pour calculer la priorité';el.style='margin-bottom:12px;padding:8px 14px;background:var(--bg);border-radius:8px;text-align:center;font-size:13px;color:var(--ts)';}
+  else{el.textContent=`→ Priorité calculée : ${score}/5 — ${PRIORITY_LABELS[score]}`;el.style=`margin-bottom:12px;padding:8px 14px;${PRIORITY_COLORS[score]};border-radius:8px;text-align:center;font-size:13px;font-weight:600`;}
+}
+
+function savePriority(cmdId){
+  if(!window._psScores)return;
+  const score=calcPriority(window._psScores);
+  DB.commandes=DB.commandes.map(x=>x.id===cmdId?{...x,priority_scores:{...window._psScores},priority:score}:x);
+  save();window._psScores=null;CM();
+  showToast('✓ Priorité enregistrée : '+(score||'—')+'/5');
+  setTimeout(()=>openCmdDetail(cmdId),30);
+}
+
+function openCmdDetail(id){
+  const cmd=DB.commandes.find(x=>x.id===id);if(!cmd)return;
+  const cl=getClient(cmd.client_id),ct=getContact(cmd.contact_id);
+  const infos=cmd.infos||{},brief=cmd.brief||{},annonce=cmd.annonce||{};
+  const sc={Active:'background:#ecfdf5;color:#065f46',Suspendue:'background:var(--amber-bg);color:var(--amber)',Pourvue:'background:var(--acc-light);color:var(--acc2)'};
+
+  // === TAB 1: INFOS ===
+  const tab1=`
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600">Informations générales sur la commande</div>
+        ${infos._saved_by?`<div style="font-size:11px;color:var(--tm)">Modifié par <b>${esc(infos._saved_by)}</b> le ${infos._saved_at}</div>`:''}
+      </div>
+      ${micWidget('cmd-infos-'+id)}
+      <textarea id="cmd-infos-${id}" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:8px 11px;font-size:13px;min-height:120px;font-family:inherit;resize:vertical;background:var(--card)" placeholder="Informations générales, contexte, historique...">${esc(infos.content||cmd.desc||'')}</textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-p btn-sm" onclick="saveCmdInfos('${id}')">💾 Enregistrer</button>
+      </div>
+    </div>`;
+
+  // === TAB 2: BRIEF ===
+  const bv=k=>esc(brief[k]||'');
+  const tab2=`
+    <div style="margin-bottom:12px;padding:10px 14px;background:var(--acc-light);border-radius:8px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:12px;color:var(--acc2)">📎 Vous pouvez joindre un brief déjà rempli pour pré-remplissage automatique</div>
+      <label class="btn btn-s btn-sm" style="cursor:pointer">📤 Importer brief PDF<input type="file" style="display:none" accept=".pdf" onchange="importBriefPDF(this,'${id}')"></label>
+    </div>
+    ${brief._saved_by?`<div style="font-size:11px;color:var(--tm);margin-bottom:12px">Dernière modification : <b>${esc(brief._saved_by)}</b> · ${brief._saved_at}</div>`:''}
+    <div class="section-title">1. L'entreprise</div>
+    <div class="fr"><div class="fld"><label>Date du brief de poste</label><input type="date" id="b-date_brief" value="${bv('date_brief')}"></div><div class="fld"><label>Interlocuteur & fonction</label><input id="b-interlocuteur" value="${bv('interlocuteur')}" placeholder="Prénom Nom, Directeur RH..."></div></div>
+    <div class="fld"><label>Coordonnées de l'interlocuteur</label><input id="b-coords_interlo" value="${bv('coords_interlo')}" placeholder="Tél, email..."></div>
+    <div class="fld"><label>Activité de l'entreprise</label><textarea id="b-activite_ent" style="min-height:70px">${bv('activite_ent')}</textarea></div>
+    <div class="fr"><div class="fld"><label>Effectif de l'entreprise / agence</label><input id="b-effectif_ent" value="${bv('effectif_ent')}"></div><div class="fld"><label>Concurrents directs</label><input id="b-concurrents" value="${bv('concurrents')}"></div></div>
+    <div class="fld"><label>Habitudes de recrutement & décisionnaire</label><textarea id="b-habitudes_recru" style="min-height:70px">${bv('habitudes_recru')}</textarea></div>
+    <div class="fld"><label>Fiche de poste ou annonce disponible ?</label><input id="b-fiche_dispo" value="${bv('fiche_dispo')}" placeholder="Oui / Non / En cours..."></div>
+    <div class="section-title">2. Le poste</div>
+    <div class="fr"><div class="fld"><label>Depuis quand le recrutement est ouvert ?</label><input id="b-ouvert_depuis" value="${bv('ouvert_depuis')}"></div><div class="fld"><label>Contexte du recrutement</label><select id="b-contexte"><option value="">—</option><option value="Création de poste"${brief.contexte==='Création de poste'?' selected':''}>Création de poste</option><option value="Remplacement"${brief.contexte==='Remplacement'?' selected':''}>Remplacement</option><option value="Démission"${brief.contexte==='Démission'?' selected':''}>Démission</option></select></div></div>
+    <div class="fld"><label>Intitulé du poste / postes équivalents</label><input id="b-intitule_poste" value="${bv('intitule_poste')}"></div>
+    <div class="fld"><label>Rattachement hiérarchique</label><input id="b-rattachement" value="${bv('rattachement')}"></div>
+    <div class="fr"><div class="fld"><label>Niveau d'urgence & date de prise idéale</label><input id="b-urgence_date" value="${bv('urgence_date')}"></div><div class="fld"><label>Période de passation / intégration / formation</label><input id="b-passation" value="${bv('passation')}"></div></div>
+    <div class="fld"><label>Qui travaille actuellement sur le besoin ?</label><input id="b-qui_travaille" value="${bv('qui_travaille')}"></div>
+    <div class="fld"><label>Étapes du processus de recrutement & tests</label><textarea id="b-process_recru" style="min-height:70px">${bv('process_recru')}</textarea></div>
+    <div class="fr"><div class="fld"><label>Entreprises à ne pas approcher</label><textarea id="b-no_approche" style="min-height:60px">${bv('no_approche')}</textarea></div><div class="fld"><label>Recrutement qui n'a pas fonctionné ?</label><textarea id="b-recru_echoue" style="min-height:60px">${bv('recru_echoue')}</textarea></div></div>
+    <div class="section-title">3. Missions & responsabilités</div>
+    <div class="fld"><label>Missions principales</label><textarea id="b-missions_princ" style="min-height:100px">${bv('missions_princ')}</textarea></div>
+    <div class="fld"><label>Missions secondaires</label><textarea id="b-missions_sec" style="min-height:80px">${bv('missions_sec')}</textarea></div>
+    <div class="fld"><label>Journée type sur le poste</label><textarea id="b-journee_type" style="min-height:70px">${bv('journee_type')}</textarea></div>
+    <div class="fr"><div class="fld"><label>Défis majeurs à relever</label><textarea id="b-defis" style="min-height:70px">${bv('defis')}</textarea></div><div class="fld"><label>Évaluation de la performance</label><textarea id="b-evaluation" style="min-height:70px">${bv('evaluation')}</textarea></div></div>
+    <div class="fld"><label>Objectifs court / moyen / long terme</label><textarea id="b-objectifs" style="min-height:70px">${bv('objectifs')}</textarea></div>
+    <div class="section-title">4. Profil recherché</div>
+    <div class="fr"><div class="fld"><label>Diplômes & expérience requis</label><textarea id="b-diplomes" style="min-height:70px">${bv('diplomes')}</textarea></div><div class="fld"><label>Compétences techniques obligatoires</label><textarea id="b-compe_tech" style="min-height:70px">${bv('compe_tech')}</textarea></div></div>
+    <div class="fr"><div class="fld"><label>Savoir-être les plus importants</label><textarea id="b-savoir_etre" style="min-height:70px">${bv('savoir_etre')}</textarea></div><div class="fld"><label>Logiciels / certifications / habilitations</label><textarea id="b-logiciels" style="min-height:70px">${bv('logiciels')}</textarea></div></div>
+    <div class="section-title">5. Conditions & environnement de travail</div>
+    <div class="fr"><div class="fld"><label>Localisation du poste</label><input id="b-localisation" value="${bv('localisation')}"></div><div class="fld"><label>Déplacements</label><input id="b-deplacements" value="${bv('deplacements')}" placeholder="Fréquence, périmètre, découchés..."></div></div>
+    <div class="fr"><div class="fld"><label>Horaires de travail</label><input id="b-horaires" value="${bv('horaires')}" placeholder="Fixe, variable, 35h..."></div><div class="fld"><label>Télétravail</label><input id="b-teletravail" value="${bv('teletravail')}" placeholder="Oui / Non / Partiel..."></div></div>
+    <div class="fld"><label>Taille & composition de l'équipe</label><input id="b-equipe" value="${bv('equipe')}"></div>
+    <div class="section-title">6. Contrat & rémunération</div>
+    <div class="fr"><div class="fld"><label>Type de contrat</label><select id="b-contrat"><option value="">—</option><option value="CDI"${brief.contrat==='CDI'?' selected':''}>CDI</option><option value="CDD"${brief.contrat==='CDD'?' selected':''}>CDD</option></select></div><div class="fld"><label>Statut</label><select id="b-statut_contrat"><option value="">—</option><option value="ETAM"${brief.statut_contrat==='ETAM'?' selected':''}>ETAM</option><option value="Cadre"${brief.statut_contrat==='Cadre'?' selected':''}>Cadre</option></select></div></div>
+    <div class="fr"><div class="fld"><label>Rémunération prévue</label><input id="b-remuneration" value="${bv('remuneration')}"></div><div class="fld"><label>Temps de travail</label><select id="b-temps_travail"><option value="">—</option>${['35h','37.5h','39h'].map(h=>`<option value="${h}"${brief.temps_travail===h?' selected':''}>${h}</option>`).join('')}</select></div></div>
+    <div class="fld"><label>Avantages (13e mois, intéressement, CSE, véhicule, tickets restaurant...)</label><textarea id="b-avantages" style="min-height:70px">${bv('avantages')}</textarea></div>
+    <div class="section-title">7. Hiérarchisation des critères</div>
+    <div class="fr3">
+      <div class="fld"><label style="color:var(--red)">Must Have — Indispensable</label><textarea id="b-must_have" style="min-height:100px;border-color:var(--red)">${bv('must_have')}</textarea></div>
+      <div class="fld"><label style="color:var(--amber)">Should Have — Plus sur la candidature</label><textarea id="b-should_have" style="min-height:100px;border-color:var(--amber)">${bv('should_have')}</textarea></div>
+      <div class="fld"><label style="color:var(--green)">Nice Have — Top candidat</label><textarea id="b-nice_have" style="min-height:100px;border-color:var(--green)">${bv('nice_have')}</textarea></div>
+    </div>
+    <div class="section-title">8. Commentaires & informations supplémentaires</div>
+    <div class="fld"><textarea id="b-commentaires" style="min-height:100px">${bv('commentaires')}</textarea></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-p" onclick="saveCmdBrief('${id}')">💾 Enregistrer le brief</button>
+    </div>`;
+
+  // === TAB 3: ANNONCE ===
+  const av=k=>esc(annonce[k]||'');
+  const salaireType=annonce.salaire_type||'fixe';
+  const villOpts=`<option value="">— Sélectionner —</option>`+(REF.villes||[]).map(v2=>`<option value="${v2.id}"${annonce.ville_id===v2.id?' selected':''}>${esc(v2.label)}</option>`).join('');
+  const tab3=`
+    ${annonce._saved_by?`<div style="font-size:11px;color:var(--tm);margin-bottom:12px">Dernière modification : <b>${esc(annonce._saved_by)}</b> · ${annonce._saved_at}</div>`:''}
+    <div class="fld"><label>Intitulé du poste</label><input id="a-intitule" value="${av('intitule')}" placeholder="Titre exact de l'annonce"></div>
+    <div class="fld"><label>Présentation de l'entreprise</label><textarea id="a-entreprise" style="min-height:120px" placeholder="Description de l'entreprise qui recrute...">${av('entreprise')}</textarea></div>
+    <div class="fld"><label>Missions</label><textarea id="a-missions" style="min-height:120px" placeholder="Les missions du poste...">${av('missions')}</textarea></div>
+    <div class="fld"><label>Profil</label><textarea id="a-profil" style="min-height:120px" placeholder="Le profil recherché...">${av('profil')}</textarea></div>
+    <div class="fld"><label>Lieu du poste</label>
+      <select id="a-ville_id" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit">${villOpts}</select>
+    </div>
+    <div class="fld"><label>Type de salaire</label>
+      <div style="display:flex;gap:12px;margin-bottom:10px">
+        <label class="check-row"><input type="radio" name="salaire_type_${id}" value="fixe" ${salaireType==='fixe'?'checked':''} onchange="toggleSalaireType('${id}','fixe')"> Montant fixe</label>
+        <label class="check-row"><input type="radio" name="salaire_type_${id}" value="fourchette" ${salaireType==='fourchette'?'checked':''} onchange="toggleSalaireType('${id}','fourchette')"> Fourchette</label>
+      </div>
+      <div id="salaire-fixe-${id}" style="display:${salaireType==='fixe'?'block':'none'}">
+        <div class="fr"><div class="fld"><label>Montant</label><input id="a-salaire_fixe" value="${av('salaire_fixe')}" placeholder="ex: 45 000"></div><div class="fld"><label>Périodicité</label><select id="a-periodicite_fixe"><option value="Annuel"${annonce.periodicite_fixe==='Annuel'?' selected':''}>Annuel</option><option value="Mensuel"${annonce.periodicite_fixe==='Mensuel'?' selected':''}>Mensuel</option><option value="Horaire"${annonce.periodicite_fixe==='Horaire'?' selected':''}>Horaire</option></select></div></div>
+      </div>
+      <div id="salaire-fourchette-${id}" style="display:${salaireType==='fourchette'?'block':'none'}">
+        <div class="fr3"><div class="fld"><label>Minimum</label><input id="a-salaire_min" value="${av('salaire_min')}"></div><div class="fld"><label>Maximum</label><input id="a-salaire_max" value="${av('salaire_max')}"></div><div class="fld"><label>Périodicité</label><select id="a-periodicite_four"><option value="Annuel"${annonce.periodicite_four==='Annuel'?' selected':''}>Annuel</option><option value="Mensuel"${annonce.periodicite_four==='Mensuel'?' selected':''}>Mensuel</option><option value="Horaire"${annonce.periodicite_four==='Horaire'?' selected':''}>Horaire</option></select></div></div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-p" onclick="saveCmdAnnonce('${id}')">💾 Enregistrer l'annonce</button>
+    </div>`;
+
+  // === TAB 4: CANDIDATURES ===
+  const inCmd=new Set((cmd.candidats||[]).map(cc=>cc.candidat_id));
+  const avail=DB.candidats.filter(c=>!inCmd.has(c.id));
+  const kCols=PIPE_CMD.map(e=>{
+    const items=(cmd.candidats||[]).filter(cc=>cc.etape===e.id);
+    const cards=items.map(cc=>{
+      const cand=getCand(cc.candidat_id);if(!cand)return '';
+      const extra=cc.etape_info||{};
+      const infoTag=
+        e.id==='entr_cl'&&extra.date?`<div style="font-size:10px;color:${e.color};font-weight:500;margin-top:4px">📅 ${esc(extra.date)}${extra.heure?' '+esc(extra.heure):''}</div>`:
+        e.id==='prop'&&extra.salaire?`<div style="font-size:10px;color:${e.color};font-weight:500;margin-top:4px">💰 ${esc(extra.salaire)} ${esc(extra.periodicite||'')}</div>`:
+        (e.id==='refc'||e.id==='refcl')&&extra.motif?`<div style="font-size:10px;color:${e.color};font-weight:500;margin-top:4px">⚠️ ${esc(extra.motif)}</div>`:'';
+      return `<div class="kcard" draggable="true" data-id="${cc.candidat_id}" data-type="cmd_cand" data-cmd="${id}"
+        ondragstart="cmdKDragStart(event)" style="border-left-color:${e.color}">
+        <div style="cursor:pointer" onclick="openCandDetailFromCmd('${cc.candidat_id}','${id}')">
+          <div style="font-size:12px;font-weight:600;margin-bottom:2px">${esc(cand.prenom)} ${esc(cand.nom)}</div>
+          <div style="font-size:11px;color:var(--ts)">${esc(cand.poste||(cand.metier1_id?refLbl('metiers',cand.metier1_id):'')||'—')}</div>
+          ${cand.phone?`<div style="font-size:10px;color:var(--tm)">📞 ${esc(formatPhone(cand.phone))}</div>`:''}
+          ${infoTag}
+        </div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button style="font-size:10px;color:var(--acc);background:transparent;border:1px solid var(--br);border-radius:4px;cursor:pointer;padding:2px 6px;font-family:inherit" onclick="openEtapeInfo('${id}','${cc.candidat_id}','${e.id}')">Détails</button>
+          <button style="font-size:10px;color:var(--red);background:transparent;border:none;cursor:pointer;font-family:inherit;margin-left:auto" onclick="rmCand('${id}','${cc.candidat_id}')">✕ Retirer</button>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="kanban-col">
+      <div class="kanban-col-head" style="border-top:3px solid ${e.color}">
+        <span style="font-size:11px">${esc(e.label)}</span><span style="font-size:10px;color:var(--tm)">${items.length}</span>
+      </div>
+      <div class="kanban-col-body" data-etape="${e.id}" data-cmd="${id}"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="cmdKDrop(event,this)">${cards}
+      </div>
+    </div>`;
+  }).join('');
+
+  const tab4=`
+    <div style="margin-bottom:14px;padding:12px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br)">
+      <div style="font-size:12px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ajouter depuis le vivier</div>
+      <div style="display:flex;gap:8px">
+        <select id="add-csel-${id}" style="flex:1;border:1px solid var(--br);border-radius:7px;padding:7px 10px;font-size:13px;color:var(--tp);background:var(--card);outline:none;font-family:inherit">
+          <option value="">— Rechercher un candidat —</option>
+          ${avail.map(c=>`<option value="${c.id}">${esc(c.prenom)} ${esc(c.nom)} · ${esc(c.poste||refLbl('metiers',c.metier1_id)||'—')}</option>`).join('')}
+        </select>
+        <button class="btn btn-p" onclick="addCandToCmd('${id}')">Ajouter</button>
+      </div>
+    </div>
+    <div class="kanban-wrap" style="min-height:300px;max-height:500px">${kCols}</div>`;
+
+  const html=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:14px;margin-bottom:0;border-bottom:1px solid var(--br)">
+      <div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div>
+        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · ${renderCons(cmd.cons,18)} · 📅 ${cmd.date_cmd||cmd.date||'—'}${cmd.ca_potentiel?` · <span style="color:var(--acc2);font-weight:600">💰 ${parseFloat(cmd.ca_potentiel).toLocaleString('fr-FR')} €</span>`:''}</div>
+        <div style="margin-top:8px">${buildPriorityBadge(cmd)}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+        ${buildNavArrows(id,_cmdsNav,'cmdNav')}
+        <span style="${sc[cmd.statut]||sc.Active};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(cmd.statut)}</span>
+        <button class="btn btn-s btn-sm" onclick="CM();openCmdForm('${id}')">✏️</button>
+      </div>
+    </div>
+    <div class="tabs" style="margin-top:14px">
+      <button class="tab-btn active" onclick="switchTab(this,'cmd-tab-infos-${id}')">📋 Informations</button>
+      <button class="tab-btn" onclick="switchTab(this,'cmd-tab-brief-${id}')">📝 Brief de poste</button>
+      <button class="tab-btn" onclick="switchTab(this,'cmd-tab-annonce-${id}')">📢 Annonce</button>
+      <button class="tab-btn" onclick="switchTab(this,'cmd-tab-cands-${id}')">👥 Candidatures (${(cmd.candidats||[]).length})</button>
+    </div>
+    <div id="cmd-tab-infos-${id}" class="tab-panel active">${tab1}</div>
+    <div id="cmd-tab-brief-${id}" class="tab-panel">${tab2}</div>
+    <div id="cmd-tab-annonce-${id}" class="tab-panel">${tab3}</div>
+    <div id="cmd-tab-cands-${id}" class="tab-panel">${tab4}</div>
+    <div class="dact"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`;
+  OM(`Commande — ${esc(cmd.titre)}`,html,'xl');
+  // Restore active tab (defaults to 'infos' on first open)
+  const lastTab=activeCmdTab[id]||'infos';
+  const tabBtn=document.querySelector(`[onclick*="cmd-tab-${lastTab}-${id}"]`);
+  if(tabBtn&&lastTab!=='infos'){switchTab(tabBtn,`cmd-tab-${lastTab}-${id}`);}
+}
+
+// Toggle salaire type in annonce
+function toggleSalaireType(cmdId,type){
+  document.getElementById('salaire-fixe-'+cmdId).style.display=type==='fixe'?'block':'none';
+  document.getElementById('salaire-fourchette-'+cmdId).style.display=type==='fourchette'?'block':'none';
+}
+
+// Save functions for each tab
+function saveCmdInfos(cmdId){
+  const content=document.getElementById('cmd-infos-'+cmdId)?.value||'';
+  const infos={content,_saved_by:currentUser?.display_name||'—',_saved_at:TODAY};
+  DB.commandes=DB.commandes.map(c=>c.id===cmdId?{...c,infos}:c);
+  save();showToast('✓ Informations enregistrées');
+}
+function saveCmdBrief(cmdId){
+  const g=id=>document.getElementById('b-'+id)?.value||'';
+  const brief={
+    date_brief:g('date_brief'),interlocuteur:g('interlocuteur'),coords_interlo:g('coords_interlo'),
+    activite_ent:g('activite_ent'),effectif_ent:g('effectif_ent'),concurrents:g('concurrents'),
+    habitudes_recru:g('habitudes_recru'),fiche_dispo:g('fiche_dispo'),
+    ouvert_depuis:g('ouvert_depuis'),contexte:g('contexte'),intitule_poste:g('intitule_poste'),
+    rattachement:g('rattachement'),urgence_date:g('urgence_date'),passation:g('passation'),
+    qui_travaille:g('qui_travaille'),process_recru:g('process_recru'),no_approche:g('no_approche'),recru_echoue:g('recru_echoue'),
+    missions_princ:g('missions_princ'),missions_sec:g('missions_sec'),journee_type:g('journee_type'),
+    defis:g('defis'),evaluation:g('evaluation'),objectifs:g('objectifs'),
+    diplomes:g('diplomes'),compe_tech:g('compe_tech'),savoir_etre:g('savoir_etre'),logiciels:g('logiciels'),
+    localisation:g('localisation'),deplacements:g('deplacements'),horaires:g('horaires'),teletravail:g('teletravail'),equipe:g('equipe'),
+    contrat:g('contrat'),statut_contrat:g('statut_contrat'),remuneration:g('remuneration'),temps_travail:g('temps_travail'),avantages:g('avantages'),
+    must_have:g('must_have'),should_have:g('should_have'),nice_have:g('nice_have'),commentaires:g('commentaires'),
+    _saved_by:currentUser?.display_name||'—',_saved_at:TODAY
+  };
+  DB.commandes=DB.commandes.map(c=>c.id===cmdId?{...c,brief}:c);
+  save();showToast('✓ Brief de poste enregistré');
+}
+function saveCmdAnnonce(cmdId){
+  const g=id=>document.getElementById('a-'+id)?.value||'';
+  const sType=document.querySelector(`input[name="salaire_type_${cmdId}"]:checked`)?.value||'fixe';
+  const annonce={
+    intitule:g('intitule'),entreprise:g('entreprise'),missions:g('missions'),profil:g('profil'),
+    ville_id:g('ville_id'),salaire_type:sType,
+    salaire_fixe:g('salaire_fixe'),periodicite_fixe:g('periodicite_fixe'),
+    salaire_min:g('salaire_min'),salaire_max:g('salaire_max'),periodicite_four:g('periodicite_four'),
+    _saved_by:currentUser?.display_name||'—',_saved_at:TODAY
+  };
+  DB.commandes=DB.commandes.map(c=>c.id===cmdId?{...c,annonce}:c);
+  save();showToast('✓ Annonce enregistrée');
+}
+
+let _briefImportData=null;
+
+async function importBriefPDF(inp,cmdId){
+  const file=inp.files[0];if(!file)return;
+  inp.value='';
+  if(file.size>5*1024*1024){alert('Fichier trop lourd (max 5Mo)');return;}
+  const banner=document.createElement('div');
+  banner.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:9999';
+  banner.innerHTML='<div style="background:var(--card);border-radius:14px;padding:28px 36px;text-align:center;font-size:14px;font-weight:500;color:var(--tp)">⏳ Analyse du brief en cours...</div>';
+  document.body.appendChild(banner);
+  try{
+    const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+    const result=await api('POST','/api/parse-brief',{name:file.name,type:file.type,data:base64});
+    banner.remove();
+    if(result?.error){alert('⚠️ '+result.error);return;}
+    showBriefReview(cmdId,result?.parsed||{});
+  }catch(e){
+    banner.remove();
+    alert('Erreur lors de l\'analyse : '+e.message);
+  }
+}
+
+function showBriefReview(cmdId,parsed){
+  const cmd=DB.commandes.find(x=>x.id===cmdId);
+  const brief=cmd?.brief||{};
+  const LABELS={
+    interlocuteur:'Interlocuteur & fonction',coords_interlo:'Coordonnées interlocuteur',
+    activite_ent:'Activité de l\'entreprise',effectif_ent:'Effectif entreprise/agence',
+    concurrents:'Concurrents',habitudes_recru:'Habitudes recrutement',
+    ouvert_depuis:'Recrutement ouvert depuis',contexte:'Contexte recrutement',
+    intitule_poste:'Intitulé du poste',rattachement:'Rattachement hiérarchique',
+    urgence_date:'Urgence & date idéale',passation:'Période passation/intégration',
+    qui_travaille:'Qui travaille sur le besoin',process_recru:'Process recrutement',
+    no_approche:'Entreprises à ne pas approcher',recru_echoue:'Recrutement échoué',
+    missions_princ:'Missions principales',missions_sec:'Missions secondaires',
+    journee_type:'Journée type',defis:'Défis majeurs',
+    objectifs:'Objectifs CT/MT/LT',diplomes:'Diplômes & expérience',
+    compe_tech:'Compétences techniques',savoir_etre:'Savoir-être',
+    logiciels:'Logiciels / certifications',localisation:'Localisation du poste',
+    deplacements:'Déplacements',horaires:'Horaires',teletravail:'Télétravail',
+    equipe:'Composition équipe',contrat:'Type contrat',statut_contrat:'Statut',
+    remuneration:'Rémunération',avantages:'Avantages',
+    must_have:'Must Have',should_have:'Should Have',nice_have:'Nice Have',
+    commentaires:'Commentaires'
+  };
+
+  const hasData=Object.values(parsed).some(v=>v&&v!=='');
+  if(!hasData){
+    OM('Import brief',`<div style="padding:20px;text-align:center;color:var(--tm)">⚠️ Aucune information extraite du document.<br>Vérifiez que le brief est bien rempli.</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'n');
+    return;
+  }
+
+  _briefImportData={cmdId,parsed};
+
+  const rows=Object.entries(LABELS).map(([k,lbl])=>{
+    const newVal=parsed[k];
+    const curVal=brief[k];
+    const hasNew=newVal!==undefined&&newVal!==''&&newVal!==null;
+    if(!hasNew)return '';
+    const hasCur=curVal!==undefined&&curVal!==''&&curVal!==null;
+    const conflict=hasCur&&String(curVal)!==String(newVal);
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--bg);display:flex;align-items:flex-start;gap:10px">
+      <input type="checkbox" id="bri-${k}" ${!conflict?'checked':''} style="margin-top:3px;accent-color:var(--acc);width:16px;height:16px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.04em">${lbl}</div>
+        <div style="font-size:13px;color:var(--tp);margin-top:2px;white-space:pre-wrap">${esc(String(newVal))}</div>
+        ${conflict?`<div style="font-size:11px;color:var(--amber);margin-top:2px">⚠️ Valeur actuelle : ${esc(String(curVal).slice(0,80))}...</div>`:''}
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  OM('Vérification — Brief importé',`
+    <div style="background:var(--acc-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--acc2)">
+      ✅ Données extraites du brief. Cochez les champs à importer, décochez ceux à ignorer.
+      Les champs avec ⚠️ contiennent déjà une valeur différente.
+    </div>
+    <div style="max-height:450px;overflow-y:auto;padding-right:4px">${rows}</div>
+    <div class="fa" style="margin-top:14px">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="applyBriefImport()">✅ Appliquer les champs cochés</button>
+    </div>`,'w');
+}
+
+function applyBriefImport(){
+  if(!_briefImportData)return;
+  const {cmdId,parsed}=_briefImportData;
+  const KEYS=['interlocuteur','coords_interlo','activite_ent','effectif_ent','concurrents',
+    'habitudes_recru','ouvert_depuis','contexte','intitule_poste','rattachement',
+    'urgence_date','passation','qui_travaille','process_recru','no_approche','recru_echoue',
+    'missions_princ','missions_sec','journee_type','defis','objectifs',
+    'diplomes','compe_tech','savoir_etre','logiciels','localisation',
+    'deplacements','horaires','teletravail','equipe','contrat','statut_contrat',
+    'remuneration','avantages','must_have','should_have','nice_have','commentaires'];
+  const toApply={};
+  KEYS.forEach(k=>{
+    const cb=document.getElementById('bri-'+k);
+    if(cb&&cb.checked&&parsed[k]!==undefined&&parsed[k]!=='')toApply[k]=parsed[k];
+  });
+  const cmd=DB.commandes.find(x=>x.id===cmdId);if(!cmd)return;
+  const newBrief={...(cmd.brief||{}),...toApply,_saved_by:currentUser?.display_name||'—',_saved_at:TODAY};
+  DB.commandes=DB.commandes.map(x=>x.id===cmdId?{...x,brief:newBrief}:x);
+  save();_briefImportData=null;CM();
+  showToast('✓ '+Object.keys(toApply).length+' champ(s) importé(s) dans le brief');
+  activeCmdTab[cmdId]='brief';
+  setTimeout(()=>openCmdDetail(cmdId),30);
+}
+
+// Commande Kanban drag & drop
+let cmdKDragging=null;
+function cmdKDragStart(e){cmdKDragging=e.currentTarget;e.currentTarget.classList.add('dragging');}
+function cmdKDrop(e,col){
+  e.preventDefault();col.classList.remove('drag-over');
+  if(!cmdKDragging)return;
+  const candId=cmdKDragging.dataset.id,cmdId=col.dataset.cmd,etape=col.dataset.etape;
+  DB.commandes=DB.commandes.map(cmd=>{
+    if(cmd.id!==cmdId)return cmd;
+    const cands=(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape}:cc);
+    return {...cmd,candidats:cands};
+  });
+  // If moved to embauché, update global statut_cand
+  if(etape==='emb'){
+    DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,statut_cand:'Embauché',embauche_cmd_id:cmdId}:c);
+  }
+  activeCmdTab[cmdId]='cands';
+  save();openCmdDetail(cmdId);
+  cmdKDragging.classList.remove('dragging');cmdKDragging=null;
+}
+
+function addCandToCmd(cmdId){
+  const selId=`add-csel-${cmdId}`;
+  const candId=document.getElementById(selId)?.value;
+  if(!candId)return;
+  DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:[...(cmd.candidats||[]),{candidat_id:candId,etape:'envc',cons:currentUser?.display_name||'—',added_at:TODAY}]}:cmd);
+  activeCmdTab[cmdId]='cands';
+  save();openCmdDetail(cmdId);
+}
+
+function addCand(cmdId){addCandToCmd(cmdId);}
+function rmCand(cmdId,candId){
+  if(!confirm('Retirer ce candidat ?'))return;
+  DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==candId)}:cmd);
+  activeCmdTab[cmdId]='cands';
+  save();openCmdDetail(cmdId);
+}
+function chEtape(cmdId,candId,etape){
+  DB.commandes=DB.commandes.map(cmd=>cmd.id===cmdId?{...cmd,candidats:(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape}:cc)}:cmd);
+  activeCmdTab[cmdId]='cands';
+  save();openCmdDetail(cmdId);
+}
+
+function showToast(msg){const el=document.createElement('div');el.style.cssText='position:fixed;bottom:20px;right:20px;background:#ecfdf5;color:#065f46;border:1px solid #bbf7d0;border-radius:9px;padding:12px 18px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.1)';el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),2500);}
+
+function openClientForm(id){
+  EID=id||null;const c=id?getClient(id):{};const v=f=>esc(c[f]||'');
+  const tOpts=['Client','Prospect'].map(t=>`<option value="${t}"${(c.type||'Prospect')===t?' selected':''}>${t}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${(c.cons||currentUser?.display_name)===u.id?' selected':''}>${u.label}</option>`).join('');
+  const ctOpts=`<option value="">— Aucun —</option>`+DB.contacts.filter(ct=>!id||ct.client_id===id||!ct.client_id).map(ct=>`<option value="${ct.id}"${c.contact_principal_id===ct.id?' selected':''}>${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
+  const effOpts=`<option value="">— Effectif —</option>`+EFFECTIFS.map(e=>`<option value="${e}"${c.effectif===e?' selected':''}>${e}</option>`).join('');
+  const saItems=(REF.secteurs_act||[]).filter(x=>x.actif!==false);
+  const ssItems=c.secteur_act_new_id?(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===c.secteur_act_new_id):(REF.sous_secteurs||[]).filter(s=>s.actif!==false);
+  const cts=id?DB.contacts.filter(ct=>ct.client_id===id):[];
+  const ctsH=cts.length?buildClientContacts(id||''  ,cts):'<div style="color:var(--tm);font-size:12px;font-style:italic">Aucun contact</div>';
+  const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length]||AV_COLORS[0];
+  const ini=(c.nom||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  window._pClientLogo=null;window._clSpecCount=1;
+  OM(id?'Modifier':'Nouveau client / prospect',`
+      <div style="position:relative;flex-shrink:0;width:72px;height:72px;cursor:pointer" title="${c.logo?'Changer le logo':'Ajouter un logo'}" onclick="document.getElementById('logo-edit-inp').click()">
+        ${c.logo
+          ?`<img id="logo-edit-preview-img" src="${c.logo}" style="width:72px;height:72px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`
+          :`<div id="logo-edit-preview-img" style="width:72px;height:72px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;">${ini}</div>`}
+        <div style="position:absolute;inset:0;border-radius:12px;background:rgba(0,0,0,0);display:flex;align-items:center;justify-content:center;font-size:18px;opacity:0;transition:all .15s" onmouseover="this.style.background='rgba(0,0,0,0.35)';this.style.opacity='1'" onmouseout="this.style.background='rgba(0,0,0,0)';this.style.opacity='0'">📷</div>
+        <input type="file" id="logo-edit-inp" style="display:none" accept=".jpg,.jpeg,.png,.svg,.webp" onchange="previewLogoEdit(this,'${id||''}')">
+        ${c.logo?`<button type="button" onclick="event.stopPropagation();window._pClientLogo='DELETE';document.getElementById('logo-edit-preview-img').outerHTML='<div id=\\'logo-edit-preview-img\\' style=\\'width:72px;height:72px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;\\'>${ini}</div>'" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:white;border:none;cursor:pointer;font-size:11px;line-height:18px;text-align:center;padding:0">✕</button>`:''}
+      </div>
+      <div style="flex:1">
+        <div class="fr"><div class="fld"><label>Nom entreprise</label><input id="f-nom" value="${v('nom')}"></div><div class="fld"><label>Type</label><select id="f-type">${tOpts}</select></div></div>
+        <div class="fr"><div class="fld"><label>Consultant</label><select id="f-cons">${cOpts}</select></div><div class="fld"><label>Effectif</label><select id="f-effectif">${effOpts}</select></div></div>
+      </div>
+    </div>
+    <div style="padding:10px 14px;background:var(--bg);border-radius:9px;border:1px solid var(--br);margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;color:var(--ts);margin-bottom:6px">🔍 Recherche INSEE</div>
+      <div class="geo-wrap">
+        <input class="geo-input" id="sirene-inp" placeholder="Tapez le nom, SIREN ou SIRET..." autocomplete="off" oninput="sireneType(this.value)" onblur="setTimeout(()=>sireneDrop(''),250)" value="${v('nom')}">
+        <div class="geo-drop" id="sirene-drop" style="max-height:250px"></div>
+      </div>
+      <div id="sirene-etabs" style="margin-top:8px"></div>
+    </div>
+    <div id="doublon-client-alert"></div>
+    <div class="fr">
+      <div class="fld"><label>Secteur d'activité</label>${searchSel('cl-sa',saItems,c.secteur_act_new_id||c.secteur_ref_id||'','— Secteur —')}</div>
+      <div class="fld"><label>Sous-secteur</label><div id="cl-ss-wrap">${searchSel('cl-ss',ssItems,c.sous_secteur_id||'','— Sous-secteur —')}</div></div>
+    </div>
+    <div class="section-title">Spécialités</div>
+    <div style="font-size:11px;color:var(--ts);margin-bottom:8px">Rattachées au sous-secteur sélectionné</div>
+    <div id="cl-specs-wrap">
+      ${buildClientSpecSelects(c.sous_secteur_id||'',c)}
+    </div>
+    <div class="fld"><label>Localisation</label>${geoWidget('geo-cl',c.ville||'',c.departement||'',c.region||'',c.code_postal||'')}</div>
+    <div class="section-title">Données INSEE</div>
+    <div class="fr"><div class="fld"><label>SIREN</label><input id="f-siren" value="${v('siren')}"></div><div class="fld"><label>SIRET</label><input id="f-siret" value="${v('siret')}"></div></div>
+    <div class="fld"><label>Adresse officielle</label><input id="f-adresse_sirene" value="${v('adresse_sirene')}"></div>
+    <div class="fr"><div class="fld"><label>Code APE / NAF</label><input id="f-naf" value="${v('naf')}"></div></div>
+    <div class="fr"><div class="fld"><label>Statut INSEE</label><input id="f-statut_sirene" value="${v('statut_sirene')||'Active'}"></div><div class="fld"><label>Date de création</label><input id="f-date_creation_sirene" value="${v('date_creation_sirene')}"></div></div>
+    <input type="hidden" id="f-source_sirene" value="${v('source_sirene')||'Manuel'}">
+    <div class="section-title">Contact & Web</div>
+    <div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div>
+    <div class="fld"><label>Site internet</label><input id="f-site_web" value="${v('site_web')}" placeholder="https://..."></div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--ts)">Contacts (${cts.length})</div>
+        <div style="display:flex;gap:5px">
+          <button type="button" class="btn btn-s btn-sm" onclick="openLinkContactToClient(EID)">🔗 Rattacher</button>
+          <button type="button" class="btn btn-p btn-sm" onclick="openAddContactFromClient(EID)">+ Nouveau</button>
+        </div>
+      </div>
+      <div class="client-contacts-list" style="max-height:180px;overflow-y:auto">${ctsH}</div>
+    </div>
+    <div class="fa">
+      <button class="btn btn-s" onclick="CM();${id?`openClientDetail('${id}')`:''}">Annuler</button>
+      <button class="btn btn-p" onclick="saveClient()">Enregistrer</button>
+    </div>`,'w');
+}
+
+function previewLogoEdit(inp,clientId){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>500*1024){alert('Image trop lourde (max 500Ko)');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    window._pClientLogo=e.target.result;
+    const el=document.getElementById('logo-edit-preview-img');
+    if(el)el.outerHTML=`<img id="logo-edit-preview-img" src="${e.target.result}" style="width:72px;height:72px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`;
+  };
+  r.readAsDataURL(file);
+}
+async function saveClient(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const secteur_act_new_id=ssGet('cl-sa');
+  const secteurLabel=refLbl('secteurs_act',secteur_act_new_id)||refLbl('secteurs',secteur_act_new_id)||'';
+  const geo=geoGetVal('geo-cl');
+  const existing=EID?getClient(EID):{};
+  // Logo: DELETE flag → remove, new upload → use it, otherwise keep existing
+  let logo=existing.logo||null;
+  if(window._pClientLogo==='DELETE')logo=null;
+  else if(window._pClientLogo)logo=window._pClientLogo;
+  window._pClientLogo=null;
+  const form={
+    nom:g('nom'),type:g('type'),cons:g('cons'),
+    secteur:secteurLabel,secteur_act_new_id,sous_secteur_id:ssGet('cl-ss'),
+    secteur_ref_id:existing.secteur_ref_id||'',
+    ville:geo.ville,code_postal:geo.code_postal,departement:geo.departement,departement_code:geo.departement_code,region:geo.region,loc:geo.ville||'',
+    effectif:g('effectif'),siren:g('siren'),siret:g('siret'),site_web:g('site_web'),
+    adresse_sirene:g('adresse_sirene'),naf:g('naf'),naf_label:g('naf_label'),
+    statut_sirene:g('statut_sirene'),date_creation_sirene:g('date_creation_sirene'),
+    source_sirene:g('source_sirene')||'Manuel',
+    email:g('email'),phone:g('phone'),contact_principal_id:g('contact_principal_id'),
+    cl_spec1_id:ssGet('cl-spec1'),cl_spec2_id:ssGet('cl-spec2'),cl_spec3_id:ssGet('cl-spec3'),
+    cl_spec4_id:ssGet('cl-spec4'),cl_spec5_id:ssGet('cl-spec5'),
+    logo,
+  };
+  const savedId=EID;
+  let newId=null;
+  if(EID){DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c);}
+  else{newId=genId();DB.clients.push({...form,id:newId,actions:[]});}
+  await save(['clients']);CM();R(CV);
+  showToast('✓ Fiche client enregistrée');
+  const targetId=savedId||newId;
+  if(targetId)setTimeout(()=>openClientDetail(targetId),30);
+}
+function delClient(id){if(!confirm('Supprimer ?'))return;DB.clients=DB.clients.filter(c=>c.id!==id);save();R(CV);}
+function openClientDetail(id){
+  const c=getClient(id);if(!c)return;
+  const [bg,txt]=AV_COLORS[DB.clients.indexOf(c)%AV_COLORS.length];
+  const ini=c.nom.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const allActs=DB.actions.filter(a=>a.client_id===id).sort((a,b)=>b.date>a.date?1:-1);
+  const cmds=DB.commandes.filter(cmd=>cmd.client_id===id);
+  const cts=DB.contacts.filter(ct=>ct.client_id===id);
+  const actsH=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);const cmts=a.admin_comments||[];const hasCmt=cmts.length>0;
+const cmtBubbles=cmts.map(c=>{const u=_usersCache.find(x=>x.id===c.by||x.label===c.by);const photoHtml=u?.photo?`<img src="${u.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${(c.by||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>`;return `<div style="display:flex;align-items:flex-start;gap:7px;margin-top:7px;padding-left:28px">${photoHtml}<div style="flex:1;background:var(--acc-light);border:1px solid var(--br2);border-radius:12px 12px 12px 3px;padding:6px 10px"><div style="font-size:10px;font-weight:600;color:var(--acc2);margin-bottom:2px">${esc(c.by)} · ${c.date}</div><div style="font-size:12px;color:var(--tp);line-height:1.5">${esc(c.text)}</div></div></div>`;}).join('');
+return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="ic-btn" onclick="openActionComments('${a.id}')" title="Commentaires">${hasCmt?'💬<sup style=\'font-size:9px\'>'+cmts.length+'</sup>':'💬'}</button>${(currentUser?.role==='admin'||a.cons===currentUser?.display_name)?`<button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>`:''}</div></div>${cmtBubbles}</div>`;}).join('');
+  const cmdsH=cmds.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune commande</div>':cmds.map(cmd=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg);font-size:12px;cursor:pointer" onclick="CM();openCmdDetail('${cmd.id}')"><div style="flex:1;font-weight:500;color:var(--tp)">${esc(cmd.titre)}</div><span style="background:${cmd.statut==='Active'?'#ecfdf5':'var(--acc-light)'};color:${cmd.statut==='Active'?'#065f46':'var(--acc2)'};border-radius:20px;padding:1px 8px;font-size:11px">${esc(cmd.statut)}</span></div>`).join('');
+  const ctsH=buildClientContacts(id,cts);
+  const leftHtml=`
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--br);position:relative">
+      <div style="flex-shrink:0">
+        ${c.logo
+          ?`<img src="${c.logo}" style="width:62px;height:62px;border-radius:12px;object-fit:contain;background:white;border:1px solid var(--br);display:block">`
+          :`<div style="width:62px;height:62px;border-radius:12px;background:${bg};color:${txt};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;">${ini}</div>`}
+      </div>
+      <div style="flex:1"><div style="font-size:17px;font-weight:700">${esc(c.nom)}</div><div style="font-size:13px;color:var(--ts)">${esc(c.secteur||'—')} · ${esc(c.ville||c.loc||'—')}${c.departement?' ('+esc(c.departement)+')':''}</div></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span class="${c.type==='Client'?'b-client':'b-prospect'}">${c.type}</span>
+        ${c.archived?`<span style="background:#fef3c7;color:#92400e;border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">📦 Archivé</span>`:''}
+        <button class="btn btn-s btn-sm" onclick="openClientStatutPicker('${id}')" title="Modifier le statut commercial">${esc(c.statut_commercial||'Nouveau prospect')} ▾</button>
+        <button class="btn btn-s btn-sm" onclick="openAgendaForm(null,'client','${id}')">📋 Tâche</button>
+        <button class="btn btn-p btn-sm" onclick="openClientForm('${id}')">✏️ Modifier</button>
+      </div>
+      ${buildNavArrows(id,_clientsNav,'clientNav')}
+      <button onclick="CM()" style="flex-shrink:0;width:28px;height:28px;border-radius:7px;background:#fef2f2;border:1px solid #fecaca;cursor:pointer;color:var(--red);font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1" title="Fermer">×</button>
+    </div>
+    <div class="dg2" style="margin-bottom:14px">
+      <div><div class="dg"><div class="dl">Consultant</div><div class="dv">${renderCons(c.cons||'—',18)}</div></div>
+        <div class="dg"><div class="dl">Localisation</div><div class="dv">${[c.ville,c.departement?`(${c.departement_code}) ${c.departement}`:'',c.region].filter(Boolean).join(' · ')||'—'}</div></div>
+        <div class="dg"><div class="dl">Téléphone</div><div class="dv">${esc(c.phone||'—')}</div></div>
+        ${c.site_web?`<div class="dg"><div class="dl">Site web</div><div class="dv"><a href="${esc(c.site_web)}" target="_blank" class="btn btn-s btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">🌐 Voir le site</a></div></div>`:''}
+      </div>
+      <div>
+        <div class="dg"><div class="dl">Effectif</div><div class="dv">${esc(c.effectif||'—')}</div></div>
+        <div class="dg"><div class="dl">SIRET</div><div class="dv">${esc(c.siret||'—')}</div></div>
+        <div class="dg"><div class="dl">Commandes</div><div class="dv">${cmds.length}</div></div>
+        <div class="dg"><div class="dl">Contacts</div><div class="dv">${cts.length}</div></div>
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">Contacts (${cts.length})</div>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-s btn-sm" onclick="openLinkContactToClient('${id}')">🔗 Rattacher</button>
+          <button class="btn btn-p btn-sm" onclick="openAddContactFromClient('${id}')">+ Nouveau</button>
+        </div>
+      </div>
+      <div class="client-contacts-list" style="max-height:220px;overflow-y:auto">${ctsH}</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">Commandes (${cmds.length})</div>
+        <button class="btn btn-p btn-sm" onclick="openCmdFormForClient('${id}')">+ Commande</button>
+      </div>
+      ${cmdsH}
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;border-top:1px solid var(--br);padding-top:14px;margin-top:14px;margin-bottom:10px">📋 Conditions commerciales</div>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600">Conventions (${(c.conventions||[]).length})</div>
+          <label class="btn btn-s btn-sm" style="cursor:pointer">+ Convention<input type="file" style="display:none" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="uploadConvention(this,'${id}')"></label>
+        </div>
+        <div id="conv-list-${id}">${buildConventionsHtml(id,c.conventions||[])}</div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600">Conditions tarifaires (${(c.conditions_tarif||[]).length})</div>
+          <button class="btn btn-s btn-sm" onclick="openAddCondTarif('${id}')">+ Condition</button>
+        </div>
+        <div id="tarif-list-${id}">${buildCondTarifHtml(id,c.conditions_tarif||[])}</div>
+      </div>
+    </div>
+    <div class="dact">
+      ${c.archived
+        ?`<button class="btn btn-s btn-sm" onclick="unarchiveFiche('client','${id}')">♻️ Restaurer</button>`
+        :`<button class="btn btn-d btn-sm" onclick="archiveFiche('client','${id}')">📦 Archiver</button>`
+      }
+      <button class="btn btn-d btn-sm" onclick="delClient('${id}');CM()">🗑 Supprimer</button>
+    </div>`;
+
+  const rightHtml=`
+    <div class="split-right">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--br)">
+        <div class="split-right-title" style="margin:0">Actions commerciales (${allActs.length})</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-s btn-sm" onclick="openActionFromDetail('${id}')">+ Action</button>
+          <button class="btn btn-p btn-sm" onclick="CM();G('dashboard-crm')">📊</button>
+        </div>
+      </div>
+      <div id="acts-panel-${id}" style="overflow-y:auto">${actsH}</div>
+    </div>`;
+
+  const html=`<div class="split-panel"><div class="split-left">${leftHtml}</div>${rightHtml}</div>`;
+  OM(esc(c.nom),html,'xxl');
+}
+function openActionFromDetail(clientId){
+  openActionForm(clientId);
+  // Override saveAction to refresh the acts panel instead of closing the fiche
+  window._actionRefreshClientId=clientId;
+}
+async function saveAction(){
+  const type=document.getElementById('at')?.value;
+  const date=document.getElementById('ad')?.value||TODAY;
+  const cons=document.getElementById('aa')?.value;
+  const client_id=document.getElementById('acl')?.value;
+  const contact_id=document.getElementById('act')?.value;
+  const commentaire=(document.getElementById('ac')?.value||'').trim();
+  if(!cons||!client_id||!contact_id||!date){alert('Consultant, entreprise, contact et date sont obligatoires.');return;}
+  const cl=getClient(client_id);const ct=getContact(contact_id);
+  const action={id:genId(),type,date,cons,client_id,contact_id,client_nom:cl?.nom||'',contact_nom:ct?`${ct.prenom} ${ct.nom}`:'',commentaire,created_at:TODAY};
+  DB.actions.push(action);await save(['actions']);CM();
+  const refId=window._actionRefreshClientId||client_id;
+  window._actionRefreshClientId=null;
+  // Refresh panel inline if visible, otherwise reopen client detail
+  const panel=document.getElementById('acts-panel-'+refId);
+  if(panel){
+    const allActs=DB.actions.filter(a=>a.client_id===refId).sort((a,b)=>b.date>a.date?1:-1);
+    panel.innerHTML=allActs.length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune action</div>':allActs.map(a=>{const ct2=getContact(a.contact_id);const cmts=a.admin_comments||[];const hasCmt=cmts.length>0;
+const cmtBubbles=cmts.map(c=>{const u=_usersCache.find(x=>x.id===c.by||x.label===c.by);const photoHtml=u?.photo?`<img src="${u.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${(c.by||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>`;return `<div style="display:flex;align-items:flex-start;gap:7px;margin-top:7px;padding-left:28px">${photoHtml}<div style="flex:1;background:var(--acc-light);border:1px solid var(--br2);border-radius:12px 12px 12px 3px;padding:6px 10px"><div style="font-size:10px;font-weight:600;color:var(--acc2);margin-bottom:2px">${esc(c.by)} · ${c.date}</div><div style="font-size:12px;color:var(--tp);line-height:1.5">${esc(c.text)}</div></div></div>`;}).join('');
+return `<div style="margin-bottom:${hasCmt?'4px':'0'}"><div class="tl-item"><div class="tl-ico">${ACT_ICO[a.type]||'📋'}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(a.type)} — ${renderCons(a.cons,16)}</div><div style="font-size:11px;color:var(--tm)">${a.date}${ct2?' · 👤 '+esc(ct2.prenom)+' '+esc(ct2.nom):''}</div><div style="font-size:12px;color:var(--ts);margin-top:2px;line-height:1.5">${esc(a.commentaire||'')}</div></div><div style="display:flex;gap:4px;flex-shrink:0"><button class="ic-btn" onclick="openActionComments('${a.id}')" title="Commentaires">${hasCmt?'💬<sup style=\'font-size:9px\'>'+cmts.length+'</sup>':'💬'}</button>${(currentUser?.role==='admin'||a.cons===currentUser?.display_name)?`<button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>`:''}</div></div>${cmtBubbles}</div>`;}).join('');
+  }else{
+    // Toujours rouvrir la fiche client, jamais renvoyer au listing
+    setTimeout(()=>openClientDetail(refId),30);
+  }
+}
+function openActionForm(prefClientId){
+  EID=null;
+  const tOpts=ACT_TYPES.map(t=>`<option value="${t}">${ACT_ICO[t]} ${t}</option>`).join('');
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
+  const clOpts=`<option value="">— Entreprise (obligatoire) —</option>`+DB.clients.map(c=>`<option value="${c.id}"${c.id===prefClientId?' selected':''}>${esc(c.nom)}</option>`).join('');
+  // Filter contacts by pre-selected company
+  const filteredCts=prefClientId?DB.contacts.filter(ct=>ct.client_id===prefClientId||ct.client_ids?.includes(prefClientId)):DB.contacts;
+  const ctOpts=`<option value="">— Contact (obligatoire) —</option>`+filteredCts.map(ct=>`<option value="${ct.id}">${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
+  OM('Nouvelle action commerciale',`
+    <div class="fr"><div class="fld"><label>Type</label><select id="at">${tOpts}</select></div><div class="fld"><label>Date (obligatoire)</label><input type="date" id="ad" value="${TODAY}"></div></div>
+    <div class="fld"><label>Consultant (obligatoire)</label><select id="aa">${cOpts}</select></div>
+    <div class="fld"><label>Entreprise (obligatoire)</label><select id="acl" onchange="refreshActionContacts(this.value)">${clOpts}</select></div>
+    <div class="fld"><label>Contact (obligatoire)</label><select id="act">${ctOpts}</select></div>
+    <div class="fld"><label>Commentaire</label><textarea id="ac" style="min-height:80px" placeholder="Résumé, points abordés..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveAction()">Enregistrer</button></div>`,'w');
+}
+function refreshActionContacts(clientId){
+  const sel=document.getElementById('act');if(!sel)return;
+  const filtered=clientId?DB.contacts.filter(ct=>ct.client_id===clientId||ct.client_ids?.includes(clientId)):DB.contacts;
+  sel.innerHTML=`<option value="">— Contact (obligatoire) —</option>`+filtered.map(ct=>`<option value="${ct.id}">${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');
+}
+function delAction(id){
+  const a=DB.actions.find(x=>x.id===id);if(!a)return;
+  const isAdmin=currentUser?.role==='admin';
+  if(!isAdmin&&a.cons!==currentUser?.display_name){alert('Vous ne pouvez supprimer que vos propres actions.');return;}
+  if(!confirm('Supprimer cette action ?'))return;
+  DB.actions=DB.actions.filter(x=>x.id!==id);save();R(CV);showToast('✓ Action supprimée');
+}
+
+function openContactForm(id){
+  EID=id||null;const ct=id?getContact(id):{};const v=f=>esc(ct[f]||'');
+  const clOpts=`<option value="">— Rattacher à un client —</option>`+DB.clients.map(c=>`<option value="${c.id}"${ct.client_id===c.id?' selected':''}>${esc(c.nom)}</option>`).join('');
+  OM(id?'Modifier':'Nouveau contact',`
+    <div class="fr"><div class="fld"><label>Prénom</label><input id="f-prenom" value="${v('prenom')}"></div><div class="fld"><label>Nom</label><input id="f-nom" value="${v('nom')}"></div></div>
+    <div class="fld"><label>Fonction</label><input id="f-fonction" value="${v('fonction')}" placeholder="DRH, PDG, Directeur technique..."></div>
+    <div class="fld"><label>Rattaché à</label><select id="f-client_id">${clOpts}</select></div>
+    <div class="fr"><div class="fld"><label>Email</label><input id="f-email" value="${v('email')}"></div><div class="fld"><label>Téléphone</label><input id="f-phone" value="${v('phone')}"></div></div>
+    <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="f-linkedin" value="${v('linkedin')}" placeholder="https://linkedin.com/in/..."></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveContact()">Enregistrer</button></div>`,'n');
+}
+async function saveContact(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const form={prenom:g('prenom'),nom:g('nom'),fonction:g('fonction'),client_id:g('client_id'),email:g('email'),phone:g('phone'),linkedin:g('linkedin')};
+  const savedId=EID;
+  EID?DB.contacts=DB.contacts.map(c=>c.id===EID?{...c,...form}:c):DB.contacts.push({...form,id:genId()});
+  await save(['contacts']);CM();R(CV);
+  showToast('✓ Contact enregistré');
+  if(savedId)setTimeout(()=>openContactDetail(savedId),30);
+}
+function openContactDetail(id){
+  const ct=getContact(id);if(!ct)return;
+  const cl=getClient(ct.client_id);
+  OM(`${esc(ct.prenom)} ${esc(ct.nom)}`,`
+    <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--br)">
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+      <div style="font-size:14px;font-weight:600;color:var(--acc2);margin-bottom:8px">${esc(ct.fonction||'—')}</div>
+      ${cl?`<span style="font-size:12px;background:var(--acc-light);color:var(--acc2);border-radius:5px;padding:2px 9px">${esc(cl.nom)}</span>`:''}
+    </div>
+    <div class="dg2">
+      <div>
+        <div class="dg"><div class="dl">Téléphone</div><div class="dv" style="display:flex;align-items:center;gap:5px">${ct.phone?`<a href="tel:${esc(ct.phone)}" style="color:var(--tp);text-decoration:none">${esc(ct.phone)}</a>`:' —'}${ct.linkedin?liBtn(ct.linkedin):''}</div></div>
+        <div class="dg"><div class="dl">Email</div><div class="dv">${ct.email?`<a href="mailto:${esc(ct.email)}" style="color:var(--acc);text-decoration:none">${esc(ct.email)}</a>`:'—'}</div></div>
+        ${ct.linkedin?`<div class="dg"><div class="dl">LinkedIn</div><div class="dv">${liBtn(ct.linkedin)} <a href="${esc(ct.linkedin)}" target="_blank" style="color:var(--acc);font-size:12px;text-decoration:none">Voir le profil</a></div></div>`:''}
+      </div>
+      <div><div class="dg"><div class="dl">Entreprise</div><div class="dv">${esc(cl?.nom||'—')}</div></div></div>
+    </div>
+    <div class="fa">
+      <button class="btn btn-d btn-sm" onclick="delContact('${id}');CM()">🗑 Supprimer</button>
+      <div style="display:flex;gap:7px"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openContactForm('${id}')">✏️ Modifier</button></div>
+    </div>`,'n');
+}
+function delContact(id){if(!confirm('Supprimer ?'))return;DB.contacts=DB.contacts.filter(c=>c.id!==id);save();R(CV);}
+
+function openAgendaForm(id, ctxType, ctxId){
+  EID=id||null;
+  const r=id?DB.relances.find(x=>x.id===id):{};
+  const v=f=>esc(r[f]||'');
+  const curPlanif=r.planif_type||'Relance';
+
+  // Contexte pré-sélectionné selon la fiche d'origine
+  const preType=ctxType||(r.type||'Candidat'); // 'cand'|'client'|'Candidat'|'Client'
+  const isCandCtx=preType==='cand'||preType==='Candidat';
+  const preRef=ctxId||r.ref||'';
+
+  // Items pour les searchSel
+  const candItems=alphaSort(DB.candidats.map(c=>({id:c.id,label:`${c.prenom} ${c.nom}`})));
+  const clientItems=alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
+  const consItems=getCONS();
+
+  // Assignés (checkboxes)
+  const assignedArr=r.assigned_to||[r.cons||currentUser?.display_name||''];
+
+  // Champ référence selon contexte
+  const refLabel=isCandCtx?'Candidat concerné':'Client / Prospect concerné';
+  const refItems=isCandCtx?candItems:clientItems;
+  const refSel=searchSel('r-ref',refItems,preRef,'— Rechercher —');
+
+  // Si contexte forcé (depuis une fiche), on masque le choix de type
+  const typeSelector=ctxType?`<input type="hidden" id="r-type" value="${isCandCtx?'Candidat':'Client'}">`
+    :`<div class="fld"><label>Lié à</label><select id="r-type" onchange="refreshAgendaRef(this.value)" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit"><option value="Candidat"${isCandCtx?' selected':''}>Candidat</option><option value="Client"${!isCandCtx?' selected':''}>Client / Prospect</option></select></div>`;
+
+  OM(id?'Modifier la tâche':'Nouvelle tâche planifiée',`
+    <div class="fld"><label>Type de tâche</label><select id="r-planif" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit">
+      <option value="Relance"${curPlanif==='Relance'?' selected':''}>🔔 Relance</option>
+      <option value="Rendez-vous"${curPlanif==='Rendez-vous'?' selected':''}>🤝 Rendez-vous</option>
+    </select></div>
+    ${typeSelector}
+    <div class="fld" id="r-ref-wrap"><label>${refLabel}</label>${refSel}</div>
+    <div class="fld"><label>Objet</label><input id="r-obj" value="${v('obj')}" placeholder="Objet de la tâche..."></div>
+    <div class="fr">
+      <div class="fld"><label>Date</label><input type="date" id="r-date" value="${v('date')||TODAY}"></div>
+      <div class="fld"><label>Heure</label><input type="time" id="r-heure" value="${v('heure')||'10:00'}"></div>
+    </div>
+    <div class="fld"><label>Assigné à</label>
+      <div style="padding:8px 10px;background:var(--bg);border:1px solid var(--br);border-radius:7px;display:flex;flex-direction:column;gap:5px">
+        ${getCONS().map(u=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:2px 0">
+          <input type="checkbox" value="${esc(u.id)}" ${assignedArr.includes(u.id)?'checked':''} style="width:15px;height:15px;accent-color:var(--acc);flex-shrink:0">
+          <span>${esc(u.label)}</span>
+        </label>`).join('')}
+      </div>
+    </div>
+    <div class="fld"><label>Notes</label><textarea id="r-notes" style="min-height:60px;width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;font-family:inherit;resize:vertical">${v('notes')}</textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveRel()">Enregistrer</button></div>`,'n');
+}
+
+function refreshAgendaRef(type){
+  const wrap=document.getElementById('r-ref-wrap');if(!wrap)return;
+  const isCand=type==='Candidat';
+  const items=isCand?alphaSort(DB.candidats.map(c=>({id:c.id,label:`${c.prenom} ${c.nom}`}))):alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
+  wrap.innerHTML=`<label>${isCand?'Candidat concerné':'Client / Prospect concerné'}</label>`+searchSel('r-ref',items,'','— Rechercher —');
+}
+async function saveRel(){
+  const g=id=>document.getElementById(id)?.value||'';
+  const type=g('r-type')||'Candidat';
+  const ref=ssGet('r-ref')||g('r-ref-val')||'';
+  const ri=type==='Candidat'?getCand(ref):getClient(ref);
+  const nom=type==='Candidat'?(ri?`${ri.prenom} ${ri.nom}`:''):(ri?.nom||'');
+  const assigned_to=Array.from(document.querySelectorAll('.mmodal input[type=checkbox]:checked, #ov input[type=checkbox]:checked')).map(cb=>cb.value).filter(Boolean);
+  const cons=assigned_to[0]||currentUser?.display_name||'';
+  const created_by=EID?(DB.relances.find(r=>r.id===EID)?.created_by||currentUser?.display_name):currentUser?.display_name;
+  const form={
+    type,ref,nom,
+    obj:g('r-obj'),date:g('r-date')||TODAY,heure:g('r-heure'),
+    planif_type:g('r-planif')||'Relance',
+    cons,assigned_to,created_by,
+    notes:g('r-notes'),
+    fait:EID?(DB.relances.find(r=>r.id===EID)?.fait||false):false,
+    completed_by:EID?(DB.relances.find(r=>r.id===EID)?.completed_by||null):null,
+    completed_at:EID?(DB.relances.find(r=>r.id===EID)?.completed_at||null):null,
+  };
+  if(!form.obj){alert('Veuillez renseigner un objet.');return;}
+  EID?DB.relances=DB.relances.map(r=>r.id===EID?{...r,...form}:r):DB.relances.push({...form,id:genId()});
+  await save(['relances']);CM();R(CV);showToast('✓ Tâche enregistrée');
+}
+async function toggleRel(id){
+  const r=DB.relances.find(x=>x.id===id);if(!r)return;
+  const nowDone=!r.fait;
+  const me=currentUser?.display_name||'';
+  const updatedR={...r,fait:nowDone,
+    completed_by:nowDone?me:null,
+    completed_at:nowDone?(TODAY+' '+new Date().toTimeString().slice(0,5)):null
+  };
+  DB.relances=DB.relances.map(x=>x.id===id?updatedR:x);
+  await save(['relances']);
+  // Notification au créateur si différent de celui qui valide
+  if(nowDone&&r.created_by&&r.created_by!==me){
+    addNotif(r.created_by,`✅ Tâche validée par ${me}`,`"${r.obj||r.nom}" a été marquée comme faite par ${me}.`,id);
+  }
+  R(CV);
+  if(CV==='dash')rDash();
+}
+function delRel(id){if(!confirm('Supprimer ?'))return;DB.relances=DB.relances.filter(r=>r.id!==id);save();R(CV);}
+
+// ── Notifications internes ─────────────────────────────────────────────────
+function addNotif(toUser,title,msg,relId){
+  if(!DB._notifs)DB._notifs={};
+  if(!DB._notifs[toUser])DB._notifs[toUser]=[];
+  DB._notifs[toUser].unshift({id:genId(),title,msg,relId,date:TODAY,read:false});
+  // Conserver max 30 notifs par user
+  DB._notifs[toUser]=DB._notifs[toUser].slice(0,30);
+  saveKey('settings'); // on stocke dans settings pour éviter un endpoint supplémentaire
+  // Si le destinataire est connecté en ce moment, afficher un toast
+  if(currentUser?.display_name===toUser)showToast('🔔 '+title);
+  // Mettre à jour le badge notif
+  updateNotifBadge();
+}
+function getMyNotifs(){return(DB._notifs&&DB._notifs[currentUser?.display_name])||[];}
+function updateNotifBadge(){
+  const unread=getMyNotifs().filter(n=>!n.read).length;
+  let badge=document.getElementById('notif-badge');
+  if(badge)badge.style.display=unread>0?'':'none',badge.textContent=unread;
+}
+function openNotifs(){
+  const notifs=getMyNotifs();
+  // Marquer tout comme lu
+  if(DB._notifs&&DB._notifs[currentUser?.display_name]){
+    DB._notifs[currentUser?.display_name]=DB._notifs[currentUser?.display_name].map(n=>({...n,read:true}));
+    saveKey('settings');updateNotifBadge();
+  }
+  if(!notifs.length){OM('🔔 Notifications','<div style="padding:20px;text-align:center;color:var(--tm)">Aucune notification</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>','n');return;}
+  const rows=notifs.slice(0,15).map(n=>`<div style="padding:10px 12px;border-bottom:1px solid var(--bg);${n.read?'':'background:var(--acc-light);'}" onclick="${n.relId?`CM();`:''}" style="cursor:pointer">
+    <div style="font-size:13px;font-weight:600">${esc(n.title)}</div>
+    <div style="font-size:12px;color:var(--ts);margin-top:2px">${esc(n.msg)}</div>
+    <div style="font-size:11px;color:var(--tm);margin-top:2px">${n.date}</div>
+  </div>`).join('');
+  OM('🔔 Notifications',rows+'<div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>','n');
+}
+
+function resetDashF(){dashF={cons:'',date_from:'',date_to:'',client_id:'',contact_id:'',secteur_id:''};document.getElementById('df-cons').value='';document.getElementById('df-from').value='';document.getElementById('df-to').value='';document.getElementById('df-client').value='';document.getElementById('df-contact').value='';document.getElementById('df-sect').value='';rDashCRM();}
+
+function rDashCRM(){
+  // Populate filter dropdowns
+  const dfCons=document.getElementById('df-cons');
+  if(dfCons&&dfCons.options.length<=1){getCONS().forEach(u=>{const o=document.createElement('option');o.value=u.id;o.textContent=u.label;dfCons.appendChild(o);});}
+  const dfCl=document.getElementById('df-client');
+  if(dfCl){dfCl.innerHTML=`<option value="">Toutes les entreprises</option>`+DB.clients.map(c=>`<option value="${c.id}"${dashF.client_id===c.id?' selected':''}>${esc(c.nom)}</option>`).join('');}
+  const dfCt=document.getElementById('df-contact');
+  if(dfCt){dfCt.innerHTML=`<option value="">Tous les contacts</option>`+DB.contacts.map(ct=>`<option value="${ct.id}"${dashF.contact_id===ct.id?' selected':''}>${esc(ct.prenom)} ${esc(ct.nom)}</option>`).join('');}
+  const dfSect=document.getElementById('df-sect');
+  if(dfSect){dfSect.innerHTML=`<option value="">Tous les secteurs</option>`+(REF.secteurs_act||[]).filter(x=>x.actif!==false).map(s=>`<option value="${s.id}"${dashF.secteur_id===s.id?' selected':''}>${esc(s.label)}</option>`).join('');}
+
+  let acts=DB.actions;
+  if(dashF.cons)acts=acts.filter(a=>a.cons===dashF.cons);
+  if(dashF.date_from)acts=acts.filter(a=>a.date>=dashF.date_from);
+  if(dashF.date_to)acts=acts.filter(a=>a.date<=dashF.date_to);
+  if(dashF.client_id)acts=acts.filter(a=>a.client_id===dashF.client_id);
+  if(dashF.contact_id)acts=acts.filter(a=>a.contact_id===dashF.contact_id);
+  if(dashF.secteur_id){const cls=new Set(DB.clients.filter(c=>c.secteur_act_new_id===dashF.secteur_id||c.secteur_ref_id===dashF.secteur_id).map(c=>c.id));acts=acts.filter(a=>cls.has(a.client_id));}
+  acts=acts.sort((a,b)=>b.date>a.date?1:-1);
+
+  // KPIs
+  const byType={};ACT_TYPES.forEach(t=>{byType[t]=0;});acts.forEach(a=>{if(byType[a.type]!==undefined)byType[a.type]++;});
+  // Weekly bounds (Monday to Sunday)
+  const now=new Date(TODAY);const dow=now.getDay()||7;
+  const wS=new Date(now);wS.setDate(now.getDate()-dow+1);const wE=new Date(wS);wE.setDate(wS.getDate()+6);
+  const wSstr=wS.toISOString().slice(0,10),wEstr=wE.toISOString().slice(0,10);
+  const weekActs=DB.actions.filter(a=>a.date>=wSstr&&a.date<=wEstr);
+  const byConsWeek={};getCONS().forEach(u=>{byConsWeek[u.id]=0;});weekActs.forEach(a=>{if(byConsWeek[a.cons]!==undefined)byConsWeek[a.cons]++;else byConsWeek[a.cons]=(byConsWeek[a.cons]||0)+1;});
+  const topCW=Object.entries(byConsWeek).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+  const maxCW=topCW[0]?.[1]||1;
+
+  let h=`<div style="display:grid;grid-template-columns:repeat(${ACT_TYPES.length},1fr);gap:11px;margin-bottom:18px">`;
+  ACT_TYPES.forEach(t=>{h+=`<div class="kpi-card"><div style="font-size:26px;margin-bottom:4px">${ACT_ICO[t]||'📋'}</div><div class="kpi-val">${byType[t]||0}</div><div class="kpi-lbl">${t}</div></div>`;});
+  h+=`</div>`;
+
+  h+=`<div style="margin-bottom:16px"><div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px"><div style="font-size:14px;font-weight:600">Activité par consultant — semaine en cours</div><span style="font-size:11px;color:var(--tm)">${wSstr} → ${wEstr}</span></div>
+  ${topCW.length===0?'<div style="color:var(--tm);font-size:13px;text-align:center;padding:14px 0">Aucune action saisie cette semaine</div>':topCW.map(([cn,n])=>`<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px"><div style="font-weight:600;width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cn)}</div><div style="flex:1;height:6px;background:var(--bg);border-radius:3px"><div style="height:100%;background:var(--acc);border-radius:3px;width:${Math.round(n/maxCW*100)}%"></div></div><div style="font-size:13px;color:var(--tp);font-weight:600;flex-shrink:0;min-width:24px;text-align:right">${n}</div></div>`).join('')}
+  </div></div>`;
+
+  // Liste des actions
+  h+=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-size:14px;font-weight:600">Actions (${acts.length})</div></div>`;
+  if(!acts.length){h+='<div class="empty" style="padding:20px 0">Aucune action ne correspond aux filtres</div>';}
+  else{
+    h+=`<table><thead><tr><th>Type</th><th>Date</th><th>Consultant</th><th>Entreprise</th><th>Contact</th><th>Commentaire</th><th></th></tr></thead><tbody>`;
+    acts.forEach(a=>{
+      const hasCmt=(a.admin_comments||[]).length>0;
+      h+=`<tr style="cursor:pointer" onclick="openActionDetail('${a.id}')">
+        <td><span style="font-size:15px">${ACT_ICO[a.type]||'📋'}</span> <span style="font-size:12px;color:var(--ts)">${esc(a.type)}</span></td>
+        <td style="font-size:12px;white-space:nowrap">${a.date}</td>
+        <td style="font-size:12px">${renderCons(a.cons,18)}</td>
+        <td style="font-size:12px;color:var(--acc)">${esc(a.client_nom||'—')}</td>
+        <td style="font-size:12px">${esc(a.contact_nom||'—')}</td>
+        <td style="font-size:12px;color:var(--ts);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.commentaire||'—')}</td>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap">
+          <button class="btn btn-s btn-sm" onclick="openActionComments('${a.id}')" title="Commentaires admin">${hasCmt?'💬 '+(a.admin_comments.length):'💬'}</button>
+          ${(currentUser?.role==='admin'||a.cons===currentUser?.display_name)?`<button class="ic-btn" onclick="delAction('${a.id}')">🗑</button>`:''}
+        </td>
+      </tr>`;
+    });
+    h+=`</tbody></table>`;
+  }
+  h+='</div>';
+  document.getElementById('body-dash-crm').innerHTML=h;
+}
+
+function openActionDetail(actionId){
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  const cl=getClient(a.client_id);const ct=getContact(a.contact_id);
+  OM('Détail action',`
+    <div style="margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">${ACT_ICO[a.type]||'📋'} ${esc(a.type)}</div>
+      <div style="font-size:13px;color:var(--ts);margin-bottom:8px">${a.date} · ${renderCons(a.cons,16)}</div>
+      ${cl?`<div style="font-size:13px;margin-bottom:3px">🏢 <b>${esc(cl.nom)}</b></div>`:''}
+      ${ct?`<div style="font-size:13px;margin-bottom:3px">👤 ${esc(ct.prenom)} ${esc(ct.nom)}${ct.linkedin?` ${liBtn(ct.linkedin)}`:''}</div>`:''}
+      ${a.commentaire?`<div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:8px;font-size:13px">${esc(a.commentaire)}</div>`:''}
+    </div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="CM();openActionComments('${actionId}')">💬 Commentaires</button></div>`,'n');
+}
+
+function openActionComments(actionId){
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  const isAdmin=currentUser?.role==='admin';
+  const cmts=(a.admin_comments||[]);
+  const cmtHtml=cmts.length?cmts.map((c,i)=>`<div style="padding:9px 12px;background:var(--bg);border-radius:8px;margin-bottom:7px;position:relative">
+    <div style="font-size:11px;color:var(--tm);margin-bottom:3px">${renderCons(c.by,14)} · ${c.date}</div>
+    <div style="font-size:13px">${esc(c.text)}</div>
+    ${isAdmin?`<button onclick="delActionComment('${actionId}',${i})" style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;color:var(--red);font-size:12px">✕</button>`:''}
+  </div>`).join(''):'<div style="color:var(--tm);font-size:13px;font-style:italic;padding:8px 0">Aucun commentaire</div>';
+  OM('💬 Commentaires — '+esc(a.type),`
+    <div style="margin-bottom:10px;font-size:12px;color:var(--ts)">Action du ${a.date} · ${esc(a.client_nom||'—')}</div>
+    <div id="cmt-list-${actionId}" style="max-height:300px;overflow-y:auto;margin-bottom:12px">${cmtHtml}</div>
+    ${isAdmin?`<div class="fld"><label>Ajouter un commentaire</label><textarea id="cmt-inp-${actionId}" rows="3" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="btn btn-p" onclick="addActionComment('${actionId}')">Ajouter</button></div>`
+    :`<div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`}
+  `,'n');
+}
+async function addActionComment(actionId){
+  const inp=document.getElementById('cmt-inp-'+actionId);
+  const text=(inp?.value||'').trim();if(!text)return;
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  if(!a.admin_comments)a.admin_comments=[];
+  a.admin_comments.push({by:currentUser?.display_name||'Admin',date:TODAY,text});
+  DB.actions=DB.actions.map(x=>x.id===actionId?a:x);
+  save();showToast('✓ Commentaire ajouté');
+  // Mettre à jour la liste des commentaires DANS la modale sans la fermer
+  const listEl=document.getElementById('cmt-list-'+actionId);
+  if(listEl){
+    const aUp=DB.actions.find(x=>x.id===actionId);
+    const cmts=aUp?.admin_comments||[];
+    listEl.innerHTML=cmts.map((c,i)=>{const u=_usersCache.find(x=>x.id===c.by||x.label===c.by);const ph=u?.photo?`<img src="${u.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">`:`<span style="display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--acc);color:white;font-size:10px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0">${(c.by||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}</span>`;return `<div style="display:flex;align-items:flex-start;gap:7px;margin-bottom:8px">${ph}<div style="flex:1;background:var(--acc-light);border:1px solid var(--br2);border-radius:12px 12px 12px 3px;padding:6px 10px;position:relative"><div style="font-size:10px;font-weight:600;color:var(--acc2);margin-bottom:2px">${esc(c.by)} · ${c.date}</div><div style="font-size:12px">${esc(c.text)}</div>${currentUser?.role==='admin'?`<button onclick="delActionComment('${actionId}',${i})" style="position:absolute;top:4px;right:6px;background:none;border:none;cursor:pointer;color:var(--red);font-size:11px">✕</button>`:''}</div></div>`;}).join('');
+    const inp2=document.getElementById('cmt-inp-'+actionId);if(inp2)inp2.value='';
+  }else{openActionComments(actionId);}
+}
+async function delActionComment(actionId,idx){
+  const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
+  if(!confirm('Supprimer ce commentaire ?'))return;
+  a.admin_comments.splice(idx,1);
+  DB.actions=DB.actions.map(x=>x.id===actionId?a:x);
+  save();openActionComments(actionId);
+}
+
+async function openAdminPanel(){
+  OM('Gestion des utilisateurs','<div style="text-align:center;padding:20px;color:var(--tm)">Chargement...</div>','w');
+  const users=await api('GET','/api/users');if(!users)return;
+  let h=`<div style="margin-bottom:18px">${users.map(u=>{
+    const av=u.photo?`<img src="${u.photo}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+      :`<div style="width:38px;height:38px;border-radius:50%;background:rgba(30,96,128,.2);color:#7ec8e0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${(u.display_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</div>`;
+    return `<div class="admin-row">
+    ${av}
+    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">${esc(u.display_name)}</div><div style="font-size:11px;color:var(--tm)">@${esc(u.username)} · ${u.role==='admin'?'<span style="color:var(--acc2)">Administrateur</span>':'Consultant'}</div></div>
+    <button class="btn btn-s btn-sm" onclick="openEditUser('${u.id}','${esc(u.display_name)}','${u.role}','${u.photo||''}','${esc(u.username||'')}')">Modifier</button>
+    <button class="btn btn-d btn-sm" onclick="deleteUser('${u.id}','${esc(u.display_name)}')">Suppr.</button>
+  </div>`;}).join('')}</div>
+  <div style="border-top:1px solid var(--br);padding-top:16px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:12px">Ajouter un collaborateur</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <div id="new-photo-preview" style="width:56px;height:56px;border-radius:50%;background:var(--bg);border:2px dashed var(--br);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;flex-shrink:0" onclick="document.getElementById('new-photo-inp').click()" title="Ajouter une photo">📷</div>
+      <input type="file" id="new-photo-inp" style="display:none" accept=".jpg,.jpeg,.png,.webp" onchange="previewNewUserPhoto(this)">
+      <div style="flex:1">
+        <div class="fr"><div class="fld"><label>Prénom / Nom</label><input id="new-name" placeholder="ex: Simon David"></div><div class="fld"><label>Identifiant</label><input id="new-user" placeholder="ex: simon"></div></div>
+        <div class="fr"><div class="fld"><label>Mot de passe</label><input type="password" id="new-pass" placeholder="Min. 6 caractères"></div><div class="fld"><label>Rôle</label><select id="new-role"><option value="user">Consultant</option><option value="admin">Administrateur</option></select></div></div>
+      </div>
+    </div>
+    <div class="fa"><button class="btn btn-p" onclick="createUser()">Créer le compte</button></div>
+  </div>`;
+  document.getElementById('mbody').innerHTML=h;
+}
+function previewNewUserPhoto(inp){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>300*1024){alert('Photo trop lourde (max 300Ko)');return;}
+  const r=new FileReader();r.onload=e=>{
+    const prev=document.getElementById('new-photo-preview');
+    if(prev)prev.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  };r.readAsDataURL(file);
+}
+async function createUser(){
+  const name=document.getElementById('new-name')?.value.trim(),user=document.getElementById('new-user')?.value.trim(),pass=document.getElementById('new-pass')?.value,role=document.getElementById('new-role')?.value;
+  if(!name||!user||!pass){alert('Remplis tous les champs.');return;}
+  if(pass.length<6){alert('Mot de passe trop court (min. 6 caractères).');return;}
+  // Get photo if uploaded
+  const photoInp=document.getElementById('new-photo-inp');
+  let photo=null;
+  if(photoInp?.files?.[0]){photo=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(photoInp.files[0]);});}
+  const res=await api('POST','/api/users',{username:user,password:pass,display_name:name,role,photo});
+  if(res?.ok){
+    // Refresh users cache
+    const usrs=await api('GET','/api/consultants');
+    if(usrs&&Array.isArray(usrs))_usersCache=usrs;
+    alert(`✅ Compte créé !\n${name} peut se connecter avec :\nIdentifiant : ${user}\nMot de passe : ${pass}`);
+    openAdminPanel();
+  }else alert('Erreur : cet identifiant est déjà utilisé.');
+}
+function openEditUser(id,name,role,currentPhoto,username){
+  OM("Modifier l'utilisateur",`
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+      <div id="eu-photo-preview" style="width:60px;height:60px;border-radius:50%;overflow:hidden;border:2px dashed var(--br);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0" onclick="document.getElementById('eu-photo-inp').click()">
+        ${currentPhoto?`<img src="${currentPhoto}" style="width:100%;height:100%;object-fit:cover">`:'<span style="font-size:22px">📷</span>'}
+      </div>
+      <input type="file" id="eu-photo-inp" style="display:none" accept=".jpg,.jpeg,.png,.webp" onchange="previewEditUserPhoto(this)">
+      <div style="flex:1;font-size:12px;color:var(--ts)">Cliquer sur la photo pour la changer<br><button type="button" class="btn btn-d btn-sm" style="margin-top:5px" onclick="document.getElementById('eu-photo-del').value='1';document.getElementById('eu-photo-preview').innerHTML='<span style=\\'font-size:22px\\'>📷</span>'">✕ Supprimer la photo</button></div>
+      <input type="hidden" id="eu-photo-del" value="0">
+    </div>
+    <div class="fld"><label>Prénom / Nom (affiché)</label><input id="eu-name" value="${name}"></div>
+    <div class="fld"><label>Identifiant de connexion</label><input id="eu-username" value="${username||''}" placeholder="ex: simon.david" autocomplete="off"></div>
+    <div class="fld"><label>Rôle</label><select id="eu-role"><option value="user"${role==='user'?' selected':''}>Consultant</option><option value="admin"${role==='admin'?' selected':''}>Administrateur</option></select></div>
+    <div class="fld"><label>Nouveau mot de passe (laisser vide pour ne pas changer)</label><input type="password" id="eu-pass" placeholder="Nouveau mot de passe..."></div>
+    <div class="fa"><button class="btn btn-s" onclick="openAdminPanel()">Retour</button><button class="btn btn-p" onclick="editUser('${id}')">Enregistrer</button></div>`,'n');
+}
+function previewEditUserPhoto(inp){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>300*1024){alert('Photo trop lourde (max 300Ko)');return;}
+  document.getElementById('eu-photo-del').value='0';
+  const r=new FileReader();r.onload=e=>{
+    const prev=document.getElementById('eu-photo-preview');
+    if(prev)prev.innerHTML=`<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover">`;
+  };r.readAsDataURL(file);
+}
+async function editUser(id){
+  const name=document.getElementById('eu-name')?.value.trim(),role=document.getElementById('eu-role')?.value,pass=document.getElementById('eu-pass')?.value;
+  const username=document.getElementById('eu-username')?.value.trim();
+  const delPhoto=document.getElementById('eu-photo-del')?.value==='1';
+  const photoInp=document.getElementById('eu-photo-inp');
+  const body={display_name:name,role};
+  if(username)body.username=username.toLowerCase();
+  if(pass&&pass.length>=4)body.password=pass;
+  if(delPhoto){body.photo=null;}
+  else if(photoInp?.files?.[0]){body.photo=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(photoInp.files[0]);});}
+  const res=await api('PUT',`/api/users/${id}`,body);
+  if(res?.ok){
+    const usrs=await api('GET','/api/consultants');
+    if(usrs&&Array.isArray(usrs))_usersCache=usrs;
+    openAdminPanel();
+  }
+}
+async function deleteUser(id,name){
+  if(!confirm(`Supprimer le compte de ${name} ?`))return;
+  const res=await api('DELETE',`/api/users/${id}`);
+  if(res?.ok)openAdminPanel();else alert('Impossible de supprimer ce compte.');
+}
+
+function rRMetiers(){
+  let h='<div>';
+  (REF.familles_metier||[]).filter(f=>f.actif!==false).forEach(fam=>{
+    const ch=(REF.metiers||[]).filter(m=>m.actif!==false&&m.famille_id===fam.id);
+    const uid='rfm-'+fam.id;
+    h+=`<div style="margin-bottom:6px">
+      <div class="rpr ref-row-l0" style="cursor:pointer" onclick="toggleRefGroup('${uid}')">
+        <span class="ref-chevron" id="${uid}-arrow">▶</span>
+        <span style="flex:1;font-size:13px;font-weight:600">${esc(fam.label)}</span>
+        <span style="font-size:11px;color:var(--tm);margin-right:4px">${ch.length} métier${ch.length!==1?'s':''}</span>
+        <button class="ic-btn" onclick="event.stopPropagation();renRefItem('familles_metier','${fam.id}')">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="event.stopPropagation();delRefItem('familles_metier','${fam.id}')">🗑</button>
+      </div>
+      <div id="${uid}" class="ref-children" style="display:none;padding-left:16px">
+        ${ch.map(m=>`<div class="rcr ref-row-l2" style="background:none;border-left:2px solid var(--br);margin-left:2px;padding-left:8px">
+          <span style="flex:1;font-size:12px">● ${esc(m.label)}</span>
+          <button class="ic-btn" onclick="renRefItem('metiers','${m.id}')">✏️</button>
+          <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('metiers','${m.id}')">🗑</button>
+        </div>`).join('')}
+        <div class="radd ref-add" style="margin-top:5px;padding-left:2px">
+          <input type="text" id="nm-${fam.id}" placeholder="Nouveau métier..." onkeydown="if(event.key==='Enter')addMetier('${fam.id}')">
+          <button onclick="addMetier('${fam.id}')">+ Ajouter</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  return h+`</div><div style="border-top:1px solid var(--br);padding-top:10px;margin-top:8px">
+    <div class="radd"><input type="text" id="new-familles_metier" placeholder="Nouvelle famille métier..." onkeydown="if(event.key==='Enter')addRefFlat('familles_metier')"><button onclick="addRefFlat('familles_metier')">+ Famille</button></div>
+  </div>`;
+}
+function openRef(){rtab='secteurs';renderRef();}
+function renderRef(){
+  OM('Référentiels',`
+    <div class="ref-tabs">
+      <button class="ref-tab${rtab==='secteurs'?' active':''}" onclick="swRef('secteurs')">📦 Secteurs · Sous-secteurs · Spécialités</button>
+      <button class="ref-tab${rtab==='metiers'?' active':''}" onclick="swRef('metiers')">💼 Familles & Métiers</button>
+    </div>
+    <div id="rc-sticky" style="display:none;position:sticky;top:0;z-index:10;background:var(--acc-light);border-bottom:1px solid var(--br2);padding:6px 12px;font-size:12px;font-weight:500;color:var(--acc2);border-radius:0"></div>
+    <div id="rc" style="padding-top:4px">${rRC()}</div>
+  `,'xl');
+  // Setup sticky observer after render
+  setTimeout(()=>setupRefSticky(),100);
+}
+function swRef(t){
+  rtab=t;
+  document.getElementById('rc').innerHTML=rRC();
+  const sticky=document.getElementById('rc-sticky');
+  if(sticky)sticky.style.display='none';
+  setTimeout(()=>setupRefSticky(),100);
+}
+function rRC(){
+  if(rtab==='secteurs')return rRTree();
+  if(rtab==='metiers')return rRMetiers();
+  return rRTree();
+}
+
+// ── Arborescence 3 niveaux : Secteur → Sous-secteur → Spécialité ─────────
+function rRTree(){
+  const secteurs=(REF.secteurs_act||[]).filter(s=>s.actif!==false);
+  let h='';
+  secteurs.forEach(sect=>{
+    const ssList=(REF.sous_secteurs||[]).filter(s=>s.actif!==false&&s.secteur_id===sect.id);
+    const totalSpecs=ssList.reduce((acc,ss)=>{return acc+(REF.specialites||[]).filter(sp=>sp.actif!==false&&sp.sous_secteur_id===ss.id).length;},0);
+    const uid='rsa-'+sect.id;
+    h+=`<div class="ref-node" data-level="0" data-label="${esc(sect.label)}" style="margin-bottom:4px">
+      <div class="rpr ref-row-l0" style="cursor:pointer" onclick="toggleRefGroup('${uid}')">
+        <span class="ref-chevron" id="${uid}-arrow">▶</span>
+        <span style="flex:1;font-size:13px;font-weight:600;color:var(--tp)">${esc(sect.label)}</span>
+        <span style="font-size:11px;color:var(--tm);margin-right:4px">${ssList.length} sous-sect. · ${totalSpecs} spéc.</span>
+        <button class="ic-btn" onclick="event.stopPropagation();renRefItem('secteurs_act','${sect.id}')">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="event.stopPropagation();delRefItem('secteurs_act','${sect.id}')">🗑</button>
+      </div>
+      <div id="${uid}" class="ref-children" style="display:none;padding-left:16px">
+        ${ssList.map(ss=>{
+          const specs=(REF.specialites||[]).filter(sp=>sp.actif!==false&&sp.sous_secteur_id===ss.id);
+          const ssuid='rss-'+ss.id;
+          return `<div class="ref-node" data-level="1" data-label="${esc(sect.label)} › ${esc(ss.label)}" style="margin-bottom:3px">
+            <div class="rpr ref-row-l1" style="cursor:pointer;background:var(--bg)" onclick="toggleRefGroup('${ssuid}')">
+              <span class="ref-chevron" id="${ssuid}-arrow">▶</span>
+              <span style="flex:1;font-size:12px;font-weight:500;color:var(--tp)">${esc(ss.label)}</span>
+              <span style="font-size:11px;color:var(--tm);margin-right:4px">${specs.length} spéc.</span>
+              <button class="ic-btn" onclick="event.stopPropagation();renRefItem('sous_secteurs','${ss.id}')">✏️</button>
+              <button class="ic-btn" style="color:var(--red)" onclick="event.stopPropagation();delRefItem('sous_secteurs','${ss.id}')">🗑</button>
+            </div>
+            <div id="${ssuid}" class="ref-children" style="display:none;padding-left:16px">
+              ${specs.map(sp=>`<div class="rcr ref-row-l2" style="background:none;border-left:2px solid var(--br);margin-left:2px;padding-left:8px">
+                <span style="flex:1;font-size:12px">● ${esc(sp.label)}</span>
+                <button class="ic-btn" onclick="renRefItem('specialites','${sp.id}')">✏️</button>
+                <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('specialites','${sp.id}')">🗑</button>
+              </div>`).join('')}
+              <div class="radd ref-add" style="margin-top:5px;padding-left:2px">
+                <input type="text" id="nspec-${ss.id}" placeholder="Nouvelle spécialité..." onkeydown="if(event.key==='Enter')addSpecialite('${ss.id}')">
+                <button onclick="addSpecialite('${ss.id}')">+ Ajouter</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+        <div class="radd ref-add" style="margin-top:6px;border-top:1px solid var(--br);padding-top:8px">
+          <input type="text" id="nss-${sect.id}" placeholder="Nouveau sous-secteur..." onkeydown="if(event.key==='Enter')addSousSecteur('${sect.id}')">
+          <button onclick="addSousSecteur('${sect.id}')">+ Sous-secteur</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  h+=`<div style="border-top:1px solid var(--br);padding-top:10px;margin-top:8px">
+    <div class="radd"><input type="text" id="new-secteurs_act" placeholder="Nouveau secteur..." onkeydown="if(event.key==='Enter')addRefFlat('secteurs_act')"><button onclick="addRefFlat('secteurs_act')">+ Secteur</button></div>
+  </div>`;
+  return h;
+}
+
+// ── Sticky header : affiche le contexte du premier groupe ouvert visible ──
+function setupRefSticky(){
+  const mbody=document.querySelector('.mbody');
+  const sticky=document.getElementById('rc-sticky');
+  if(!mbody||!sticky)return;
+  mbody.onscroll=()=>{
+    // Trouver le nœud ref-node visible le plus haut
+    const nodes=Array.from(document.querySelectorAll('.ref-node[data-label]'));
+    let ctx='';
+    for(const node of nodes){
+      const rect=node.getBoundingClientRect();
+      const mRect=mbody.getBoundingClientRect();
+      if(rect.top<mRect.top+10&&rect.bottom>mRect.top){ctx=node.dataset.label||'';break;}
+    }
+    if(ctx){sticky.textContent='📍 '+ctx;sticky.style.display='block';}
+    else sticky.style.display='none';
+  };
+}
+
+function toggleRefGroup(uid){
+  const el=document.getElementById(uid);
+  const arrow=document.getElementById(uid+'-arrow');
+  if(!el)return;
+  const open=el.style.display==='block';
+  el.style.display=open?'none':'block';
+  if(arrow)arrow.textContent=open?'▶':'▼';
+}
+
+// ── Helpers : préserver les groupes ouverts ───────────────────────────────
+function _getOpenGroups(){
+  return Array.from(document.querySelectorAll('[id^="rsa-"],[id^="rss-"],[id^="rfm-"]'))
+    .filter(el=>!el.id.endsWith('-arrow')&&el.style.display==='block')
+    .map(el=>el.id);
+}
+function _restoreOpenGroups(og){og.forEach(uid=>toggleRefGroup(uid));}
+
+function addRefFlat(arr){
+  const inp=document.getElementById('new-'+arr);
+  const l=(inp?.value||'').trim();if(!l)return;
+  if(!REF[arr])REF[arr]=[];
+  REF[arr].push({id:genId(),label:l,actif:true});
+  inp.value='';saveKey('refs');
+  const og=_getOpenGroups();
+  document.getElementById('rc').innerHTML=rRC();
+  _restoreOpenGroups(og);
+  showToast('✓ "'+l+'" ajouté');
+}
+function addSousSecteur(sectId){
+  const inp=document.getElementById('nss-'+sectId);
+  const l=(inp?.value||'').trim();if(!l)return;
+  if(!REF.sous_secteurs)REF.sous_secteurs=[];
+  REF.sous_secteurs.push({id:genId(),label:l,secteur_id:sectId,actif:true});
+  inp.value='';saveKey('refs');
+  const og=_getOpenGroups();
+  document.getElementById('rc').innerHTML=rRC();
+  _restoreOpenGroups(og);
+  // S'assurer que le secteur parent reste ouvert
+  const uid='rsa-'+sectId;
+  if(!og.includes(uid))toggleRefGroup(uid);
+  showToast('✓ Sous-secteur "'+l+'" ajouté');
+}
+function addSpecialite(ssId){
+  const inp=document.getElementById('nspec-'+ssId);
+  const l=(inp?.value||'').trim();if(!l)return;
+  if(!REF.specialites)REF.specialites=[];
+  REF.specialites.push({id:genId(),label:l,sous_secteur_id:ssId,actif:true});
+  inp.value='';saveKey('refs');
+  const og=_getOpenGroups();
+  document.getElementById('rc').innerHTML=rRC();
+  _restoreOpenGroups(og);
+  // Garder le sous-secteur parent ouvert
+  const ssuid='rss-'+ssId;
+  if(!og.includes(ssuid))toggleRefGroup(ssuid);
+  // Garder le secteur grand-parent ouvert
+  const ss=(REF.sous_secteurs||[]).find(s=>s.id===ssId);
+  if(ss){const sauid='rsa-'+ss.secteur_id;if(!og.includes(sauid))toggleRefGroup(sauid);}
+  showToast('✓ Spécialité "'+l+'" ajoutée');
+  // Refocus input for chaining
+  setTimeout(()=>{const ni=document.getElementById('nspec-'+ssId);if(ni)ni.focus();},50);
+}
+function addMetier(famId){
+  const inp=document.getElementById('nm-'+famId);
+  const l=(inp?.value||'').trim();if(!l)return;
+  if(!REF.metiers)REF.metiers=[];
+  REF.metiers.push({id:genId(),label:l,famille_id:famId,actif:true});
+  inp.value='';saveKey('refs');
+  const og=_getOpenGroups();
+  document.getElementById('rc').innerHTML=rRC();
+  _restoreOpenGroups(og);
+  const uid='rfm-'+famId;if(!og.includes(uid))toggleRefGroup(uid);
+  showToast('✓ Métier "'+l+'" ajouté');
+}
+function renRefItem(arr,id){
+  const it=(REF[arr]||[]).find(x=>x.id===id);if(!it)return;
+  const nl=prompt('Renommer :',it.label);if(!nl||nl.trim()===it.label)return;
+  REF[arr]=REF[arr].map(x=>x.id===id?{...x,label:nl.trim()}:x);
+  saveKey('refs');
+  const og=_getOpenGroups();
+  document.getElementById('rc').innerHTML=rRC();
+  _restoreOpenGroups(og);
+}
+function delRefItem(arr,id){
+  const it=(REF[arr]||[]).find(x=>x.id===id);if(!it)return;
+  const used=checkRefUsed(arr,id);
+  const msg=used>0
+    ?`⚠️ "${it.label}" est utilisé dans ${used} fiche${used>1?'s':''}.\nSi vous supprimez, ces fiches perdront cette valeur. Continuer ?`
+    :`Supprimer "${it.label}" ?`;
+  if(!confirm(msg))return;
+  if(arr==='familles_metier')REF.metiers=(REF.metiers||[]).filter(m=>m.famille_id!==id);
+  if(arr==='secteurs_act'){
+    const ssIds=(REF.sous_secteurs||[]).filter(s=>s.secteur_id===id).map(s=>s.id);
+    REF.sous_secteurs=(REF.sous_secteurs||[]).filter(s=>s.secteur_id!==id);
+    REF.specialites=(REF.specialites||[]).filter(sp=>!ssIds.includes(sp.sous_secteur_id));
+  }
+  if(arr==='sous_secteurs')REF.specialites=(REF.specialites||[]).filter(sp=>sp.sous_secteur_id!==id);
+  REF[arr]=(REF[arr]||[]).filter(x=>x.id!==id);
+  saveKey('refs');
+  const og=_getOpenGroups().filter(uid=>!uid.includes(id));
+  document.getElementById('rc').innerHTML=rRC();
+  _restoreOpenGroups(og);
+  showToast('✓ Supprimé');
+}
+function checkRefUsed(arr,id){
+  if(arr==='familles_metier')return DB.candidats.filter(c=>c.famille_metier_id===id).length;
+  if(arr==='metiers')return DB.candidats.filter(c=>c.metier1_id===id||c.metier2_id===id||c.metier3_id===id).length;
+  if(arr==='secteurs_act')return DB.clients.filter(c=>c.secteur_act_new_id===id).length+DB.candidats.filter(c=>c.secteur_act_new_id===id).length;
+  if(arr==='sous_secteurs')return DB.clients.filter(c=>c.sous_secteur_id===id).length+DB.candidats.filter(c=>c.sous_secteur_id===id).length;
+  return 0;
+}
+function rRF(arr,lbl){return `<div>${(REF[arr]||[]).map(it=>`<div class="rpr"><span style="flex:1;font-size:13px">${esc(it.label)}</span><button class="ic-btn" onclick="renRefItem('${arr}','${it.id}')">✏️</button></div>`).join('')}</div><div class="radd"><input type="text" id="new-${arr}" placeholder="Nouveau..."><button onclick="addRefFlat('${arr}')">+ Ajouter</button></div>`;}
+function rRG(){
+  let h='<div>';
+  (REF.regions||[]).forEach(reg=>{
+    const ch=(REF.villes||[]).filter(v=>v.region_id===reg.id);
+    const uid='rreg-'+reg.id;
+    h+=`<div style="margin-bottom:6px">
+      <div class="rpr" style="cursor:pointer" onclick="toggleRefGroup('${uid}')">
+        <span style="flex:1;font-size:13px;font-weight:500">🗺 ${esc(reg.label)}</span>
+        <span style="font-size:11px;color:var(--tm);margin-right:6px">${ch.length} ville${ch.length!==1?'s':''}</span>
+        <button class="ic-btn" onclick="event.stopPropagation();renRefItem('regions','${reg.id}')">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="event.stopPropagation();delRefItem('regions','${reg.id}')" title="Supprimer">🗑</button>
+        <span id="${uid}-arrow" style="font-size:12px;color:var(--tm);margin-left:4px">▶</span>
+      </div>
+      <div id="${uid}" style="display:none" class="rchildren">
+        ${ch.map(v=>`<div class="rcr"><span style="flex:1;font-size:12px">📍 ${esc(v.label)}</span>
+          <button class="ic-btn" onclick="renRefItem('villes','${v.id}')">✏️</button>
+          <button class="ic-btn" style="color:var(--red)" onclick="delRefItem('villes','${v.id}')" title="Supprimer">🗑</button>
+        </div>`).join('')}
+        <div class="radd" style="margin-top:6px"><input type="text" id="nv-${reg.id}" placeholder="Nouvelle ville..."><button onclick="addVille('${reg.id}')">+ Ville</button></div>
+      </div>
+    </div>`;
+  });
+  return h+`</div><div style="border-top:1px solid var(--br);padding-top:12px;margin-top:6px">
+    <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Ajouter une région</div>
+    <div class="radd"><input type="text" id="new-regions" placeholder="Nom de la région..."><button onclick="addRefFlat('regions')">+ Région</button></div>
+  </div>`;
+}
+function addVille(rid){const inp=document.getElementById('nv-'+rid);const l=(inp?.value||'').trim();if(!l)return;if(!REF.villes)REF.villes=[];REF.villes.push({id:genId(),label:l,region_id:rid,actif:true});inp.value='';saveKey('refs');document.getElementById('rc').innerHTML=rRC();toggleRefGroup('rreg-'+rid);}
+
+// ══ KANBAN ══════════════════════════════════════════════
+
+const CAND_STATUTS=['Non-contactés','Qualifiés','En process','Embauchés'];
+const CAND_STATUT_MAP={'Non-contactés':'Candidat','Qualifiés':'Qualifié','En process':'En process','Embauchés':'Embauché'};
+const CAND_STATUT_COLORS={'Non-contactés':'#475569',Qualifiés:'#1e6080','En process':'#d97706',Embauchés:'#065f46'};
+
+const CLIENT_STATUTS=['Nouveau prospect','À contacter','Contacté','RDV pris','En négociation','Client signé','Perdu'];
+const CLIENT_STATUT_COLORS={'Nouveau prospect':'#475569','À contacter':'#7c3aed',Contacté:'#1e6080','RDV pris':'#d97706','En négociation':'#ea580c','Client signé':'#065f46',Perdu:'#dc2626'};
+
+// Pipeline spécifique aux commandes (onglet Candidatures en cours)
+const PIPE_CMD=[
+  {id:'envc',label:'Envoyé au client',color:'#1e6080',bg:'#e8f4f8'},
+  {id:'entr_cl',label:'Entretien client',color:'#7c3aed',bg:'#f5f3ff'},
+  {id:'prop',label:'Proposition envoyée',color:'#d97706',bg:'#fffbeb'},
+  {id:'refc',label:'Refus candidat',color:'#dc2626',bg:'#fef2f2'},
+  {id:'refcl',label:'Refus client',color:'#b91c1c',bg:'#fff1f2'},
+  {id:'emb',label:'Embauché',color:'#065f46',bg:'#ecfdf5'},
+];
+
+let vivierView='list',clientsView='list';
+let activeCmdTab={};  // Store active tab per command ID
+
+function setVivierView(v){
+  vivierView=v;
+  document.getElementById('vivier-list-btn')?.classList.toggle('active',v==='list');
+  document.getElementById('vivier-kanban-btn')?.classList.toggle('active',v==='kanban');
+  const main=document.getElementById('vivier-main');
+  if(main){
+    main.style.flexDirection=v==='kanban'?'column':'row';
+    main.style.overflow=v==='kanban'?'hidden':'';
+  }
+  const sidebar=document.getElementById('vivier-sidebar');
+  if(sidebar)sidebar.style.display=v==='kanban'?'none':'block';
+  if(v==='list')applyVivierF(); else rVivierKanban();
+}
+
+function rVivierKanban(){
+  const list=document.getElementById('vivier-list');if(!list)return;
+  const cols=CAND_STATUTS.map(status=>{
+    const realStatut=CAND_STATUT_MAP[status]||status;
+    const cands=DB.candidats.filter(c=>{
+      const cs=c.statut_cand||'Candidat';
+      return cs===realStatut||(status==='Non-contactés'&&cs==='Candidat')||(status==='Non-contactés'&&!c.statut_cand);
+    });
+    const color=CAND_STATUT_COLORS[status]||'#1e6080';
+    const cards=cands.map(c=>`
+      <div class="kcard" draggable="true" data-id="${c.id}" data-type="cand"
+        ondragstart="kDragStart(event)" onclick="openCandDetail('${c.id}')">
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">${esc(c.prenom)} ${esc(c.nom)}</div>
+        <div style="font-size:11px;color:var(--ts);margin-bottom:4px">${esc(c.poste||(c.metier1_id?refLbl('metiers',c.metier1_id):'')||'—')}</div>
+        ${c.secteur_act_new_id?`<div style="font-size:10px;color:var(--tm)">${esc(refLbl('secteurs_act',c.secteur_act_new_id))}</div>`:''}
+        <div style="font-size:10px;color:var(--tm);margin-top:4px">${esc(c.ent||'')}</div>
+      </div>`).join('');
+    return `<div class="kanban-col">
+      <div class="kanban-col-head" style="border-top:3px solid ${color}">
+        <span>${esc(status)}</span><span style="font-size:11px;color:var(--tm)">${cands.length}</span>
+      </div>
+      <div class="kanban-col-body" data-status="${esc(status)}" data-type="cand"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="kDrop(event,this)">${cards}
+      </div>
+    </div>`;
+  }).join('');
+  list.style.overflow='auto';
+  list.style.padding='16px';
+  list.innerHTML=`<div class="kanban-wrap" style="min-height:400px">${cols}</div>`;
+}
+
+function setClientsView(v){
+  clientsView=v;
+  document.getElementById('cl-list-btn')?.classList.toggle('active',v==='list');
+  document.getElementById('cl-kanban-btn')?.classList.toggle('active',v==='kanban');
+  rClients();
+}
+
+function rClientsKanban(res){
+  let h=`<div class="kanban-wrap" style="min-height:400px">`;
+  CLIENT_STATUTS.forEach(status=>{
+    const items=res.filter(c=>(c.statut_commercial||'Nouveau prospect')===status);
+    const color=CLIENT_STATUT_COLORS[status]||'#475569';
+    const cards=items.map(c=>`
+      <div class="kcard" draggable="true" data-id="${c.id}" data-type="client"
+        ondragstart="kDragStart(event)" onclick="openClientDetail('${c.id}')"
+        style="border-left-color:${color}">
+        <div style="font-size:13px;font-weight:600;margin-bottom:3px">${esc(c.nom)}</div>
+        <div style="font-size:11px;color:var(--ts);margin-bottom:3px">${esc(c.secteur||'—')}</div>
+        <div style="font-size:11px;color:var(--tm)">${esc(c.cons||'')}</div>
+      </div>`).join('');
+    h+=`<div class="kanban-col">
+      <div class="kanban-col-head" style="border-top:3px solid ${color}">
+        <span>${esc(status)}</span><span style="font-size:11px;color:var(--tm)">${items.length}</span>
+      </div>
+      <div class="kanban-col-body" data-status="${esc(status)}" data-type="client"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="kDrop(event,this)">${cards}
+      </div>
+    </div>`;
+  });
+  return h+'</div>';
+}
+
+let kDragging=null;
+function kDragStart(e){kDragging=e.currentTarget;e.currentTarget.classList.add('dragging');}
+function kDrop(e,col){
+  e.preventDefault();col.classList.remove('drag-over');
+  if(!kDragging)return;
+  const id=kDragging.dataset.id,type=kDragging.dataset.type,status=col.dataset.status;
+  if(type==='cand'){
+    // Map kanban column to actual statut_cand value
+    const realStatut=CAND_STATUT_MAP[status]||status;
+    DB.candidats=DB.candidats.map(c=>c.id===id?{...c,statut_cand:realStatut}:c);
+    save();rVivierKanban();
+  }else{
+    DB.clients=DB.clients.map(c=>c.id===id?{...c,statut_commercial:status}:c);
+    save();rClients();
+  }
+  kDragging.classList.remove('dragging');kDragging=null;
+}
+
+// ══ MOTS-CLÉS & RECHERCHE BOOLÉENNE ══════════════════════
+
+function mkTagsHtml(cId,tags){
+  return `<div class="tag-wrap" onclick="document.getElementById('mk-inp-${cId}').focus()">
+    ${(tags||[]).map((t,i)=>`<span class="mk-tag">${esc(t)}<button onclick="removeMkTag('${cId}',${i})">×</button></span>`).join('')}
+    <input class="mk-input" id="mk-inp-${cId}" placeholder="Ajouter un mot-clé..." 
+      onkeydown="mkKeydown(event,'${cId}')">
+  </div>
+  <div class="bool-hint">💡 Recherche : AND · OR · NOT · "expression exacte"</div>`;
+}
+function mkKeydown(e,cId){
+  if(e.key==='Enter'||e.key===','||e.key===';'){
+    e.preventDefault();
+    const val=e.target.value.trim();
+    if(!val)return;
+    const c=getCand(cId);if(!c)return;
+    const tags=[...(c.mots_cles||[]),val];
+    DB.candidats=DB.candidats.map(x=>x.id===cId?{...x,mots_cles:tags}:x);
+    e.target.value='';
+    save();
+    const wrap=e.target.parentNode;
+    const span=document.createElement('span');span.className='mk-tag';
+    span.innerHTML=`${esc(val)}<button onclick="removeMkTag('${cId}',${tags.length-1})">×</button>`;
+    wrap.insertBefore(span,e.target);
+  }
+}
+function removeMkTag(cId,idx){
+  const c=getCand(cId);if(!c)return;
+  const tags=(c.mots_cles||[]).filter((_,i)=>i!==idx);
+  DB.candidats=DB.candidats.map(x=>x.id===cId?{...x,mots_cles:tags}:x);
+  save();openCandDetail(cId);
+}
+
+function parseBoolQuery(q){
+  // Tokenize: handle quoted strings, AND/OR/NOT, parentheses
+  const tokens=[];let i=0;const s=q.trim();
+  while(i<s.length){
+    if(s[i]==='"'){
+      let j=i+1;while(j<s.length&&s[j]!=='"')j++;
+      tokens.push({type:'term',val:s.slice(i+1,j).toLowerCase()});i=j+1;
+    }else if(s.slice(i,i+3)==='AND'){tokens.push({type:'AND'});i+=3;}
+    else if(s.slice(i,i+2)==='OR'){tokens.push({type:'OR'});i+=2;}
+    else if(s.slice(i,i+3)==='NOT'){tokens.push({type:'NOT'});i+=3;}
+    else if(s[i]==='('){tokens.push({type:'LPAREN'});i++;}
+    else if(s[i]===')'){tokens.push({type:'RPAREN'});i++;}
+    else if(s[i]===' '){i++;}
+    else{
+      let j=i;while(j<s.length&&s[j]!==' '&&s[j]!=='('&&s[j]!==')')j++;
+      const word=s.slice(i,j);
+      if(word)tokens.push({type:'term',val:word.toLowerCase()});
+      i=j;
+    }
+  }
+  return tokens;
+}
+
+function boolMatch(tokens,text){
+  // Simple boolean evaluator
+  const tl=text.toLowerCase();
+  let pos=0;
+  function peek(){return tokens[pos];}
+  function consume(){return tokens[pos++];}
+  function matchTerm(t){return t&&t.type==='term'&&tl.includes(t.val);}
+
+  function parseExpr(){
+    let left=parsePrimary();
+    while(pos<tokens.length){
+      const op=peek();
+      if(op&&op.type==='AND'){consume();const right=parsePrimary();left=left&&right;}
+      else if(op&&op.type==='OR'){consume();const right=parsePrimary();left=left||right;}
+      else break;
+    }
+    return left;
+  }
+  function parsePrimary(){
+    const t=peek();
+    if(!t)return false;
+    if(t.type==='NOT'){consume();return !parsePrimary();}
+    if(t.type==='LPAREN'){consume();const r=parseExpr();if(peek()?.type==='RPAREN')consume();return r;}
+    if(t.type==='term'){consume();return tl.includes(t.val);}
+    return false;
+  }
+  try{return parseExpr();}catch(e){return false;}
+}
+
+function vivierBoolSearch(q,cands){
+  if(!q.trim())return cands;
+  // Check if simple search (no operators)
+  const hasOps=/\b(AND|OR|NOT)\b|[()"]/.test(q);
+  if(!hasOps){
+    const ql=q.toLowerCase();
+    return cands.filter(c=>{
+      const text=[c.prenom,c.nom,c.poste,c.ent,(c.mots_cles||[]).join(' '),c.notes?.map(n=>n.content).join(' ')||''].join(' ');
+      return text.toLowerCase().includes(ql);
+    });
+  }
+  const tokens=parseBoolQuery(q);
+  return cands.filter(c=>{
+    const text=[c.prenom,c.nom,c.poste,c.ent,
+      (c.mots_cles||[]).join(' '),
+      c.notes?.map(n=>n.content).join(' ')||'',
+      refLbl('metiers',c.metier1_id),refLbl('secteurs_act',c.secteur_act_new_id)
+    ].join(' ');
+    const toksCopy=tokens.map(t=>({...t}));
+    let pos2=0;
+    const tl=text.toLowerCase();
+    const saved=tokens;
+    try{
+      const tcopy=[...tokens];let p=0;
+      function pe(){let l=pp();while(p<tcopy.length){const op=tcopy[p];if(op?.type==='AND'){p++;const r=pp();l=l&&r;}else if(op?.type==='OR'){p++;const r=pp();l=l||r;}else break;}return l;}
+      function pp(){const t=tcopy[p];if(!t)return false;if(t.type==='NOT'){p++;return!pp();}if(t.type==='LPAREN'){p++;const r=pe();if(tcopy[p]?.type==='RPAREN')p++;return r;}if(t.type==='term'){p++;return tl.includes(t.val);}return false;}
+      return pe();
+    }catch(e){return tl.includes(q.toLowerCase());}
+  });
+}
+
+// ══ PIÈCES JOINTES ══════════════════════════════════════
+
+const PJ_MAX=5;
+const PJ_ICONS={pdf:'📄',doc:'📝',docx:'📝',jpg:'🖼',jpeg:'🖼',png:'🖼'};
+function pjIcon(name){const ext=(name||'').split('.').pop().toLowerCase();return PJ_ICONS[ext]||'📎';}
+
+function pjListHtml(candId,pjs,showAdd=true){
+  const list=(pjs||[]).map((p,i)=>{
+    const ext=(p.name||'').split('.').pop().toLowerCase();
+    const canPreview=['pdf','jpg','jpeg','png'].includes(ext);
+    return `<div class="pj-item">
+      <div class="pj-icon">${pjIcon(p.name)}</div>
+      <div class="pj-info">
+        <div class="pj-name">${esc(p.name)}</div>
+        <div class="pj-meta">${esc(p.cons)} · ${p.date} · ${formatSize(p.size)}</div>
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        ${canPreview?`<button class="cv-badge" onclick="previewPJ(${i},'${candId}')">👁 Aperçu</button>`:'<span style="font-size:11px;color:var(--tm)">Aperçu indispo</span>'}
+        <button class="cv-badge" onclick="dlPJ(${i},'${candId}')">⬇ DL</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="delPJ(${i},'${candId}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+  const addBtn=(pjs||[]).length>=PJ_MAX
+    ?`<div style="font-size:12px;color:var(--amber)">⚠️ Limite de ${PJ_MAX} pièces jointes atteinte</div>`
+    :showAdd?`<label class="btn btn-s btn-sm" style="cursor:pointer;margin-top:6px">📎 Ajouter une PJ<input type="file" style="display:none" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onchange="uploadPJ(this,'${candId}')"></label>`:'';
+  return list+addBtn;
+}
+
+function previewPJ(idx,candId){
+  const c=getCand(candId);const pj=c?.pieces_jointes?.[idx];if(!pj)return;
+  const ext=(pj.name||'').split('.').pop().toLowerCase();
+  let content='';
+  if(['jpg','jpeg','png'].includes(ext)){
+    content=`<div style="text-align:center;padding:16px"><img src="data:${pj.type};base64,${pj.data}" style="max-width:100%;max-height:75vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2)"></div>`;
+  }else if(ext==='pdf'){
+    try{
+      const bytes=atob(pj.data);const arr=new Uint8Array(bytes.length);
+      for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+      const url=URL.createObjectURL(new Blob([arr],{type:'application/pdf'}));
+      content=`<iframe src="${url}" width="100%" height="600" style="border:none;border-radius:8px"></iframe>`;
+    }catch(e){content='<div style="padding:20px;text-align:center;color:var(--tm)">Aperçu indisponible</div>';}
+  }
+  OM(esc(pj.name),`<div style="padding:0 0 8px">${content}</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button><button class="cv-badge" onclick="dlPJ(${idx},'${candId}')">⬇ Télécharger</button></div>`,'xl');
+}
+
+function uploadPJ(inp,candId){
+  const file=inp.files[0];if(!file)return;
+  const c=getCand(candId);if(!c)return;
+  if((c.pieces_jointes||[]).length>=PJ_MAX){alert(`Maximum ${PJ_MAX} pièces jointes.`);return;}
+  if(file.size>5*1024*1024){alert('Fichier trop lourd (max 5Mo).');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    const pj={name:file.name,type:file.type,size:file.size,data:e.target.result.split(',')[1],cons:currentUser?.display_name||'—',date:TODAY};
+    DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,pieces_jointes:[...(x.pieces_jointes||[]),pj]}:x);
+    save();
+    const el=document.getElementById('pj-list-'+candId);
+    if(el)el.innerHTML=pjListHtml(candId,getCand(candId)?.pieces_jointes||[]);
+  };
+  r.readAsDataURL(file);
+}
+function dlPJ(idx,candId){
+  const c=getCand(candId);const pj=c?.pieces_jointes?.[idx];if(!pj)return;
+  const a=document.createElement('a');a.href=`data:${pj.type};base64,${pj.data}`;a.download=pj.name;a.click();
+}
+function delPJ(idx,candId){
+  if(!confirm('Supprimer cette pièce jointe ?'))return;
+  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,pieces_jointes:(c.pieces_jointes||[]).filter((_,i)=>i!==idx)}:c);
+  save();
+  const el=document.getElementById('pj-list-'+candId);
+  if(el)el.innerHTML=pjListHtml(candId,getCand(candId)?.pieces_jointes||[]);
+}
+
+// ══ CV ANONYMISATION ════════════════════════════════════
+
+let anonState={rects:[],pageNum:1,numPages:0,pdfDoc:null,scale:1.5,currentCandId:null,drawing:false,startX:0,startY:0,currentRect:null};
+
+async function openAnonymize(candId){
+  const c=getCand(candId);if(!c?.cv)return;
+  anonState={rects:[],pageNum:1,numPages:0,pdfDoc:null,scale:1.2,currentCandId:candId,drawing:false,startX:0,startY:0,currentRect:null};
+
+  OM(`Anonymiser le CV — ${esc(c.prenom)} ${esc(c.nom)}`,`
+    <div class="anon-toolbar">
+      <div class="anon-page-nav">
+        <button class="btn btn-s btn-sm" onclick="anonPrevPage()">◀</button>
+        <span id="anon-page-info">Page 1/1</span>
+        <button class="btn btn-s btn-sm" onclick="anonNextPage()">▶</button>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-s btn-sm" onclick="anonZoom(-0.2)" title="Zoom arrière">−</button>
+        <span id="anon-zoom-lbl" style="color:white;font-size:12px;min-width:36px;text-align:center;padding-top:5px">120%</span>
+        <button class="btn btn-s btn-sm" onclick="anonZoom(0.2)" title="Zoom avant">+</button>
+        <button class="btn btn-s btn-sm" onclick="anonFitWidth()" title="Ajuster à la largeur">⬌</button>
+      </div>
+      <button class="btn btn-s btn-sm" onclick="anonClearRects()">🗑 Effacer zones</button>
+      <span style="color:var(--sbt);font-size:11px">Cliquez-glissez pour masquer</span>
+      <button class="btn btn-p" style="margin-left:auto" onclick="generateAnonPDF('${candId}')">✅ Générer</button>
+    </div>
+    <div style="overflow:auto;background:#444;padding:12px;display:flex;justify-content:center;max-height:72vh;" id="anon-scroll">
+      <div class="anon-canvas-wrap" id="anon-canvas-wrap" style="position:relative;display:inline-block;flex-shrink:0">
+        <canvas id="anon-pdf-canvas"></canvas>
+        <div id="anon-rects-layer" style="position:absolute;top:0;left:0;pointer-events:none;"></div>
+      </div>
+    </div>
+    <div style="padding:8px 16px;font-size:11px;color:var(--ts)">
+      💡 Tracez des rectangles sur les zones à masquer. Cliquez ✕ sur un rectangle pour le supprimer.
+    </div>`,'xl');
+
+  const wrap=document.getElementById('anon-canvas-wrap');
+  const canvas=document.getElementById('anon-pdf-canvas');
+  if(!wrap||!canvas)return;
+  canvas.addEventListener('mousedown',anonMouseDown);
+  canvas.addEventListener('mousemove',anonMouseMove);
+  canvas.addEventListener('mouseup',anonMouseUp);
+
+  try{
+    if(!window.pdfjsLib){alert('PDF.js non chargé.');return;}
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const bytes=atob(c.cv.data);
+    const arr=new Uint8Array(bytes.length);
+    for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+    anonState.pdfDoc=await pdfjsLib.getDocument({data:arr}).promise;
+    anonState.numPages=anonState.pdfDoc.numPages;
+    // Auto fit-to-width on first load
+    await anonFitWidth();
+  }catch(e){alert('Impossible de charger le PDF: '+e.message);}
+}
+
+async function anonFitWidth(){
+  if(!anonState.pdfDoc)return;
+  const page=await anonState.pdfDoc.getPage(anonState.pageNum);
+  const vpNatural=page.getViewport({scale:1});
+  const scrollEl=document.getElementById('anon-scroll');
+  const availW=scrollEl?(scrollEl.clientWidth-40):600;
+  anonState.scale=Math.max(0.5,Math.min(2.5,availW/vpNatural.width));
+  const lbl=document.getElementById('anon-zoom-lbl');
+  if(lbl)lbl.textContent=Math.round(anonState.scale*100)+'%';
+  anonRenderPage(anonState.pageNum);
+}
+
+async function anonZoom(delta){
+  anonState.scale=Math.max(0.4,Math.min(3,anonState.scale+delta));
+  const lbl=document.getElementById('anon-zoom-lbl');
+  if(lbl)lbl.textContent=Math.round(anonState.scale*100)+'%';
+  anonRenderPage(anonState.pageNum);
+}
+
+async function anonRenderPage(num){
+  if(!anonState.pdfDoc)return;
+  anonState.pageNum=num;
+  const page=await anonState.pdfDoc.getPage(num);
+  const vp=page.getViewport({scale:anonState.scale});
+  const canvas=document.getElementById('anon-pdf-canvas');if(!canvas)return;
+  canvas.width=vp.width;canvas.height=vp.height;
+  const ctx=canvas.getContext('2d');
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  // Draw existing rects for this page
+  anonDrawRects();
+  const info=document.getElementById('anon-page-info');
+  if(info)info.textContent=`Page ${num}/${anonState.numPages}`;
+}
+
+function anonDrawRects(){
+  const layer=document.getElementById('anon-rects-layer');if(!layer)return;
+  const canvas=document.getElementById('anon-pdf-canvas');if(!canvas)return;
+  layer.style.width=canvas.width+'px';layer.style.height=canvas.height+'px';
+  layer.innerHTML='';
+  const pageRects=anonState.rects.filter(r=>r.page===anonState.pageNum);
+  pageRects.forEach((r,i)=>{
+    const globalIdx=anonState.rects.indexOf(r);
+    const div=document.createElement('div');
+    div.style.cssText=`position:absolute;left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:white;border:2px solid #e74c3c;box-sizing:border-box;pointer-events:all;`;
+    div.innerHTML=`<button style="position:absolute;top:-9px;right:-9px;width:18px;height:18px;border-radius:50%;background:#e74c3c;color:white;border:none;cursor:pointer;font-size:12px;line-height:18px;text-align:center;padding:0;pointer-events:all;" onclick="anonDelRect(${globalIdx})">×</button>`;
+    layer.appendChild(div);
+  });
+}
+
+function anonMouseDown(e){
+  const rect=e.target.getBoundingClientRect();
+  anonState.drawing=true;
+  anonState.startX=e.clientX-rect.left;
+  anonState.startY=e.clientY-rect.top;
+}
+function anonMouseMove(e){
+  if(!anonState.drawing)return;
+  const rect=e.target.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  // Show preview
+  const layer=document.getElementById('anon-rects-layer');if(!layer)return;
+  let preview=document.getElementById('anon-preview');
+  if(!preview){preview=document.createElement('div');preview.id='anon-preview';preview.style.cssText='position:absolute;background:rgba(255,255,255,0.7);border:2px dashed #e74c3c;box-sizing:border-box;pointer-events:none;';layer.appendChild(preview);}
+  const px=Math.min(anonState.startX,x),py=Math.min(anonState.startY,y);
+  const pw=Math.abs(x-anonState.startX),ph=Math.abs(y-anonState.startY);
+  preview.style.left=px+'px';preview.style.top=py+'px';preview.style.width=pw+'px';preview.style.height=ph+'px';
+}
+function anonMouseUp(e){
+  if(!anonState.drawing)return;
+  anonState.drawing=false;
+  const rect=e.target.getBoundingClientRect();
+  const x=e.clientX-rect.left,y=e.clientY-rect.top;
+  const px=Math.min(anonState.startX,x),py=Math.min(anonState.startY,y);
+  const pw=Math.abs(x-anonState.startX),ph=Math.abs(y-anonState.startY);
+  if(pw>5&&ph>5){
+    anonState.rects.push({page:anonState.pageNum,x:px,y:py,w:pw,h:ph});
+  }
+  document.getElementById('anon-preview')?.remove();
+  anonDrawRects();
+}
+function anonDelRect(idx){anonState.rects.splice(idx,1);anonDrawRects();}
+function anonClearRects(){anonState.rects=anonState.rects.filter(r=>r.page!==anonState.pageNum);anonDrawRects();}
+function anonPrevPage(){if(anonState.pageNum>1)anonRenderPage(anonState.pageNum-1);}
+function anonNextPage(){if(anonState.pageNum<anonState.numPages)anonRenderPage(anonState.pageNum+1);}
+
+async function generateAnonPDF(candId){
+  if(!anonState.pdfDoc){alert('PDF non chargé.');return;}
+  const btn=document.querySelector('.anon-toolbar .btn-p');
+  if(btn){btn.textContent='⏳ Génération...';btn.disabled=true;}
+  try{
+    const {jsPDF}=window.jspdf;
+    let pdfOut=null;
+    for(let p=1;p<=anonState.numPages;p++){
+      const page=await anonState.pdfDoc.getPage(p);
+      const vp=page.getViewport({scale:2});
+      const canvas=document.createElement('canvas');
+      canvas.width=vp.width;canvas.height=vp.height;
+      const ctx=canvas.getContext('2d');
+      await page.render({canvasContext:ctx,viewport:vp}).promise;
+      // Apply white rectangles for this page
+      const pageRects=anonState.rects.filter(r=>r.page===p);
+      pageRects.forEach(r=>{
+        ctx.fillStyle='white';
+        // Scale rects from display scale to render scale
+        const scaleFactor=2/anonState.scale;
+        ctx.fillRect(r.x*scaleFactor,r.y*scaleFactor,r.w*scaleFactor,r.h*scaleFactor);
+      });
+      const imgData=canvas.toDataURL('image/jpeg',0.95);
+      const wPt=vp.width*0.75,hPt=vp.height*0.75;
+      if(!pdfOut){pdfOut=new jsPDF({orientation:wPt>hPt?'landscape':'portrait',unit:'pt',format:[wPt,hPt]});}
+      else{pdfOut.addPage([wPt,hPt],wPt>hPt?'landscape':'portrait');}
+      pdfOut.addImage(imgData,'JPEG',0,0,wPt,hPt);
+    }
+    const pdfB64=pdfOut.output('datauristring').split(',')[1];
+    const c=getCand(candId);
+    const anonCv={name:`CV_anonymise_${esc(c.prenom)}_${esc(c.nom)}.pdf`,type:'application/pdf',size:Math.round(pdfB64.length*0.75),data:pdfB64,cons:currentUser?.display_name||'—',date:TODAY,original_name:c.cv?.name||''};
+    DB.candidats=DB.candidats.map(x=>x.id===candId?{...x,cv_anonymise:anonCv}:x);
+    save();
+    if(btn){btn.textContent='✅ Générer le CV anonymisé';btn.disabled=false;}
+    anonState.rects=[];// reset zones for next use
+    CM();openCandDetail(candId);
+    showToast('✓ CV anonymisé enregistré');
+  }catch(e){
+    alert('Erreur lors de la génération : '+e.message);
+    if(btn){btn.textContent='✅ Générer le CV anonymisé';btn.disabled=false;}
+  }
+}
+function dlAnonCV(candId){
+  const c=getCand(candId);if(!c?.cv_anonymise)return;
+  const a=document.createElement('a');a.href=`data:${c.cv_anonymise.type};base64,${c.cv_anonymise.data}`;a.download=c.cv_anonymise.name;a.click();
+}
+
+// ══ VIVIER SEARCH UPDATE ════════════════════════════════
+
+function rVivier(){
+  if(vivierView==='kanban'){rVivierKanban();return;}
+  rVivierSidebar();applyVivierF();
+}
+
+// ══ KANBAN STATUT PICKER FOR CLIENT FORM ════════════════
+
+function openClientStatutPicker(id){
+  const c=getClient(id);if(!c)return;
+  const cur=c.statut_commercial||'Nouveau prospect';
+  OM('Modifier le statut commercial',`
+    <div style="display:flex;flex-direction:column;gap:8px;padding:8px 0">
+      ${CLIENT_STATUTS.map(s=>`<button class="btn ${s===cur?'btn-p':'btn-s'}" style="justify-content:flex-start" onclick="setClientStatut('${id}','${s}')">${s===cur?'✓ ':''} ${esc(s)}</button>`).join('')}
+    </div>`,'n');
+}
+function setClientStatut(id,statut){
+  DB.clients=DB.clients.map(c=>c.id===id?{...c,statut_commercial:statut}:c);
+  save();CM();rClients();
+  setTimeout(()=>openClientDetail(id),50);
+}
+
+// ══ DICTÉE VOCALE ═══════════════════════════════════════
+let _micActive=null; // currently active recognition instance
+
+function micWidget(targetId,label=''){
+  return `<div class="mic-wrap">
+    <button class="mic-btn" id="mic-btn-${targetId}" onclick="micToggle('${targetId}')" type="button">🎤 Dicter</button>
+    <span class="mic-status" id="mic-st-${targetId}"></span>
+  </div>`;
+}
+
+function micToggle(targetId){
+  const btn=document.getElementById('mic-btn-'+targetId);
+  const st=document.getElementById('mic-st-'+targetId);
+  const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRec){
+    if(st)st.textContent='⚠ Nécessite Chrome ou Edge';
+    return;
+  }
+  // Stop if already active on this field
+  if(_micActive&&_micActive._fieldId===targetId){
+    _micActive.stop();return;
+  }
+  // Stop any other active mic
+  if(_micActive){_micActive.stop();}
+
+  const rec=new SpeechRec();
+  rec._fieldId=targetId;
+  rec.lang='fr-FR';
+  rec.continuous=true;
+  rec.interimResults=true;
+
+  let finalText='';
+  const field=document.getElementById(targetId);
+  const baseText=field?field.value:'';
+
+  rec.onstart=()=>{
+    _micActive=rec;
+    if(btn){btn.classList.add('active');btn.textContent='⏹ Arrêter';}
+    if(st)st.textContent='🔴 Dictée en cours...';
+  };
+  rec.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)finalText+=e.results[i][0].transcript+' ';
+      else interim=e.results[i][0].transcript;
+    }
+    if(field)field.value=baseText+(finalText+interim);
+  };
+  rec.onerror=e=>{
+    if(e.error==='not-allowed'){if(st)st.textContent='⚠ Accès micro refusé';}
+    else{if(st)st.textContent='⚠ Erreur: '+e.error;}
+    micStop(targetId,btn,st);
+  };
+  rec.onend=()=>micStop(targetId,btn,st);
+  rec.start();
+}
+function micStop(targetId,btn,st){
+  _micActive=null;
+  if(btn){btn.classList.remove('active');btn.textContent='🎤 Dicter';}
+  if(st)st.textContent='';
+}
+
+// ══ DÉTECTION DOUBLONS ══════════════════════════════════
+function normalize(s){return(s||'').toLowerCase().replace(/[\s\-\.]/g,'');}
+
+function findCandDoublons(prenom,nom,email,phone,linkedin,excludeId){
+  const results=[];
+  DB.candidats.filter(c=>c.id!==excludeId).forEach(c=>{
+    const reasons=[];
+    if(email&&normalize(email)===normalize(c.email))reasons.push('Email identique');
+    if(phone&&normalize(phone)===normalize(c.phone))reasons.push('Téléphone identique');
+    if(linkedin&&normalize(linkedin)===normalize(c.linkedin))reasons.push('LinkedIn identique');
+    if(!reasons.length&&prenom&&nom&&normalize(prenom)===normalize(c.prenom)&&normalize(nom)===normalize(c.nom))reasons.push('Nom + Prénom identiques');
+    if(reasons.length)results.push({fiche:c,reasons,type:'candidat'});
+  });
+  return results;
+}
+function findClientDoublons(nom,siren,siret,site_web,excludeId){
+  const results=[];
+  DB.clients.filter(c=>c.id!==excludeId).forEach(c=>{
+    const reasons=[];
+    if(siret&&normalize(siret)===normalize(c.siret))reasons.push('SIRET identique');
+    else if(siren&&normalize(siren)===normalize(c.siren))reasons.push('SIREN identique');
+    else if(nom&&normalize(nom)===normalize(c.nom))reasons.push('Raison sociale identique');
+    if(site_web&&site_web.length>4&&normalize(site_web)===normalize(c.site_web))reasons.push('Site web identique');
+    if(reasons.length)results.push({fiche:c,reasons,type:'client'});
+  });
+  return results;
+}
+function findContactDoublons(email,phone,nom,prenom,excludeId){
+  const results=[];
+  DB.contacts.filter(c=>c.id!==excludeId).forEach(c=>{
+    const reasons=[];
+    if(email&&normalize(email)===normalize(c.email))reasons.push('Email identique');
+    if(phone&&normalize(phone)===normalize(c.phone))reasons.push('Téléphone identique');
+    if(!reasons.length&&nom&&prenom&&normalize(nom)===normalize(c.nom)&&normalize(prenom)===normalize(c.prenom))reasons.push('Nom + Prénom identiques');
+    if(reasons.length)results.push({fiche:c,reasons,type:'contact'});
+  });
+  return results;
+}
+
+function showDoublonAlert(doublons,containerId,onContinue){
+  const el=document.getElementById(containerId);if(!el)return;
+  if(!doublons.length){el.innerHTML='';return;}
+  const rows=doublons.map(d=>{
+    const f=d.fiche;
+    const name=f.prenom?`${esc(f.prenom)} ${esc(f.nom)}`:(esc(f.nom)||'—');
+    const detail=f.email?esc(f.email):(f.siren?`SIREN: ${esc(f.siren)}`:'');
+    return `<div class="doublon-row" onclick="${d.type==='candidat'?`CM();openCandDetail('${f.id}')`:`CM();openClientDetail('${f.id}')`}">
+      <div style="font-size:18px">${d.type==='candidat'?'👤':'🏢'}</div>
+      <div style="flex:1"><div style="font-weight:600">${name}</div><div style="color:var(--tm)">${detail} · ${esc(d.reasons.join(', '))}</div></div>
+      <span style="color:var(--acc);font-size:11px">Voir →</span>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="doublon-alert">
+    <div style="font-weight:600;margin-bottom:8px;color:#d97706">⚠️ Fiche(s) similaire(s) déjà existante(s)</div>
+    ${rows}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      <button class="btn btn-s btn-sm" onclick="document.getElementById('${containerId}').innerHTML=''">Ignorer et continuer</button>
+    </div>
+  </div>`;
+}
+
+// Wrappers appelés depuis les formulaires
+function checkCandDoublons(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const d=findCandDoublons(g('prenom'),g('nom'),g('email'),g('phone'),g('linkedin'),EID||'');
+  showDoublonAlert(d,'doublon-cand-alert');
+}
+function checkClientDoublons(){
+  const g=id=>document.getElementById('f-'+id)?.value||'';
+  const d=findClientDoublons(g('nom'),g('siren'),g('siret'),g('site_web'),EID||'');
+  showDoublonAlert(d,'doublon-client-alert');
+}
+
+// ══ CONTACT DEPUIS FICHE CLIENT ════════════════════════
+function openCreateContactForClient(clientId){
+  const cl=getClient(clientId);
+  OM('Ajouter un contact — '+esc(cl?.nom||''),`
+    <div style="font-size:12px;color:var(--acc2);background:var(--acc-light);border-radius:7px;padding:8px 12px;margin-bottom:14px">
+      Le contact sera automatiquement rattaché à <b>${esc(cl?.nom||'')}</b>
+    </div>
+    <div class="fr"><div class="fld"><label>Prénom</label><input id="ct-prenom" placeholder="Prénom"></div><div class="fld"><label>Nom</label><input id="ct-nom" placeholder="Nom"></div></div>
+    <div class="fld"><label>Fonction</label><input id="ct-fonction" placeholder="ex: Directeur travaux, DRH..."></div>
+    <div class="fr"><div class="fld"><label>Téléphone</label><input id="ct-phone" type="tel"></div><div class="fld"><label>Email</label><input id="ct-email" type="email"></div></div>
+    <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="ct-linkedin" value="${esc(ct.linkedin||'')} " placeholder="https://linkedin.com/in/..."></div>
+    <div class="fld"><label>Note</label><textarea id="ct-note" style="min-height:70px" placeholder="Informations complémentaires..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveContactForClient('${clientId}')">Créer le contact</button></div>`,'w');
+}
+function saveContactForClient(clientId){
+  const g=id=>document.getElementById('ct-'+id)?.value||'';
+  const prenom=g('prenom'),nom=g('nom');
+  if(!prenom||!nom){alert('Prénom et nom sont obligatoires.');return;}
+  const ct={id:genId(),prenom,nom,fonction:g('fonction'),phone:g('phone'),email:g('email'),linkedin:g('linkedin'),note:g('note'),client_id:clientId,created_at:TODAY};
+  DB.contacts.push(ct);
+  save();CM();
+  // Refresh the contact list in the open client detail
+  const cts=DB.contacts.filter(c=>c.client_id===clientId);
+  const container=document.querySelector(`[data-client-contacts="${clientId}"]`);
+  if(container)container.innerHTML=buildClientContacts(clientId,cts);
+  showToast('✓ Contact créé et rattaché au client');
+}
+function buildClientContacts(clientId,cts){
+  if(!cts.length)return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:10px 0">Aucun contact rattaché à cette entreprise</div>';
+  return cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="openContactDetail('${ct.id}')">
+        <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:2px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+        ${ct.fonction?`<div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:5px">${esc(ct.fonction)}</div>`:''}
+        <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:3px">
+          ${ct.phone?`<div style="display:flex;align-items:center">📞 <a href="tel:${esc(ct.phone)}" onclick="event.stopPropagation()" style="color:var(--ts);text-decoration:none;margin-left:4px">${esc(formatPhone(ct.phone))}</a>${ct.linkedin?liBtn(ct.linkedin):''}</div>`:''}${ct.linkedin&&!ct.phone?`<div style="display:flex;align-items:center">Profil LinkedIn ${liBtn(ct.linkedin)}</div>`:''}
+          ${ct.email?`<div>✉️ <a href="mailto:${esc(ct.email)}" onclick="event.stopPropagation()" style="color:var(--acc);text-decoration:none">${esc(ct.email)}</a></div>`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;margin-left:8px">
+        <button class="ic-btn" onclick="openContactForm('${ct.id}')" title="Modifier">✏️</button>
+        <button class="ic-btn" style="color:var(--red)" onclick="unlinkContactFromClient('${ct.id}','${clientId}')" title="Dissocier">✕</button>
+      </div>
+    </div>
+  </div>`).join('');
+}
+
+// ══ ÉTABLISSEMENTS SIRET (extension SIRENE) ══════════════
+async function sireneGetEtablissements(siren){
+  if(!siren||siren.length<9)return[];
+  try{
+    const r=await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(siren)}&page=1&per_page=1`);
+    if(!r.ok)return[];
+    const data=await r.json();
+    const ent=data.results?.[0];if(!ent)return[];
+    // Get establishments from matching_etablissements if available
+    const etabs=(ent.matching_etablissements||[ent.siege]).filter(Boolean);
+    return etabs.map(e=>({
+      siret:e.siret||'',
+      adresse:[e.numero_voie,e.type_voie,e.libelle_voie,e.code_postal,e.libelle_commune].filter(Boolean).join(' '),
+      ville:e.libelle_commune||'',
+      code_postal:e.code_postal||'',
+      est_siege:e.est_siege||false,
+    }));
+  }catch(e){return[];}
+}
+
+async function sireneShowEtablissements(siren){
+  const etabs=await sireneGetEtablissements(siren);
+  const container=document.getElementById('sirene-etabs');if(!container)return;
+  if(!etabs.length){container.innerHTML='<div style="font-size:12px;color:var(--tm)">Aucun établissement trouvé</div>';return;}
+  container.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--ts);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Sélectionner un établissement</div>`+
+    etabs.map((e,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--br);border-radius:7px;margin-bottom:5px;cursor:pointer;background:var(--card)" onclick="sirenePickEtab(${i})">
+      <div style="flex:1"><div style="font-size:12px;font-weight:600">${esc(e.siret)} ${e.est_siege?'<span style="font-size:10px;background:var(--acc-light);color:var(--acc2);border-radius:4px;padding:1px 5px">Siège</span>':''}</div>
+      <div style="font-size:11px;color:var(--ts)">${esc(e.adresse)}</div></div>
+      <span style="color:var(--acc);font-size:11px">Choisir →</span>
+    </div>`).join('');
+  container._etabs=etabs;
+}
+
+function sirenePickEtab(idx){
+  const container=document.getElementById('sirene-etabs');if(!container||!container._etabs)return;
+  const e=container._etabs[idx];if(!e)return;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  set('f-siret',e.siret);
+  set('f-adresse_sirene',e.adresse);
+  const geoInp=document.getElementById('geo-cl-ville');if(geoInp&&e.ville){geoInp.value=e.ville;}
+  container.innerHTML=`<div style="font-size:12px;color:var(--green)">✓ Établissement sélectionné : ${esc(e.siret)} — ${esc(e.ville)}</div>`;
+  showToast('✓ Établissement sélectionné');
+}
+
+function cmdKDrop(e,col){
+  e.preventDefault();col.classList.remove('drag-over');
+  if(!cmdKDragging)return;
+  const candId=cmdKDragging.dataset.id,cmdId=col.dataset.cmd,etape=col.dataset.etape;
+  cmdKDragging.classList.remove('dragging');cmdKDragging=null;
+  // Update etape first
+  DB.commandes=DB.commandes.map(cmd=>{
+    if(cmd.id!==cmdId)return cmd;
+    return {...cmd,candidats:(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape,etape_changed_by:currentUser?.display_name||'—',etape_changed_at:TODAY}:cc)};
+  });
+  if(etape==='emb'){DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,statut_cand:'Embauché',embauche_cmd_id:cmdId}:c);}
+  // Show info modal for specific stages
+  const needsInfo={entr_cl:true,prop:true,refc:true,refcl:true};
+  if(needsInfo[etape]){
+    save();
+    openEtapeInfo(cmdId,candId,etape);
+  }else{
+    activeCmdTab[cmdId]='cands';save();openCmdDetail(cmdId);
+  }
+}
+
+function openEtapeInfo(cmdId,candId,etape){
+  const cand=getCand(candId);const cmd=DB.commandes.find(c=>c.id===cmdId);
+  const cc=(cmd?.candidats||[]).find(x=>x.candidat_id===candId)||{};
+  const info=cc.etape_info||{};
+  let fields='';
+  if(etape==='entr_cl'){
+    fields=`<div class="fr"><div class="fld"><label>Date de l'entretien</label><input type="date" id="ei-date" value="${info.date||TODAY}"></div><div class="fld"><label>Heure</label><input type="time" id="ei-heure" value="${info.heure||''}"></div></div>
+    <div class="fld"><label>Commentaire</label><textarea id="ei-comment" style="min-height:70px">${esc(info.commentaire||'')}</textarea></div>`;
+  }else if(etape==='prop'){
+    fields=`<div class="fr"><div class="fld"><label>Salaire proposé</label><input id="ei-salaire" value="${esc(info.salaire||'')}" placeholder="ex: 45000"></div><div class="fld"><label>Périodicité</label><select id="ei-periodicite"><option value="Annuel"${info.periodicite==='Annuel'?' selected':''}>Annuel</option><option value="Mensuel"${info.periodicite==='Mensuel'?' selected':''}>Mensuel</option><option value="Horaire"${info.periodicite==='Horaire'?' selected':''}>Horaire</option></select></div></div>
+    <div class="fld"><label>Commentaire</label><textarea id="ei-comment" style="min-height:60px">${esc(info.commentaire||'')}</textarea></div>`;
+  }else if(etape==='refc'){
+    const motifs=['Salaire insuffisant','Poste non aligné','Distance / mobilité','Contre-proposition','Plus disponible','Manque d\'intérêt pour l\'entreprise','Autre'];
+    fields=`<div class="fld"><label>Motif du refus candidat</label><select id="ei-motif"><option value="">— Sélectionner —</option>${motifs.map(m=>`<option value="${m}"${info.motif===m?' selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="fld"><label>Commentaire</label><textarea id="ei-comment" style="min-height:70px">${esc(info.commentaire||'')}</textarea></div>`;
+  }else if(etape==='refcl'){
+    const motifs=['Profil trop junior','Profil trop senior','Salaire trop élevé','Manque d\'expérience technique','Savoir-être non validé','Disponibilité trop longue','Autre'];
+    fields=`<div class="fld"><label>Motif du refus client</label><select id="ei-motif"><option value="">— Sélectionner —</option>${motifs.map(m=>`<option value="${m}"${info.motif===m?' selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="fld"><label>Commentaire</label><textarea id="ei-comment" style="min-height:70px">${esc(info.commentaire||'')}</textarea></div>`;
+  }
+  const etapeLabel=PIPE_CMD.find(p=>p.id===etape)?.label||etape;
+  OM(`${etapeLabel} — ${esc(cand?.prenom||'')} ${esc(cand?.nom||'')}`,`
+    ${fields}
+    <div class="fa">
+      <button class="btn btn-s" onclick="activeCmdTab['${cmdId}']='cands';CM();openCmdDetail('${cmdId}')">Fermer sans enregistrer</button>
+      <button class="btn btn-p" onclick="saveEtapeInfo('${cmdId}','${candId}','${etape}')">Enregistrer</button>
+    </div>`,'w');
+}
+
+function saveEtapeInfo(cmdId,candId,etape){
+  const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  let info={};
+  if(etape==='entr_cl')info={date:g('ei-date'),heure:g('ei-heure'),commentaire:g('ei-comment')};
+  else if(etape==='prop')info={salaire:g('ei-salaire'),periodicite:g('ei-periodicite'),commentaire:g('ei-comment')};
+  else info={motif:g('ei-motif'),commentaire:g('ei-comment')};
+  info._by=currentUser?.display_name||'—';info._date=TODAY;
+  DB.commandes=DB.commandes.map(cmd=>cmd.id!==cmdId?cmd:{...cmd,candidats:(cmd.candidats||[]).map(cc=>cc.candidat_id===candId?{...cc,etape_info:info}:cc)});
+  activeCmdTab[cmdId]='cands';save();CM();openCmdDetail(cmdId);
+}
+
+// ══ PHONE FORMATTER ══════════════════════════════════════
+function formatPhone(p){
+  if(!p)return '';
+  let n=p.toString().replace(/\D/g,'');
+  // Handle +33
+  if(n.startsWith('33')&&n.length===11)n='0'+n.slice(2);
+  if(n.length===10)return n.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/,'$1 $2 $3 $4 $5');
+  return p;
+}
+
+// ══ SOURCE CANDIDAT ══════════════════════════════════════
+const SOURCES_TYPE=['Réponse à annonce','Sourcing','Cooptation','Candidature spontanée','Import manuel','Autre'];
+const SOURCES_CANAL=['LinkedIn','Indeed','Hellowork','France Travail','APEC','Site carrière','Réseau personnel','Cooptation interne','CVthèque','Autre'];
+
+// ══ ALPHA SORT ════════════════════════════════════════════
+function alphaSort(items){
+  return [...(items||[])].sort((a,b)=>{
+    const la=(a.label||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const lb=(b.label||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(la==='autre')return 1;if(lb==='autre')return -1;
+    return la.localeCompare(lb);
+  });
+}
+
+// ══ CRÉATION RAPIDE RÉFÉRENTIEL ══════════════════════════
+function ssOpenWithCreate(id,parentLabel){
+  ssOpen(id);
+  const drop=document.getElementById(id+'-drop');if(!drop)return;
+  // Add create option if not already there
+  if(!drop.querySelector('.ss-create-opt')){
+    const div=document.createElement('div');
+    div.className='geo-opt ss-create-opt';
+    div.style.cssText='color:var(--acc);font-weight:500;border-top:1px solid var(--br);margin-top:4px;padding-top:8px';
+    div.innerHTML=`<span class="geo-opt-name">+ Créer un nouveau...</span>`;
+    div.onclick=()=>openQuickCreate(id,parentLabel);
+    drop.appendChild(div);
+  }
+}
+function openQuickCreate(fieldId,parentLabel){
+  const isMetier=fieldId.startsWith('f-m');
+  const isSousSect=fieldId==='f-ss';
+  const parentId=isMetier?ssGet('f-fm'):ssGet('f-sa');
+  const parentName=parentId?(isMetier?refLbl('familles_metier',parentId):refLbl('secteurs_act',parentId)):'';
+  OM(`Créer rapidement`,`
+    <div style="background:var(--acc-light);border-radius:7px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--acc2)">
+      ${parentName?`Rattaché à : <b>${esc(parentName)}</b>`:'Sélectionnez d\'abord un parent'}
+    </div>
+    <div class="fld"><label>${isMetier?'Nom du métier':'Nom du sous-secteur'}</label><input id="qc-ref-label" placeholder="${isMetier?'ex: Chef de projet travaux':'ex: Construction neuve'}"></div>
+    <div class="fa">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="saveQuickRef('${fieldId}','${isMetier?'metiers':'sous_secteurs'}','${parentId}')">Créer et sélectionner</button>
+    </div>`,'n');
+}
+function saveQuickRef(fieldId,arr,parentId){
+  const label=(document.getElementById('qc-ref-label')?.value||'').trim();
+  if(!label){alert('Saisissez un nom.');return;}
+  // Check duplicate
+  const existing=(REF[arr]||[]).find(x=>x.label.toLowerCase()===label.toLowerCase()&&(!parentId||x.famille_id===parentId||x.secteur_id===parentId));
+  if(existing){if(!confirm(`"${esc(existing.label)}" existe déjà. Sélectionner cet élément ?`)){return;}CM();ssPick(fieldId,existing.id,existing.label);return;}
+  const newItem={id:genId(),label,actif:true};
+  if(arr==='metiers'){newItem.famille_id=parentId;}else{newItem.secteur_id=parentId;}
+  REF[arr]=[...(REF[arr]||[]),newItem];
+  saveKey('refs');CM();
+  // Update cache and select
+  _ssItems[fieldId]=[..._ssItems[fieldId]||[],newItem];
+  ssPick(fieldId,newItem.id,label);
+  showToast(`✓ "${label}" créé et sélectionné`);
+}
+
+// ══ ADMIN LOGO ════════════════════════════════════════════
+function openLogoAdmin(){
+  if(currentUser?.role!=='admin'){alert('Accès réservé aux administrateurs.');return;}
+  const s=DB._settings||{};
+  OM('⚙ Paramètres du logo',`
+    <div class="section-title">Logo actuel</div>
+    <div style="margin-bottom:12px;background:var(--sb);padding:10px;border-radius:8px;min-height:50px;display:flex;align-items:center">
+      ${s.logoUrl
+        ?`<img src="${s.logoUrl}" style="height:${s.logoH||34}px;max-width:${s.logoMaxW||150}px;object-fit:contain;margin-left:${s.logoML||0}px;margin-top:${s.logoMT||0}px">`
+        :'<div style="font-size:12px;color:var(--sbt)">Logo par défaut (/logo.png)</div>'}
+    </div>
+    <div class="fld"><label>Nouveau logo (PNG, JPG)</label><input type="file" accept=".png,.jpg,.jpeg,.webp" onchange="previewLogoAdmin(this)"></div>
+    <div id="logo-admin-preview"></div>
+    <div class="section-title">Taille</div>
+    <div class="fr">
+      <div class="fld"><label>Hauteur (px)</label><input id="la-h" type="number" value="${s.logoH||34}" min="16" max="80" placeholder="34"></div>
+      <div class="fld"><label>Largeur max (px)</label><input id="la-w" type="number" value="${s.logoMaxW||150}" min="40" max="300" placeholder="150"></div>
+    </div>
+    <div class="section-title">Position</div>
+    <div class="fr">
+      <div class="fld"><label>Marge gauche (px)</label><input id="la-ml" type="number" value="${s.logoML||0}" min="-20" max="50" placeholder="0"></div>
+      <div class="fld"><label>Marge top (px)</label><input id="la-mt" type="number" value="${s.logoMT||0}" min="-20" max="30" placeholder="0"></div>
+    </div>
+    <div class="fa">
+      <button class="btn btn-d btn-sm" onclick="resetLogoAdmin()">Réinitialiser</button>
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="saveLogoAdmin()">Enregistrer</button>
+    </div>`,'w');
+}
+function previewLogoAdmin(inp){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>1024*1024){alert('Image trop lourde (max 1Mo)');return;}
+  const r=new FileReader();r.onload=e=>{
+    window._pendingLogoAdmin=e.target.result;
+    const p=document.getElementById('logo-admin-preview');
+    if(p)p.innerHTML=`<img src="${e.target.result}" style="height:40px;object-fit:contain;margin-top:8px;background:var(--sb);padding:6px;border-radius:6px">`;
+  };r.readAsDataURL(file);
+}
+function saveLogoAdmin(){
+  const h=parseInt(document.getElementById('la-h')?.value)||34;
+  const w=parseInt(document.getElementById('la-w')?.value)||150;
+  const ml=parseInt(document.getElementById('la-ml')?.value)||0;
+  const mt=parseInt(document.getElementById('la-mt')?.value)||0;
+  if(!DB._settings)DB._settings={};
+  if(window._pendingLogoAdmin)DB._settings.logoUrl=window._pendingLogoAdmin;
+  DB._settings.logoH=h;DB._settings.logoMaxW=w;DB._settings.logoML=ml;DB._settings.logoMT=mt;
+  save();applyLogoSettings();CM();showToast('✓ Logo mis à jour');window._pendingLogoAdmin=null;
+}
+function resetLogoAdmin(){
+  if(!confirm('Réinitialiser le logo aux paramètres par défaut ?'))return;
+  if(DB._settings){delete DB._settings.logoUrl;DB._settings.logoH=34;DB._settings.logoMaxW=150;DB._settings.logoML=0;DB._settings.logoMT=0;}
+  save();applyLogoSettings();CM();showToast('✓ Logo réinitialisé');
+}
+function applyLogoSettings(){
+  const s=DB._settings||{};
+  const img=document.querySelector('.sb-logo img');
+  if(!img)return;
+  if(s.logoUrl){img.src=s.logoUrl;document.getElementById('sb-logo-fallback').style.display='none';img.style.display='';}
+  if(s.logoH)img.style.height=s.logoH+'px';
+  if(s.logoMaxW)img.style.maxWidth=s.logoMaxW+'px';
+  img.style.marginLeft=(s.logoML||0)+'px';
+  img.style.marginTop=(s.logoMT||0)+'px';
+}
+
+// ══ CV EXTRACTION MANUELLE ════════════════════════════════
+// Désactivation de l'extraction automatique — elle se fait maintenant sur bouton
+
+// ══ DICTÉE VOCALE ═══════════════════════════════════════
+let _voiceActive=null;let _voiceRec=null;
+function voiceBtn(targetId){
+  return `<button type="button" class="voice-btn" id="vbtn-${targetId}" onclick="toggleVoice('${targetId}')" title="Dictée vocale">🎤</button>`;
+}
+function toggleVoice(targetId){
+  if(_voiceActive===targetId){stopVoice();return;}
+  if(_voiceActive)stopVoice();
+  startVoice(targetId);
+}
+function startVoice(targetId){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('La dictée vocale nécessite Chrome ou Edge.');return;}
+  const btn=document.getElementById('vbtn-'+targetId);
+  const target=document.getElementById(targetId);if(!target)return;
+  _voiceRec=new SR();
+  _voiceRec.lang='fr-FR';_voiceRec.continuous=true;_voiceRec.interimResults=true;
+  let interim='';
+  const baseVal=target.value;
+  _voiceRec.onresult=e=>{
+    interim='';let final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)final+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    if(final){target.value=baseVal+(target.value.slice(baseVal.length).replace(interim,''))+final;}
+    else{target.value=baseVal+(target.value.slice(baseVal.length))+interim;}
+  };
+  _voiceRec.onerror=e=>{
+    if(e.error==='not-allowed')alert('Accès au micro refusé. Autorisez le micro dans les paramètres de votre navigateur.');
+    stopVoice();
+  };
+  _voiceRec.onend=()=>{if(_voiceActive===targetId)stopVoice();};
+  try{_voiceRec.start();}catch(e){alert('Erreur micro : '+e.message);return;}
+  _voiceActive=targetId;
+  if(btn){btn.textContent='⏹';btn.style.background='#fef2f2';btn.style.color='var(--red)';btn.title='Arrêter la dictée';}
+}
+function stopVoice(){
+  if(_voiceRec)try{_voiceRec.stop();}catch(e){}
+  const btn=document.getElementById('vbtn-'+_voiceActive);
+  if(btn){btn.textContent='🎤';btn.style.background='';btn.style.color='';btn.title='Dictée vocale';}
+  _voiceActive=null;_voiceRec=null;
+}
+
+// ══ DÉTECTION DE DOUBLONS ════════════════════════════════
+function normPhone(p){return (p||'').replace(/[\s\-\.\(\)]/g,'');}
+function normEmail(e){return (e||'').toLowerCase().trim();}
+function normSiret(s){return (s||'').replace(/\s/g,'');}
+function normNom(n){return (n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+
+function findDuplicatesCand(prenom,nom,email,phone,linkedin,excludeId){
+  const ep=normEmail(email),ph=normPhone(phone),li=(linkedin||'').trim(),fn=normNom(prenom+' '+nom);
+  return DB.candidats.filter(c=>{
+    if(c.id===excludeId)return false;
+    if(ep&&normEmail(c.email)===ep)return true;
+    if(ph&&ph.length>6&&normPhone(c.phone)===ph)return true;
+    if(li&&li===(c.linkedin||'').trim())return true;
+    if(fn.length>3&&normNom((c.prenom||'')+' '+(c.nom||''))===fn)return true;
+    return false;
+  });
+}
+function findDuplicatesClient(nom,siren,siret,excludeId){
+  const ns=normNom(nom),si=normSiret(siren),sit=normSiret(siret);
+  return DB.clients.filter(c=>{
+    if(c.id===excludeId)return false;
+    if(sit&&sit.length>10&&normSiret(c.siret)===sit)return true;
+    if(si&&si.length>8&&normSiret(c.siren)===si)return true;
+    if(ns.length>3&&normNom(c.nom)===ns)return true;
+    return false;
+  });
+}
+function findDuplicatesContact(prenom,nom,email,phone,excludeId){
+  // Doublon uniquement si prénom + nom + entreprise identiques (pas sur email/téléphone seuls)
+  const fn=normNom((prenom||'')+' '+(nom||''));
+  if(fn.length<3)return[];
+  return DB.contacts.filter(c=>{
+    if(c.id===excludeId)return false;
+    const cfn=normNom((c.prenom||'')+' '+(c.nom||''));
+    return cfn===fn;
+  });
+}
+function showDuplicatesAlert(dupes,type,onContinue){
+  if(!dupes.length){onContinue();return;}
+  const rows=dupes.slice(0,3).map(d=>{
+    const nm=d.prenom?`${esc(d.prenom)} ${esc(d.nom)}`:esc(d.nom);
+    const cl=d.client_id?getClient(d.client_id):null;
+    const info=cl?esc(cl.nom):d.email?esc(d.email):'';
+    return `<div style="background:var(--bg);border-radius:7px;padding:9px 12px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:13px;font-weight:600">${nm}</div><div style="font-size:11px;color:var(--tm)">${info}${d.cons?' · '+esc(d.cons):''}</div></div>
+    </div>`;
+  }).join('');
+  // Stocker onContinue dans variable globale pour éviter toString() corrompu
+  window._dupOnContinue=onContinue;
+  OM('⚠️ Doublon potentiel détecté',`
+    <div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:9px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--amber)">
+      Un contact avec le même nom existe déjà. Vérifiez avant de créer.
+    </div>
+    <div style="margin-bottom:14px">${rows}</div>
+    <div class="fa">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-d" onclick="CM();if(window._dupOnContinue){window._dupOnContinue();window._dupOnContinue=null;}">Créer quand même</button>
+    </div>`,'n');
+}
+
+// ══ CONTACT DEPUIS FICHE CLIENT ══════════════════════════
+function openLinkContactToClient(clientId){
+  // Contacts non encore liés à ce client
+  const already=new Set(DB.contacts.filter(ct=>ct.client_id===clientId).map(ct=>ct.id));
+  const avail=DB.contacts.filter(ct=>ct.id&&!already.has(ct.id));
+  if(!avail.length){alert('Tous les contacts existants sont déjà rattachés à ce client, ou aucun contact n\'existe encore. Utilisez "Nouveau" pour en créer un.');return;}
+  OM('Rattacher un contact existant',`
+    <div class="fld"><label>Rechercher un contact</label>
+      <input id="link-ct-search" style="width:100%;border:1px solid var(--br);border-radius:7px;padding:7px 11px;font-size:13px;color:var(--tp);background:var(--bg);outline:none;font-family:inherit" placeholder="Nom, prénom, fonction..." oninput="filterLinkContacts('${clientId}')">
+    </div>
+    <div id="link-ct-list" style="max-height:300px;overflow-y:auto;margin-top:8px">
+      ${avail.map(ct=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--br);border-radius:7px;margin-bottom:5px;cursor:pointer;background:var(--bg)" onclick="doLinkContact('${ct.id}','${clientId}')">
+        <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(ct.prenom)} ${esc(ct.nom)}</div><div style="font-size:11px;color:var(--ts)">${esc(ct.fonction||'')}${ct.email?' · '+esc(ct.email):''}</div></div>
+        <button class="btn btn-p btn-sm">Rattacher</button>
+      </div>`).join('')}
+    </div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'w');
+  // Store available list for filtering
+  document.getElementById('link-ct-list')._avail=avail;
+}
+function filterLinkContacts(clientId){
+  const q=(document.getElementById('link-ct-search')?.value||'').toLowerCase();
+  const list=document.getElementById('link-ct-list');
+  if(!list||!list._avail)return;
+  list.innerHTML=list._avail.filter(ct=>[ct.prenom,ct.nom,ct.fonction,ct.email].join(' ').toLowerCase().includes(q)).map(ct=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--br);border-radius:7px;margin-bottom:5px;cursor:pointer;background:var(--bg)" onclick="doLinkContact('${ct.id}','${clientId}')">
+    <div style="flex:1"><div style="font-size:13px;font-weight:600">${esc(ct.prenom)} ${esc(ct.nom)}</div><div style="font-size:11px;color:var(--ts)">${esc(ct.fonction||'')}${ct.email?' · '+esc(ct.email):''}</div></div>
+    <button class="btn btn-p btn-sm">Rattacher</button>
+  </div>`).join('');
+  list._avail=list._avail; // keep ref
+}
+async function doLinkContact(contactId,clientId){
+  DB.contacts=DB.contacts.map(ct=>ct.id===contactId?{...ct,client_id:clientId}:ct);
+  save();CM();
+  showToast('✓ Contact rattaché');
+  setTimeout(()=>openClientDetail(clientId),30);
+}
+function unlinkContactFromClient(contactId,clientId){
+  if(!confirm('Dissocier ce contact de cette fiche ? (Le contact reste dans la base)'))return;
+  DB.contacts=DB.contacts.map(ct=>ct.id===contactId?{...ct,client_id:''}:ct);
+  save();
+  const panel=document.querySelector('.client-contacts-list');
+  if(panel){const cts=DB.contacts.filter(ct=>ct.client_id===clientId);panel.innerHTML=buildClientContacts(clientId,cts);}
+  showToast('✓ Contact dissocié');
+}
+function openAddContactFromClient(clientId){
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
+  OM('+ Ajouter un contact',`
+    <div style="font-size:12px;color:var(--acc2);background:var(--acc-light);border-radius:7px;padding:8px 12px;margin-bottom:14px">Sera automatiquement rattaché à cette entreprise</div>
+    <div class="fr"><div class="fld"><label>Prénom</label><input id="qc-prenom" placeholder="Prénom"></div><div class="fld"><label>Nom</label><input id="qc-nom" placeholder="Nom"></div></div>
+    <div class="fld"><label>Fonction</label><input id="qc-fonction" placeholder="ex: Directeur travaux, RH..."></div>
+    <div class="fr"><div class="fld"><label>Téléphone</label><input id="qc-phone" type="tel" placeholder="+33..."></div><div class="fld"><label>Email</label><input id="qc-email" type="email" placeholder="email@..."></div></div>
+    <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="qc-linkedin" type="url" placeholder="https://linkedin.com/in/..."></div>
+    <div class="fld"><label>Consultant référent</label><select id="qc-cons">${cOpts}</select></div>
+    <div class="fld"><label>Commentaire</label><textarea id="qc-comment" style="min-height:60px"></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveContactFromClient('${clientId}')">Créer le contact</button></div>`,'n');
+}
+function saveContactFromClient(clientId){
+  const g=id=>document.getElementById(id)?.value?.trim()||'';
+  const prenom=g('qc-prenom'),nom=g('qc-nom'),email=g('qc-email'),phone=g('qc-phone');
+  if(!prenom||!nom){alert('Prénom et nom sont obligatoires.');return;}
+  const dupes=findDuplicatesContact(prenom,nom,email,phone,null);
+  const doSave=async()=>{
+    const ct={id:genId(),prenom,nom,fonction:g('qc-fonction'),phone,email,linkedin:g('qc-linkedin'),cons:g('qc-cons'),comment:g('qc-comment'),client_id:clientId,created_at:TODAY};
+    DB.contacts.push(ct);save();CM();
+    showToast('✓ Contact créé et rattaché au client');
+    // Rouvrir la fiche client (CM ferme tout)
+    setTimeout(()=>openClientDetail(clientId),30);
+  };
+  if(dupes.length){showDuplicatesAlert(dupes,'contact',doSave);}else{doSave();}
+}
+function buildClientContactsHtml(clientId,cts){
+  if(!cts.length)return '<div style="color:var(--tm);font-size:13px;font-style:italic;padding:10px 0">Aucun contact rattaché à cette entreprise</div>';
+  return cts.map(ct=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:8px;cursor:pointer" onclick="openContactDetail('${ct.id}')">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--tp);margin-bottom:3px">${esc(ct.prenom)} ${esc(ct.nom)}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--acc2);margin-bottom:6px">${esc(ct.fonction||'—')}</div>
+        <div style="font-size:12px;color:var(--ts);display:flex;flex-direction:column;gap:2px">
+          ${ct.phone?`<div>📞 ${esc(ct.phone)}</div>`:''}
+          ${ct.email?`<div>✉️ ${esc(ct.email)}</div>`:''}
+        </div>
+      </div>
+      <button class="ic-btn" onclick="event.stopPropagation();openContactForm('${ct.id}')">✏️</button>
+    </div>
+  </div>`).join('');
+}
+
+// ══ API SIRENE — ÉTABLISSEMENTS ══════════════════════════
+async function sireneGetEtabs(siren){
+  try{
+    const r=await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(siren)}&page=1&per_page=1`);
+    if(!r.ok)return[];
+    const data=await r.json();
+    const etabs=(data.results?.[0]?.matching_etablissements||[]);
+    return etabs.map(e=>({
+      siret:e.siret||'',
+      adresse:[e.numero_voie,e.type_voie,e.libelle_voie,e.code_postal,e.libelle_commune].filter(Boolean).join(' '),
+      ville:e.libelle_commune||'',
+      est_siege:e.etablissement_siege,
+    }));
+  }catch(e){return[];}
+}
+function openEtabPicker(siren,onSelect){
+  OM('Sélectionner un établissement',`<div style="padding:20px;text-align:center;color:var(--tm)">⏳ Chargement des établissements...</div>`,'n');
+  sireneGetEtabs(siren).then(etabs=>{
+    const mbody=document.getElementById('mbody');if(!mbody)return;
+    if(!etabs.length){mbody.innerHTML='<div style="padding:20px;text-align:center;color:var(--tm)">Aucun établissement trouvé pour ce SIREN.</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>';return;}
+    mbody.innerHTML=`<div style="margin-bottom:10px;font-size:13px;color:var(--ts)">${etabs.length} établissement${etabs.length>1?'s':''} trouvé${etabs.length>1?'s':''}</div>`+
+      etabs.map((e,i)=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:7px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="CM();(${onSelect.toString()})(${JSON.stringify(e)})">
+        <div>
+          <div style="font-size:13px;font-weight:600">${esc(e.siret)}${e.est_siege?' <span style="font-size:10px;color:var(--acc2);background:var(--acc-light);border-radius:4px;padding:1px 5px">Siège</span>':''}</div>
+          <div style="font-size:12px;color:var(--ts)">${esc(e.adresse)}</div>
+        </div>
+        <button class="btn btn-p btn-sm">Sélectionner</button>
+      </div>`).join('')+
+      `<div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`;
+  });
+}
+
+// ══ LOGO UPSEARCH ════════════════════════════════════════
+// Configurable via variable LOGO_URL (peut être une data URL ou URL externe)
+const UPSEARCH_LOGO=window.UPSEARCH_LOGO||null;
+
+// ══ CONDITIONS COMMERCIALES ══════════════════════════════
+function buildConventionsHtml(clientId,convs){
+  if(!convs.length)return '<div style="font-size:12px;color:var(--tm);font-style:italic">Aucune convention</div>';
+  const ext=n=>(n||'').split('.').pop().toLowerCase();
+  const icon=n=>({pdf:'📄',doc:'📝',docx:'📝',jpg:'🖼',jpeg:'🖼',png:'🖼'})[ext(n)]||'📎';
+  const canPrev=n=>['pdf','jpg','jpeg','png'].includes(ext(n));
+  return convs.map((p,i)=>`<div class="pj-item">
+    <div class="pj-icon">${icon(p.name)}</div>
+    <div class="pj-info"><div class="pj-name">${esc(p.name)}</div><div class="pj-meta">${esc(p.cons)} · ${p.date}</div></div>
+    <div style="display:flex;gap:5px;flex-shrink:0">
+      ${canPrev(p.name)?`<button class="cv-badge" onclick="previewConvention(${i},'${clientId}')">👁</button>`:''}
+      <button class="cv-badge" onclick="dlConvention(${i},'${clientId}')">⬇</button>
+      <button class="ic-btn" style="color:var(--red)" onclick="delConvention(${i},'${clientId}')">🗑</button>
+    </div>
+  </div>`).join('');
+}
+function uploadConvention(inp,clientId){
+  const file=inp.files[0];if(!file)return;
+  if(file.size>10*1024*1024){alert('Fichier trop lourd (max 10Mo)');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    const conv={name:file.name,type:file.type,size:file.size,data:e.target.result.split(',')[1],cons:currentUser?.display_name||'—',date:TODAY};
+    DB.clients=DB.clients.map(c=>c.id===clientId?{...c,conventions:[...(c.conventions||[]),conv]}:c);
+    save();const el=document.getElementById('conv-list-'+clientId);if(el)el.innerHTML=buildConventionsHtml(clientId,getClient(clientId)?.conventions||[]);showToast('✓ Convention ajoutée');
+  };r.readAsDataURL(file);
+}
+function dlConvention(idx,cId){const c=getClient(cId),p=c?.conventions?.[idx];if(!p)return;const a=document.createElement('a');a.href=`data:${p.type};base64,${p.data}`;a.download=p.name;a.click();}
+function delConvention(idx,cId){if(!confirm('Supprimer cette convention ?'))return;DB.clients=DB.clients.map(c=>c.id===cId?{...c,conventions:(c.conventions||[]).filter((_,i)=>i!==idx)}:c);save();const el=document.getElementById('conv-list-'+cId);if(el)el.innerHTML=buildConventionsHtml(cId,getClient(cId)?.conventions||[]);}
+function previewConvention(idx,cId){const c=getClient(cId),p=c?.conventions?.[idx];if(!p)return;const x=(p.name||'').split('.').pop().toLowerCase();let content='';if(['jpg','jpeg','png'].includes(x)){content=`<img src="data:${p.type};base64,${p.data}" style="max-width:100%;max-height:75vh;border-radius:8px">`;}else if(x==='pdf'){const b=atob(p.data),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);const u=URL.createObjectURL(new Blob([a],{type:'application/pdf'}));content=`<iframe src="${u}" width="100%" height="600" style="border:none;border-radius:8px">`;}OM(esc(p.name),`<div>${content}</div><div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`,'xl');}
+
+function buildCondTarifHtml(clientId,conds){
+  if(!conds.length)return '<div style="font-size:12px;color:var(--tm);font-style:italic">Aucune condition tarifaire</div>';
+  return conds.map((ct,i)=>`<div style="background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 14px;margin-bottom:7px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--acc2)">${ct.type==='Forfait'?'💶 Forfait : '+esc(ct.montant)+'':'📊 '+esc(ct.pourcentage)+'%'}</div>
+        ${ct.precision?`<div style="font-size:12px;color:var(--ts);margin-top:3px">${esc(ct.precision)}</div>`:''}
+        <div style="font-size:10px;color:var(--tm);margin-top:5px">${esc(ct.cons)} · ${ct.date}</div>
+      </div>
+      <button class="ic-btn" style="color:var(--red)" onclick="delCondTarif(${i},'${clientId}')">🗑</button>
+    </div>
+  </div>`).join('');
+}
+function openAddCondTarif(clientId){
+  OM('Ajouter une condition tarifaire',`
+    <div class="fld"><label>Type</label>
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <label class="check-row"><input type="radio" name="ct_type" value="Forfait" checked onchange="toggleCondTarifType(this.value)"> 💶 Forfait</label>
+        <label class="check-row"><input type="radio" name="ct_type" value="Pourcentage" onchange="toggleCondTarifType(this.value)"> 📊 Pourcentage</label>
+      </div>
+    </div>
+    <div id="ct-forfait"><div class="fld"><label>Montant</label><input id="ct-montant" placeholder="ex: 6 000€ HT"></div></div>
+    <div id="ct-pourcent" style="display:none"><div class="fld"><label>Pourcentage</label><input id="ct-pourcent-val" placeholder="ex: 15"></div></div>
+    <div class="fld"><label>Précision / commentaire</label><input id="ct-precision" placeholder="ex: Cadre, ETAM, mission spécifique..."></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveCondTarif('${clientId}')">Ajouter</button></div>`,'n');
+}
+function toggleCondTarifType(v){document.getElementById('ct-forfait').style.display=v==='Forfait'?'block':'none';document.getElementById('ct-pourcent').style.display=v==='Pourcentage'?'block':'none';}
+function saveCondTarif(clientId){
+  const type=document.querySelector('input[name="ct_type"]:checked')?.value||'Forfait';
+  const montant=type==='Forfait'?document.getElementById('ct-montant')?.value||'':'';
+  const pourcentage=type==='Pourcentage'?document.getElementById('ct-pourcent-val')?.value||'':'';
+  const precision=document.getElementById('ct-precision')?.value||'';
+  const cond={type,montant,pourcentage,precision,cons:currentUser?.display_name||'—',date:TODAY,id:genId()};
+  DB.clients=DB.clients.map(c=>c.id===clientId?{...c,conditions_tarif:[...(c.conditions_tarif||[]),cond]}:c);
+  save();CM();const el=document.getElementById('tarif-list-'+clientId);if(el)el.innerHTML=buildCondTarifHtml(clientId,getClient(clientId)?.conditions_tarif||[]);showToast('✓ Condition tarifaire ajoutée');
+}
+function delCondTarif(idx,clientId){if(!confirm('Supprimer cette condition ?'))return;DB.clients=DB.clients.map(c=>c.id===clientId?{...c,conditions_tarif:(c.conditions_tarif||[]).filter((_,i)=>i!==idx)}:c);save();const el=document.getElementById('tarif-list-'+clientId);if(el)el.innerHTML=buildCondTarifHtml(clientId,getClient(clientId)?.conditions_tarif||[]);}
+
+// ══ IMPORT LINKEDIN MANUEL ═══════════════════════════════
+function openLinkedInImport(){
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
+  OM('Import LinkedIn — saisie manuelle',`
+    <div style="background:var(--acc-light);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--acc2)">
+      📋 Ouvrez le profil LinkedIn, copiez les informations visibles (nom, poste, entreprise, résumé, expériences…) et collez-les ci-dessous.
+    </div>
+    <div class="fld"><label>URL LinkedIn du profil</label><input id="li-url" placeholder="https://www.linkedin.com/in/..." style="width:100%"></div>
+    <div class="fld"><label>Consultant</label><select id="li-cons">${cOpts}</select></div>
+    <div class="fld"><label>Texte du profil LinkedIn (copier-coller)</label><textarea id="li-text" style="min-height:200px;font-family:monospace;font-size:12px" placeholder="Collez ici le contenu copié depuis le profil LinkedIn…
+Exemple :
+Jean Dupont
+Conducteur de travaux chez Bouygues Construction
+Rouen, Normandie
+..."></textarea></div>
+    <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="analyzeLinkedIn()">Analyser →</button></div>`,'w');
+}
+
+async function analyzeLinkedIn(){
+  const url=(document.getElementById('li-url')?.value||'').trim();
+  const text=(document.getElementById('li-text')?.value||'').trim();
+  const cons=document.getElementById('li-cons')?.value||'—';
+  if(!text){alert('Collez le texte du profil LinkedIn avant d\'analyser.');return;}
+
+  // Check for existing LinkedIn URL
+  if(url){
+    const existing=DB.candidats.find(c=>c.linkedin&&c.linkedin.trim()===url);
+    if(existing){
+      if(!confirm(`⚠️ Un candidat avec cette URL LinkedIn existe déjà : ${existing.prenom} ${existing.nom}.\nContinuer quand même ?`))return;
+    }
+  }
+
+  const banner=document.createElement('div');banner.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;z-index:9999;font-size:14px;color:white;font-weight:500';banner.innerHTML='<div style="background:var(--card);color:var(--tp);border-radius:12px;padding:24px 32px;text-align:center">⏳ Analyse du profil en cours...</div>';document.body.appendChild(banner);
+  try{
+    const resp=await fetch('/api/parse-cv',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({linkedin_text:text,linkedin_url:url,type:'linkedin'})});
+    const data=await resp.json();
+    const p=data?.parsed||{};
+    banner.remove();
+    showLinkedInReview(p,url,cons,text);
+  }catch(e){
+    banner.remove();
+    // Fallback: parse manually with simple heuristics
+    const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);
+    const p={
+      prenom:lines[0]?.split(' ')?.[0]||'',
+      nom:lines[0]?.split(' ').slice(1).join(' ')||'',
+      poste:lines[1]||'',
+      ent:lines[2]?.includes(' chez ')?lines[2].split(' chez ')[1]:'',
+      loc:lines.find(l=>/,/.test(l)&&l.length<50&&!l.includes('@'))||'',
+      linkedin:url,
+    };
+    showLinkedInReview(p,url,cons,text);
+  }
+}
+
+function showLinkedInReview(p,url,cons,rawText){
+  OM('Vérification — Données LinkedIn',`
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--ts)">Vérifiez et corrigez les informations extraites avant d'enregistrer.</div>
+    <div class="fr"><div class="fld"><label>Prénom</label><input id="lr-prenom" value="${esc(p.prenom||'')}"></div><div class="fld"><label>Nom</label><input id="lr-nom" value="${esc(p.nom||'')}"></div></div>
+    <div class="fld"><label>Poste actuel</label><input id="lr-poste" value="${esc(p.poste||'')}"></div>
+    <div class="fld"><label>Entreprise actuelle</label><input id="lr-ent" value="${esc(p.ent||'')}"></div>
+    <div class="fld"><label>Localisation</label><input id="lr-loc" value="${esc(p.loc||'')}"></div>
+    <div class="fld"><label>Email (si présent)</label><input id="lr-email" type="email" value="${esc(p.email||'')}"></div>
+    <div class="fld"><label>Téléphone (si présent)</label><input id="lr-phone" value="${esc(p.tel||'')}"></div>
+    <div class="fld"><label>URL LinkedIn</label><input id="lr-linkedin" value="${esc(url||p.linkedin||'')}"></div>
+    <div class="fld"><label>Consultant</label><input value="${esc(cons)}" id="lr-cons" readonly style="background:var(--bg)"></div>
+    <div class="fa">
+      <button class="btn btn-s" onclick="CM()">Annuler</button>
+      <button class="btn btn-p" onclick="createCandFromLinkedIn()">✅ Créer la fiche candidat</button>
+    </div>`,'w');
+}
+
+async function createCandFromLinkedIn(){
+  const g=id=>document.getElementById(id)?.value?.trim()||'';
+  const prenom=g('lr-prenom'),nom=g('lr-nom'),email=g('lr-email'),phone=g('lr-phone'),linkedin=g('lr-linkedin');
+  if(!prenom&&!nom){alert('Prénom ou nom requis.');return;}
+  const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
+  const doCreate=async()=>{
+    const cand={
+      id:genId(),prenom,nom,email,phone,poste:g('lr-poste'),ent:g('lr-ent'),loc:g('lr-loc'),
+      linkedin,statut_cand:'Candidat',
+      notes:[],prequalif:{},entretien:{},entretiens:[],controles_ref:[],mots_cles:[],pieces_jointes:[],
+      _source:'LinkedIn manuel',_source_cons:g('lr-cons'),_source_date:TODAY,
+    };
+    DB.candidats.push(cand);await save(['candidats']);CM();R(CV);showToast('✓ Fiche candidat créée depuis LinkedIn');
+  };
+  if(dupes.length){showDuplicatesAlert(dupes,'cand',doCreate);}else{doCreate();}
+}
+
+async function init(){
+  try{const me=await api('GET','/api/auth/me');if(me?.id){currentUser=me;await loadData();setupUI();showApp();G('dash');}else{showLogin();}}
+  catch(e){showLogin();}
+}
+init();
+</script>
+</body>
+</html>
