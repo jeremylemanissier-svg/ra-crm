@@ -4,6 +4,7 @@ const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,7 +15,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 // Support both DATA_DIR and legacy DB_PATH variable
 let DATA_DIR = process.env.DATA_DIR;
 if (!DATA_DIR && process.env.DB_PATH) {
-  DATA_DIR = path.dirname(process.env.DB_PATH); // /data/crm.db → /data
+  DATA_DIR = path.dirname(process.env.DB_PATH);
 }
 if (!DATA_DIR) DATA_DIR = './data';
 console.log('📁 DATA_DIR:', DATA_DIR);
@@ -28,7 +29,11 @@ function readJSON(file, def) {
   catch(e) { return def; }
 }
 function writeJSON(file, data) {
-  fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
+  // Write to temp then rename = atomic write, prevents corruption
+  const full = path.join(DATA_DIR, file);
+  const tmp = full + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
+  fs.renameSync(tmp, full);
 }
 
 // ── Init users ────────────────────────────────────────
@@ -52,8 +57,22 @@ if (!adminExists) {
 });
 
 // ── Middleware ────────────────────────────────────────
+// ── Compression gzip pour accélérer les transferts ───
+app.use((req, res, next) => {
+  const ae = req.headers['accept-encoding'] || '';
+  if (!ae.includes('gzip')) return next();
+  const _json = res.json.bind(res);
+  res.json = (data) => {
+    const str = JSON.stringify(data);
+    if (str.length < 1024) return _json(data); // pas la peine pour les petites réponses
+    const buf = zlib.gzipSync(Buffer.from(str, 'utf8'));
+    res.set({ 'Content-Encoding': 'gzip', 'Content-Type': 'application/json', 'Content-Length': buf.length });
+    res.end(buf);
+  };
+  next();
+});
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h', etag: true }));
 app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 } }));
 
 const auth  = (req, res, next) => { if (!req.session.userId) return res.status(401).json({ error: 'Non authentifié' }); next(); };
