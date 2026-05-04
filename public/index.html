@@ -1909,7 +1909,7 @@ function openCandForm(id){
   OM(id?'Modifier le candidat':'Nouveau candidat',html,c.cv?'xxl':'w');
 }
 function candFormCancel(candId){CM();if(candId)openCandDetail(candId);}
-function saveCand(){
+async function saveCand(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const geo=geoGetVal('geo-c');
   const existing=EID?getCand(EID):{};
@@ -1920,7 +1920,7 @@ function saveCand(){
   // Capture photo + CV après validation
   let photo=EID?existing.photo||null:null;if(window._pPhoto)photo=window._pPhoto;
   let cv=EID?existing.cv||null:null;if(window._pCV)cv=window._pCV;
-  const doSave=()=>{
+  const doSave=async()=>{
     window._pPhoto=null;window._pCV=null; // effacés seulement après save réussi
     const form={
       prenom,nom,email,phone:formatPhone(phone),
@@ -1945,7 +1945,12 @@ function saveCand(){
     };
     const savedId=EID;
     EID?DB.candidats=DB.candidats.map(c=>c.id===savedId?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
-    save(['candidats']);CM();R(CV);
+    // CRITIQUE : attendre la sauvegarde avant de fermer
+    const saveBtn=document.querySelector('.mbody .btn-p');
+    if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Enregistrement...';}
+    await save(['candidats']);
+    CM();R(CV);
+    showToast('✓ Candidat enregistré');
     if(savedId){setTimeout(()=>openCandDetail(savedId),30);}
   };
   if(!EID){
@@ -2700,14 +2705,15 @@ function openCmdForm(id,preClientId){
     <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
     <div class="fa"><button class="btn btn-s" onclick="CM();if(window._cmdFromClientId){const cid=window._cmdFromClientId;window._cmdFromClientId=null;setTimeout(()=>openClientDetail(cid),30);}">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
 }
-function saveCmd(){
+async function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
   const savedId=EID;const fromClient=window._cmdFromClientId||null;window._cmdFromClientId=null;
   let newCmdId=null;
   if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
   else{newCmdId=genId();const existing={id:newCmdId,date:TODAY,candidats:[],infos:{},brief:{},annonce:{}};DB.commandes.push({...existing,...form});}
-  save();CM();R(CV);
+  await save(['commandes']);CM();R(CV);
+  showToast('✓ Commande enregistrée');
   if(fromClient)setTimeout(()=>openClientDetail(fromClient),30);
   else setTimeout(()=>openCmdDetail(savedId||newCmdId),30);
 }
@@ -3284,7 +3290,7 @@ function previewLogoEdit(inp,clientId){
   };
   r.readAsDataURL(file);
 }
-function saveClient(){
+async function saveClient(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const secteur_act_new_id=ssGet('cl-sa');
   const secteurLabel=refLbl('secteurs_act',secteur_act_new_id)||refLbl('secteurs',secteur_act_new_id)||'';
@@ -3313,7 +3319,8 @@ function saveClient(){
   let newId=null;
   if(EID){DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c);}
   else{newId=genId();DB.clients.push({...form,id:newId,actions:[]});}
-  save(['clients']);CM();R(CV);
+  await save(['clients']);CM();R(CV);
+  showToast('✓ Fiche client enregistrée');
   const targetId=savedId||newId;
   if(targetId)setTimeout(()=>openClientDetail(targetId),30);
 }
@@ -3423,7 +3430,7 @@ function openActionFromDetail(clientId){
   // Override saveAction to refresh the acts panel instead of closing the fiche
   window._actionRefreshClientId=clientId;
 }
-function saveAction(){
+async function saveAction(){
   const type=document.getElementById('at')?.value;
   const date=document.getElementById('ad')?.value||TODAY;
   const cons=document.getElementById('aa')?.value;
@@ -3433,7 +3440,7 @@ function saveAction(){
   if(!cons||!client_id||!contact_id||!date){alert('Consultant, entreprise, contact et date sont obligatoires.');return;}
   const cl=getClient(client_id);const ct=getContact(contact_id);
   const action={id:genId(),type,date,cons,client_id,contact_id,client_nom:cl?.nom||'',contact_nom:ct?`${ct.prenom} ${ct.nom}`:'',commentaire,created_at:TODAY};
-  DB.actions.push(action);save();CM();
+  DB.actions.push(action);await save(['actions']);CM();
   const refId=window._actionRefreshClientId||client_id;
   window._actionRefreshClientId=null;
   // Refresh panel inline if visible, otherwise reopen client detail
@@ -3488,12 +3495,13 @@ function openContactForm(id){
     <div class="fld"><label style="display:flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0a66c2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg> LinkedIn</label><input id="f-linkedin" value="${v('linkedin')}" placeholder="https://linkedin.com/in/..."></div>
     <div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveContact()">Enregistrer</button></div>`,'n');
 }
-function saveContact(){
+async function saveContact(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
   const form={prenom:g('prenom'),nom:g('nom'),fonction:g('fonction'),client_id:g('client_id'),email:g('email'),phone:g('phone'),linkedin:g('linkedin')};
   const savedId=EID;
   EID?DB.contacts=DB.contacts.map(c=>c.id===EID?{...c,...form}:c):DB.contacts.push({...form,id:genId()});
-  save();CM();R(CV);
+  await save(['contacts']);CM();R(CV);
+  showToast('✓ Contact enregistré');
   if(savedId)setTimeout(()=>openContactDetail(savedId),30);
 }
 function openContactDetail(id){
@@ -3578,7 +3586,7 @@ function refreshAgendaRef(type){
   const items=isCand?alphaSort(DB.candidats.map(c=>({id:c.id,label:`${c.prenom} ${c.nom}`}))):alphaSort(DB.clients.map(c=>({id:c.id,label:c.nom})));
   wrap.innerHTML=`<label>${isCand?'Candidat concerné':'Client / Prospect concerné'}</label>`+searchSel('r-ref',items,'','— Rechercher —');
 }
-function saveRel(){
+async function saveRel(){
   const g=id=>document.getElementById(id)?.value||'';
   const type=g('r-type')||'Candidat';
   const ref=ssGet('r-ref')||g('r-ref-val')||'';
@@ -3599,9 +3607,9 @@ function saveRel(){
   };
   if(!form.obj){alert('Veuillez renseigner un objet.');return;}
   EID?DB.relances=DB.relances.map(r=>r.id===EID?{...r,...form}:r):DB.relances.push({...form,id:genId()});
-  save();CM();R(CV);showToast('✓ Tâche enregistrée');
+  await save(['relances']);CM();R(CV);showToast('✓ Tâche enregistrée');
 }
-function toggleRel(id){
+async function toggleRel(id){
   const r=DB.relances.find(x=>x.id===id);if(!r)return;
   const nowDone=!r.fait;
   const me=currentUser?.display_name||'';
@@ -3610,7 +3618,7 @@ function toggleRel(id){
     completed_at:nowDone?(TODAY+' '+new Date().toTimeString().slice(0,5)):null
   };
   DB.relances=DB.relances.map(x=>x.id===id?updatedR:x);
-  save();
+  await save(['relances']);
   // Notification au créateur si différent de celui qui valide
   if(nowDone&&r.created_by&&r.created_by!==me){
     addNotif(r.created_by,`✅ Tâche validée par ${me}`,`"${r.obj||r.nom}" a été marquée comme faite par ${me}.`,id);
@@ -3753,7 +3761,7 @@ function openActionComments(actionId){
     :`<div class="fa"><button class="btn btn-s" onclick="CM()">Fermer</button></div>`}
   `,'n');
 }
-function addActionComment(actionId){
+async function addActionComment(actionId){
   const inp=document.getElementById('cmt-inp-'+actionId);
   const text=(inp?.value||'').trim();if(!text)return;
   const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
@@ -3770,7 +3778,7 @@ function addActionComment(actionId){
     const inp2=document.getElementById('cmt-inp-'+actionId);if(inp2)inp2.value='';
   }else{openActionComments(actionId);}
 }
-function delActionComment(actionId,idx){
+async function delActionComment(actionId,idx){
   const a=DB.actions.find(x=>x.id===actionId);if(!a)return;
   if(!confirm('Supprimer ce commentaire ?'))return;
   a.admin_comments.splice(idx,1);
@@ -5223,7 +5231,7 @@ function filterLinkContacts(clientId){
   </div>`).join('');
   list._avail=list._avail; // keep ref
 }
-function doLinkContact(contactId,clientId){
+async function doLinkContact(contactId,clientId){
   DB.contacts=DB.contacts.map(ct=>ct.id===contactId?{...ct,client_id:clientId}:ct);
   save();CM();
   showToast('✓ Contact rattaché');
@@ -5254,7 +5262,7 @@ function saveContactFromClient(clientId){
   const prenom=g('qc-prenom'),nom=g('qc-nom'),email=g('qc-email'),phone=g('qc-phone');
   if(!prenom||!nom){alert('Prénom et nom sont obligatoires.');return;}
   const dupes=findDuplicatesContact(prenom,nom,email,phone,null);
-  const doSave=()=>{
+  const doSave=async()=>{
     const ct={id:genId(),prenom,nom,fonction:g('qc-fonction'),phone,email,linkedin:g('qc-linkedin'),cons:g('qc-cons'),comment:g('qc-comment'),client_id:clientId,created_at:TODAY};
     DB.contacts.push(ct);save();CM();
     showToast('✓ Contact créé et rattaché au client');
@@ -5456,19 +5464,19 @@ function showLinkedInReview(p,url,cons,rawText){
     </div>`,'w');
 }
 
-function createCandFromLinkedIn(){
+async function createCandFromLinkedIn(){
   const g=id=>document.getElementById(id)?.value?.trim()||'';
   const prenom=g('lr-prenom'),nom=g('lr-nom'),email=g('lr-email'),phone=g('lr-phone'),linkedin=g('lr-linkedin');
   if(!prenom&&!nom){alert('Prénom ou nom requis.');return;}
   const dupes=findDuplicatesCand(prenom,nom,email,phone,linkedin,null);
-  const doCreate=()=>{
+  const doCreate=async()=>{
     const cand={
       id:genId(),prenom,nom,email,phone,poste:g('lr-poste'),ent:g('lr-ent'),loc:g('lr-loc'),
       linkedin,statut_cand:'Candidat',
       notes:[],prequalif:{},entretien:{},entretiens:[],controles_ref:[],mots_cles:[],pieces_jointes:[],
       _source:'LinkedIn manuel',_source_cons:g('lr-cons'),_source_date:TODAY,
     };
-    DB.candidats.push(cand);save();CM();R(CV);showToast('✓ Fiche candidat créée depuis LinkedIn');
+    DB.candidats.push(cand);await save(['candidats']);CM();R(CV);showToast('✓ Fiche candidat créée depuis LinkedIn');
   };
   if(dupes.length){showDuplicatesAlert(dupes,'cand',doCreate);}else{doCreate();}
 }
