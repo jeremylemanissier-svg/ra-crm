@@ -783,11 +783,9 @@ async function saveKey(k){
   }
 }
 async function save(keys){
-  // Si keys fourni, sauver uniquement ces clés. Sinon tout.
+  // Parallèle = beaucoup plus rapide (toutes les requêtes partent en même temps)
   const toSave=keys||['candidats','clients','contacts','commandes','relances','actions','refs','settings'];
-  for(const k of toSave){
-    await saveKey(k);
-  }
+  await Promise.all(toSave.map(k=>saveKey(k)));
 }
 // Helpers pour save ciblé (évite les conflits de requêtes)
 async function saveCands(){await save(['candidats']);}
