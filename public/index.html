@@ -2958,6 +2958,12 @@ function calcPriority(scores){
   return Math.min(5,Math.max(1,Math.round(avg)));
 }
 
+async function saveCaInline(cmdId, val){
+  const v=parseFloat(val)||0;
+  DB.commandes=DB.commandes.map(c=>c.id===cmdId?{...c,ca_potentiel:v||''}:c);
+  await save(['commandes']);
+  showToast('✓ CA potentiel mis à jour');
+}
 function buildPriorityBadge(cmd){
   const score=calcPriority(cmd.priority_scores);
   const style=score?PRIORITY_COLORS[score]:'background:var(--bg);color:var(--tm)';
@@ -3190,7 +3196,16 @@ function openCmdDetail(id){
       <div>
         <div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div>
         <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · ${renderCons(cmd.cons,18)} · 📅 ${cmd.date_cmd||cmd.date||'—'}${cmd.ca_potentiel?` · <span style="color:var(--acc2);font-weight:600">💰 ${parseFloat(cmd.ca_potentiel).toLocaleString('fr-FR')} €</span>`:''}${cmd.ca_previsionnel?` · <span style="color:#7c3aed;font-weight:600">📊 ${parseFloat(cmd.ca_previsionnel).toLocaleString('fr-FR')} € HT</span>`:''}</div>
-        <div style="margin-top:8px">${buildPriorityBadge(cmd)}</div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${buildPriorityBadge(cmd)}
+          <div style="display:flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--br);border-radius:20px;padding:3px 10px">
+            <span style="font-size:12px;color:var(--ts)">💰</span>
+            <input type="number" id="ca-inline-${id}" value="${cmd.ca_potentiel||''}" placeholder="CA potentiel €" min="0"
+              style="border:none;background:transparent;font-size:12px;font-weight:600;color:var(--acc2);width:110px;outline:none;font-family:inherit"
+              onchange="saveCaInline('${id}',this.value)" onblur="saveCaInline('${id}',this.value)">
+            <span style="font-size:11px;color:var(--tm)">€</span>
+          </div>
+        </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
         ${buildNavArrows(id,_cmdsNav,'cmdNav')}
