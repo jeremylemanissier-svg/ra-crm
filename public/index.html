@@ -410,6 +410,10 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span class="sb-lbl">Agenda</span><span class="sb-badge" id="badge-ag" style="display:none">0</span>
         </button>
+        <button class="sb-btn" onclick="G('objectifs')" id="nav-objectifs">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+          <span class="sb-lbl">Objectifs</span>
+        </button>
         <button class="sb-btn" onclick="openRef()">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h10M4 18h6"/></svg>
           <span class="sb-lbl">Référentiel</span>
@@ -511,6 +515,11 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
           <button class="btn btn-p" style="margin-left:auto" onclick="openActionForm()">+ Nouvelle action</button>
         </div>
         <div class="view-body" id="body-dash-crm"></div>
+      </div>
+
+      <!-- Objectifs -->
+      <div class="view" id="view-objectifs">
+        <div class="view-body" id="body-objectifs"></div>
       </div>
 
       <!-- Agenda -->
@@ -843,7 +852,7 @@ async function loadData(){
   DB.clients.forEach(c=>{if(!c.actions)c.actions=[];});
 }
 
-const VTITLES={dash:'Tableau de bord',vivier:'Vivier de candidats',commandes:'Commandes',clients:'Prospects / Clients',contacts:'Contacts','dashboard-crm':'Dashboard commercial',agenda:'Agenda & Relances'};
+const VTITLES={dash:'Tableau de bord',vivier:'Vivier de candidats',commandes:'Commandes',clients:'Prospects / Clients',contacts:'Contacts','dashboard-crm':'Dashboard commercial',agenda:'Agenda & Relances',objectifs:'Objectifs commerciaux'};
 let CV='dash';
 function G(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -916,6 +925,13 @@ function rDash(){
   // ── Clients & Prospects du consultant ─────────────────────────────────────
   const myClients=isAdmin?DB.clients.filter(c=>c.type==='Client'):DB.clients.filter(c=>c.cons===me&&c.type==='Client');
   const myProspects=isAdmin?DB.clients.filter(c=>c.type==='Prospect'):DB.clients.filter(c=>c.cons===me&&c.type==='Prospect');
+  // ── CA potentiel + objectifs ──────────────────────────────────────────────
+  const caTot=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_potentiel)||0),0);
+  const myObj=(DB._settings?._objectifs||{})[me]||{};
+  const thisWeek=typeof getWeekKey==='function'?getWeekKey(TODAY):'';
+  const weekActs=DB.actions.filter(a=>(isAdmin||a.cons===me)&&(typeof getWeekKey==='function'?getWeekKey(a.date):a.date?.slice(0,10))===thisWeek);
+  const appels_sem_done=weekActs.filter(a=>a.type==='Appel').length;
+  const rdv_sem_done=weekActs.filter(a=>a.type==='Rendez-vous').length;
 
   // ── Relances & actions du consultant ──────────────────────────────────────
   // Tâches assignées au consultant connecté et non terminées
@@ -966,9 +982,30 @@ function rDash(){
       <div class="kpi-lbl">Mes prospects</div>
       <div class="kpi-ico" style="background:#e8f4f8"><svg width="14" height="14" fill="none" stroke="#1e6080" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
     </div>
-  </div>`;
-
-  // ── Grille principale ──────────────────────────────────────────────────────
+    <div class="kpi-card" style="cursor:pointer" onclick="G('objectifs')">
+      <div class="kpi-val">${caTot>0?caTot.toLocaleString('fr-FR')+' €':'—'}</div>
+      <div class="kpi-lbl">CA potentiel</div>
+      <div class="kpi-ico" style="background:#fdf4ff"><svg width="14" height="14" fill="none" stroke="#7c3aed" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+    </div>
+  </div>
+  ${(myObj.appels_sem>0||myObj.rdv_sem>0)?`<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:600">🎯 Objectifs de la semaine</div>
+      <button class="btn btn-s btn-sm" onclick="G('objectifs')">Voir tout →</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      ${myObj.appels_sem>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:4px">📞 Appels</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:8px;background:var(--br);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.min(100,Math.round(appels_sem_done/myObj.appels_sem*100))}%;background:${appels_sem_done>=myObj.appels_sem?'#16a34a':'var(--acc)'};border-radius:4px;transition:width .3s"></div></div>
+          <span style="font-size:12px;font-weight:600;color:${appels_sem_done>=myObj.appels_sem?'#16a34a':'var(--tp)'};white-space:nowrap">${appels_sem_done}/${myObj.appels_sem}</span>
+        </div></div>`:''}
+      ${myObj.rdv_sem>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:4px">🤝 Rendez-vous</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:8px;background:var(--br);border-radius:4px;overflow:hidden"><div style="height:100%;width:${Math.min(100,Math.round(rdv_sem_done/myObj.rdv_sem*100))}%;background:${rdv_sem_done>=myObj.rdv_sem?'#16a34a':'#7c3aed'};border-radius:4px;transition:width .3s"></div></div>
+          <span style="font-size:12px;font-weight:600;color:${rdv_sem_done>=myObj.rdv_sem?'#16a34a':'var(--tp)'};white-space:nowrap">${rdv_sem_done}/${myObj.rdv_sem}</span>
+        </div></div>`:''}
+    </div>
+  </div>`:''}`;
   h+=`<div class="dash-grid">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px">
@@ -1237,7 +1274,7 @@ function rCommandes(){
     const cl=getClient(cmd.client_id),ct=getContact(cmd.contact_id),nc=cmd.candidats?.length||0;
     h+=`<div class="cmd-row" style="cursor:pointer" onclick="openCmdDetail('${cmd.id}')"><div style="flex:1;min-width:0">
       <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center"><span style="font-size:14px;font-weight:600">${esc(cmd.titre)}</span><span style="${sc[cmd.statut]||sc.Active};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">${esc(cmd.statut)}</span>${cmd.priority?`<span style="${PRIORITY_COLORS[cmd.priority]};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:500">⭐ ${cmd.priority}/5</span>`:''}</div>
-      <div style="display:flex;gap:12px;font-size:12px;color:var(--ts);flex-wrap:wrap;margin-bottom:6px"><span>🏢 ${esc(cl?.nom||'—')}</span>${ct?`<span>👤 ${esc(ct.prenom)} ${esc(ct.nom)}</span>`:''}<span>📋 ${esc(cmd.cons)}</span><span>📅 ${cmd.date_cmd||cmd.date||''}</span></div>
+      <div style="display:flex;gap:12px;font-size:12px;color:var(--ts);flex-wrap:wrap;margin-bottom:6px"><span>🏢 ${esc(cl?.nom||'—')}</span>${ct?`<span>👤 ${esc(ct.prenom)} ${esc(ct.nom)}</span>`:''}<span>📋 ${esc(cmd.cons)}</span><span>📅 ${cmd.date_cmd||cmd.date||''}</span>${cmd.ca_potentiel?`<span style="color:var(--acc2);font-weight:500">💰 ${parseFloat(cmd.ca_potentiel).toLocaleString('fr-FR')} €</span>`:''}</div>
       ${cmd.desc?`<div style="font-size:12px;color:var(--tm);line-height:1.5">${esc(cmd.desc.length>100?cmd.desc.slice(0,100)+'…':cmd.desc)}</div>`:''}
       ${nc>0?`<div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">${(cmd.candidats||[]).slice(0,4).map(cc=>{const cand=getCand(cc.candidat_id);const e=getEtape(cc.etape);return cand?`<span style="font-size:11px;background:${e.bg};color:${e.color};border:1px solid ${e.br};border-radius:5px;padding:2px 8px">${esc(cand.prenom)} ${esc(cand.nom)}</span>`:'';}).join('')}${nc>4?`<span style="font-size:11px;color:var(--tm)">+${nc-4}</span>`:''}</div>`:''}
     </div>
@@ -2700,12 +2737,15 @@ function openCmdForm(id,preClientId){
       <div class="fld"><label>Statut</label><select id="f-statut">${sOpts}</select></div>
       <div class="fld"><label>Date de la commande</label><input type="date" id="f-date_cmd" value="${v('date_cmd')||TODAY}"></div>
     </div>
-    <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
+    <div class="fr">
+      <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
+      <div class="fld"><label>💰 CA potentiel (€)</label><input type="number" id="f-ca_potentiel" value="${v('ca_potentiel')}" placeholder="ex: 15000" min="0" style="width:100%"></div>
+    </div>
     <div class="fa"><button class="btn btn-s" onclick="CM();if(window._cmdFromClientId){const cid=window._cmdFromClientId;window._cmdFromClientId=null;setTimeout(()=>openClientDetail(cid),30);}">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
 }
 async function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
-  const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY};
+  const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY,ca_potentiel:g('ca_potentiel')||''};
   const savedId=EID;const fromClient=window._cmdFromClientId||null;window._cmdFromClientId=null;
   let newCmdId=null;
   if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
@@ -2716,7 +2756,138 @@ async function saveCmd(){
   else setTimeout(()=>openCmdDetail(savedId||newCmdId),30);
 }
 function delCmd(id){if(!confirm('Supprimer ?'))return;DB.commandes=DB.commandes.filter(c=>c.id!==id);save();R(CV);}
-// ══ SCORING PRIORITÉ COMMANDE ════════════════════════════
+// ══ OBJECTIFS COMMERCIAUX ════════════════════════════════════════════════════
+function rObjectifs(){
+  const isAdmin=currentUser?.role==='admin';
+  const obj=DB._settings._objectifs||{};
+  const consuls=getCONS();
+  const thisWeek=getWeekKey(TODAY);
+  const thisMonth=TODAY.slice(0,7);
+
+  // Calcul des réalisations par consultant
+  function getStats(cons){
+    const weekActs=DB.actions.filter(a=>a.cons===cons&&getWeekKey(a.date)===thisWeek);
+    const monthActs=DB.actions.filter(a=>a.cons===cons&&a.date?.startsWith(thisMonth));
+    return {
+      appels_sem:weekActs.filter(a=>a.type==='Appel').length,
+      rdv_sem:weekActs.filter(a=>a.type==='Rendez-vous').length,
+      appels_mois:monthActs.filter(a=>a.type==='Appel').length,
+      rdv_mois:monthActs.filter(a=>a.type==='Rendez-vous').length,
+    };
+  }
+
+  function progressBar(val,target,color){
+    const pct=target>0?Math.min(100,Math.round(val/target*100)):0;
+    const col=pct>=100?'#16a34a':pct>=60?'#ca8a04':color||'var(--acc)';
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1;height:7px;background:var(--br);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${col};border-radius:4px;transition:width .3s"></div>
+      </div>
+      <span style="font-size:11px;color:var(--tm);white-space:nowrap;min-width:40px;text-align:right">${val}/${target}</span>
+    </div>`;
+  }
+
+  // Vue admin : édition des objectifs
+  let adminSection='';
+  if(isAdmin){
+    const rows=consuls.map(u=>{
+      const o=obj[u.id]||{appels_sem:0,rdv_sem:0,appels_mois:0,rdv_mois:0};
+      return `<tr>
+        <td style="font-size:13px;font-weight:500;padding:8px 10px">${renderCons(u.id,20)}</td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.appels_sem||0}" id="obj-${u.id}-as" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.rdv_sem||0}" id="obj-${u.id}-rs" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.appels_mois||0}" id="obj-${u.id}-am" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+        <td style="padding:6px 8px"><input type="number" min="0" value="${o.rdv_mois||0}" id="obj-${u.id}-rm" style="width:60px;border:1px solid var(--br);border-radius:6px;padding:4px 7px;font-size:13px;text-align:center;background:var(--bg);color:var(--tp)"></td>
+      </tr>`;
+    }).join('');
+    adminSection=`<div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:14px;font-weight:600">⚙️ Définir les objectifs</div>
+        <button class="btn btn-p btn-sm" onclick="saveObjectifs()">💾 Enregistrer</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="font-size:11px;color:var(--ts);text-transform:uppercase;letter-spacing:.05em">
+            <th style="text-align:left;padding:6px 10px">Consultant</th>
+            <th style="padding:6px 8px">Appels / sem.</th>
+            <th style="padding:6px 8px">RDV / sem.</th>
+            <th style="padding:6px 8px">Appels / mois</th>
+            <th style="padding:6px 8px">RDV / mois</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // Vue suivi pour tous
+  const cardsHtml=consuls.map(u=>{
+    const o=obj[u.id]||{};
+    const s=getStats(u.id);
+    const hasObj=o.appels_sem||o.rdv_sem||o.appels_mois||o.rdv_mois;
+    if(!hasObj&&!isAdmin)return '';
+    // CA potentiel des commandes actives du consultant
+    const myCmds=DB.commandes.filter(c=>c.cons===u.id&&c.statut==='Active');
+    const caTot=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_potentiel)||0),0);
+    return `<div class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        ${renderCons(u.id,32)}
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${esc(u.label)}</div>
+          <div style="font-size:12px;color:var(--ts)">${myCmds.length} commande${myCmds.length!==1?'s':''} active${myCmds.length!==1?'s':''}${caTot>0?` · CA potentiel : <b style="color:var(--acc2)">${caTot.toLocaleString('fr-FR')} €</b>`:''}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Cette semaine</div>
+          ${o.appels_sem>0?`<div style="margin-bottom:8px"><div style="font-size:12px;color:var(--tm);margin-bottom:3px">📞 Appels</div>${progressBar(s.appels_sem,o.appels_sem)}</div>`:''}
+          ${o.rdv_sem>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:3px">🤝 RDV</div>${progressBar(s.rdv_sem,o.rdv_sem,'#7c3aed')}</div>`:''}
+          ${!o.appels_sem&&!o.rdv_sem?'<div style="font-size:12px;color:var(--tm);font-style:italic">Aucun objectif</div>':''}
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ce mois</div>
+          ${o.appels_mois>0?`<div style="margin-bottom:8px"><div style="font-size:12px;color:var(--tm);margin-bottom:3px">📞 Appels</div>${progressBar(s.appels_mois,o.appels_mois)}</div>`:''}
+          ${o.rdv_mois>0?`<div><div style="font-size:12px;color:var(--tm);margin-bottom:3px">🤝 RDV</div>${progressBar(s.rdv_mois,o.rdv_mois,'#7c3aed')}</div>`:''}
+          ${!o.appels_mois&&!o.rdv_mois?'<div style="font-size:12px;color:var(--tm);font-style:italic">Aucun objectif</div>':''}
+        </div>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  document.getElementById('body-objectifs').innerHTML=`
+    ${adminSection}
+    <div style="font-size:14px;font-weight:600;margin-bottom:14px">📊 Suivi des objectifs — semaine du ${getWeekLabel(TODAY)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
+      ${cardsHtml||'<div style="color:var(--tm);font-size:13px">Aucun objectif défini.</div>'}
+    </div>`;
+}
+
+async function saveObjectifs(){
+  if(!DB._settings)DB._settings={};
+  if(!DB._settings._objectifs)DB._settings._objectifs={};
+  getCONS().forEach(u=>{
+    const as=parseInt(document.getElementById('obj-'+u.id+'-as')?.value)||0;
+    const rs=parseInt(document.getElementById('obj-'+u.id+'-rs')?.value)||0;
+    const am=parseInt(document.getElementById('obj-'+u.id+'-am')?.value)||0;
+    const rm=parseInt(document.getElementById('obj-'+u.id+'-rm')?.value)||0;
+    DB._settings._objectifs[u.id]={appels_sem:as,rdv_sem:rs,appels_mois:am,rdv_mois:rm};
+  });
+  await save(['settings']);
+  showToast('✓ Objectifs enregistrés');
+  rObjectifs();
+}
+
+function getWeekKey(dateStr){
+  if(!dateStr)return '';
+  const d=new Date(dateStr);const day=d.getDay()||7;
+  d.setDate(d.getDate()-day+1);
+  return d.toISOString().slice(0,10);
+}
+function getWeekLabel(dateStr){
+  const start=getWeekKey(dateStr);
+  const end=new Date(start);end.setDate(end.getDate()+6);
+  return `${start} → ${end.toISOString().slice(0,10)}`;
+}
 const PRIORITY_CRITERIA=[
   {id:'engagement', label:'Engagement & réactivité client', coef:2,
    opts:['Ne répond pas, aucun retour','Réponses très tardives, flou','Réactif irrégulier','Réactif, échanges clairs','Très réactif, proactif']},
@@ -2980,7 +3151,7 @@ function openCmdDetail(id){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:14px;margin-bottom:0;border-bottom:1px solid var(--br)">
       <div>
         <div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div>
-        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · ${renderCons(cmd.cons,18)} · 📅 ${cmd.date_cmd||cmd.date||'—'}</div>
+        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · ${renderCons(cmd.cons,18)} · 📅 ${cmd.date_cmd||cmd.date||'—'}${cmd.ca_potentiel?` · <span style="color:var(--acc2);font-weight:600">💰 ${parseFloat(cmd.ca_potentiel).toLocaleString('fr-FR')} €</span>`:''}</div>
         <div style="margin-top:8px">${buildPriorityBadge(cmd)}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
