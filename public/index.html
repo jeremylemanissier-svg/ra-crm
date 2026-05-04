@@ -468,6 +468,7 @@ td{padding:9px 10px;border-bottom:1px solid #f8fafc;}
       <div class="view" id="view-commandes">
         <div class="toolbar">
           <div class="sw"><svg class="si" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input placeholder="Titre, client..." id="s-cmds" oninput="rCommandes()"></div>
+          <select id="s-cmds-cons" onchange="rCommandes()" style="border:1px solid var(--br);border-radius:7px;padding:5px 10px;font-size:12px;color:var(--tp);background:var(--bg);outline:none;cursor:pointer"><option value="">Tous les consultants</option></select>
           <div id="cmd-filters" style="display:flex;gap:6px"></div>
           <button class="btn btn-p" style="margin-left:auto" onclick="openCmdForm()">+ Nouvelle commande</button>
         </div>
@@ -1200,9 +1201,19 @@ function applyVivierF(){
 
 function rCommandes(){
   const s=(document.getElementById('s-cmds')?.value||'').toLowerCase();
+  const consFilter=document.getElementById('s-cmds-cons')?.value||'';
+  // Peupler le select consultant si vide
+  const sel=document.getElementById('s-cmds-cons');
+  if(sel&&sel.options.length<=1){
+    const cons=[...new Set(DB.commandes.map(c=>c.cons).filter(Boolean))].sort();
+    cons.forEach(cn=>{const o=document.createElement('option');o.value=cn;o.textContent=cn;sel.appendChild(o);});
+    if(consFilter)sel.value=consFilter;
+  }
   const fltrs=['Toutes','Active','Suspendue','Pourvue'];
   document.getElementById('cmd-filters').innerHTML=fltrs.map(f=>`<button class="fb${cmdFilter===f?' on':''}" onclick="cmdFilter='${f}';rCommandes()">${f}</button>`).join('');
-  let res=DB.commandes;if(cmdFilter!=='Toutes')res=res.filter(c=>c.statut===cmdFilter);
+  let res=DB.commandes;
+  if(cmdFilter!=='Toutes')res=res.filter(c=>c.statut===cmdFilter);
+  if(consFilter)res=res.filter(c=>c.cons===consFilter);
   if(s)res=res.filter(c=>{const cl=getClient(c.client_id);return [c.titre,cl?.nom||''].join(' ').toLowerCase().includes(s);});
   res.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const sc={Active:'background:#ecfdf5;color:#065f46',Suspendue:'background:var(--amber-bg);color:var(--amber)',Pourvue:'background:var(--acc-light);color:var(--acc2)'};
