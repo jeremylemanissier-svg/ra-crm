@@ -773,12 +773,26 @@ async function api(method,url,data){
   }catch(e){if(e.message!=='Session invalide')console.error(e);return null;}
 }
 async function saveKey(k){
-  if(k==='refs'){
-    _ssItems={}; // Vider le cache dropdowns → rechargement depuis REF à la prochaine ouverture
-  }
+  if(k==='refs') _ssItems={};
   if(k==='settings'&&DB._notifs)DB._settings._notifs=DB._notifs;
-const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];if(v!==undefined)await api('PUT',`/api/data/${k}`,v);}
-function save(){['candidats','clients','contacts','commandes','relances','actions'].forEach(k=>saveKey(k));saveKey('refs');saveKey('settings');}
+  const v=k==='refs'?REF:k==='settings'?DB._settings:DB[k];
+  if(v!==undefined){
+    const res=await api('PUT',`/api/data/${k}`,v);
+    if(!res)console.warn('⚠️ Échec sauvegarde:',k);
+    return res;
+  }
+}
+async function save(keys){
+  // Si keys fourni, sauver uniquement ces clés. Sinon tout.
+  const toSave=keys||['candidats','clients','contacts','commandes','relances','actions','refs','settings'];
+  for(const k of toSave){
+    await saveKey(k);
+  }
+}
+// Helpers pour save ciblé (évite les conflits de requêtes)
+async function saveCands(){await save(['candidats']);}
+async function saveClients(){await save(['clients']);}
+async function saveCmds(){await save(['commandes']);}
 
 function showLogin(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.remove('visible');}
 function showApp(){document.getElementById('loading').classList.add('hidden');document.getElementById('login-screen').classList.add('hidden');document.getElementById('app').classList.add('visible');}
@@ -1931,7 +1945,7 @@ function saveCand(){
     };
     const savedId=EID;
     EID?DB.candidats=DB.candidats.map(c=>c.id===savedId?{...c,...form}:c):DB.candidats.push({...form,id:genId()});
-    save();CM();R(CV);
+    save(['candidats']);CM();R(CV);
     if(savedId){setTimeout(()=>openCandDetail(savedId),30);}
   };
   if(!EID){
@@ -3299,7 +3313,7 @@ function saveClient(){
   let newId=null;
   if(EID){DB.clients=DB.clients.map(c=>c.id===EID?{...c,...form}:c);}
   else{newId=genId();DB.clients.push({...form,id:newId,actions:[]});}
-  save();CM();R(CV);
+  save(['clients']);CM();R(CV);
   const targetId=savedId||newId;
   if(targetId)setTimeout(()=>openClientDetail(targetId),30);
 }
