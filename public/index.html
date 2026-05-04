@@ -927,9 +927,10 @@ function rDash(){
   const myProspects=isAdmin?DB.clients.filter(c=>c.type==='Prospect'):DB.clients.filter(c=>c.cons===me&&c.type==='Prospect');
   // ── CA potentiel + objectifs ──────────────────────────────────────────────
   const caTot=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_potentiel)||0),0);
+  const caPrev=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_previsionnel)||0),0);
   const myObj=(DB._settings?._objectifs||{})[me]||{};
-  const thisWeek=typeof getWeekKey==='function'?getWeekKey(TODAY):'';
-  const weekActs=DB.actions.filter(a=>(isAdmin||a.cons===me)&&(typeof getWeekKey==='function'?getWeekKey(a.date):a.date?.slice(0,10))===thisWeek);
+  const thisWeek=getWeekKey(TODAY);
+  const weekActs=DB.actions.filter(a=>(isAdmin||a.cons===me)&&getWeekKey(a.date)===thisWeek);
   const appels_sem_done=weekActs.filter(a=>a.type==='Appel').length;
   const rdv_sem_done=weekActs.filter(a=>a.type==='Rendez-vous').length;
 
@@ -986,6 +987,11 @@ function rDash(){
       <div class="kpi-val">${caTot>0?caTot.toLocaleString('fr-FR')+' €':'—'}</div>
       <div class="kpi-lbl">CA potentiel</div>
       <div class="kpi-ico" style="background:#fdf4ff"><svg width="14" height="14" fill="none" stroke="#7c3aed" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+    </div>
+    <div class="kpi-card" style="cursor:pointer" onclick="G('commandes')">
+      <div class="kpi-val">${caPrev>0?caPrev.toLocaleString('fr-FR')+' €':'—'}</div>
+      <div class="kpi-lbl">CA prévisionnel HT</div>
+      <div class="kpi-ico" style="background:#ecfdf5"><svg width="14" height="14" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
     </div>
   </div>
   ${(myObj.appels_sem>0||myObj.rdv_sem>0)?`<div class="card" style="margin-bottom:16px">
@@ -2020,7 +2026,13 @@ function openCandDetail(id){
     ${isPDF?`<button class="cv-badge" id="cv-tbtn" onclick="toggleCV('${id}')">👁 Afficher</button>`:'<span style="font-size:11px;color:var(--tm)">Aperçu indispo (Word)</span>'}
     <button class="cv-badge" onclick="dlCV(event,'${id}')">⬇ Télécharger</button></div>
     <div id="cv-wrap" style="display:none;border:1px solid var(--br);border-radius:9px;overflow:hidden"><iframe id="cv-frame" src="about:blank" width="100%" height="560" style="display:block;border:none"></iframe></div></div>`:'';
-  const notesH=(c.notes||[]).length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune note</div>':[...(c.notes||[])].reverse().map(n=>`<div class="note-item"><div class="note-meta">📝 <b>${esc(n.cons)}</b> · ${n.date}</div><div class="note-content">${esc(n.content)}</div></div>`).join('');
+  const notesH=(c.notes||[]).length===0?'<div style="color:var(--tm);font-size:13px;font-style:italic">Aucune note</div>':[...(c.notes||[])].reverse().map(n=>`<div class="note-item"><div class="note-meta" style="display:flex;justify-content:space-between;align-items:center">
+    <span>📝 <b>${esc(n.cons)}</b> · ${n.date}</span>
+    <div style="display:flex;gap:4px">
+      <button class="ic-btn" onclick="openEditNote('${id}','${n.id}')" title="Modifier">✏️</button>
+      <button class="ic-btn" onclick="delNote('${id}','${n.id}')" title="Supprimer" style="color:var(--red)">🗑</button>
+    </div>
+  </div><div class="note-content">${esc(n.content)}</div></div>`).join('');
 
   const [avBg,avTxt]=AV_COLORS[0];
   const avIni=(c.prenom+' '+c.nom).split(' ').map(w=>w[0]||'').slice(0,2).join('').toUpperCase();
@@ -2703,13 +2715,35 @@ function buildCandCmdsSection(candId){
 }
 function openAddNote(candId){
   const cOpts=getCONS().map(u=>`<option value="${u.id}"${u.id===currentUser?.display_name?' selected':''}>${u.label}</option>`).join('');
-  OM('Ajouter une note',`<div class="fld"><label>Consultant</label><select id="nc">${cOpts}</select></div><div class="fld"><label>Note</label><textarea id="nn" style="min-height:100px" placeholder="Contenu de la note..."></textarea></div><div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNote('${candId}')">Ajouter</button></div>`,'n');
+  OM('Ajouter une note',`<div class="fld"><label>Consultant</label><select id="nc" data-note-id="">${cOpts}</select></div><div class="fld"><label>Note</label><textarea id="nn" style="min-height:100px" placeholder="Contenu de la note..."></textarea></div><div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNote('${candId}')">Ajouter</button></div>`,'n');
 }
-function saveNote(candId){
+async function saveNote(candId){
   const cons=document.getElementById('nc')?.value,content=(document.getElementById('nn')?.value||'').trim();
+  const noteId=document.getElementById('nc')?.dataset.noteId||null;
   if(!content)return;
-  DB.candidats=DB.candidats.map(c=>c.id===candId?{...c,notes:[...(c.notes||[]),{id:genId(),cons,date:TODAY,content}]}:c);
-  save();CM();openCandDetail(candId);
+  DB.candidats=DB.candidats.map(c=>{
+    if(c.id!==candId)return c;
+    let notes=c.notes||[];
+    if(noteId)notes=notes.map(n=>n.id===noteId?{...n,content,cons}:n);
+    else notes=[...notes,{id:genId(),cons,date:TODAY,content}];
+    return {...c,notes};
+  });
+  await save(['candidats']);CM();showToast('✓ Note enregistrée');
+  setTimeout(()=>openCandDetail(candId),30);
+}
+async function delNote(candId,noteId){
+  if(!confirm('Supprimer cette note ?'))return;
+  DB.candidats=DB.candidats.map(c=>c.id!==candId?c:{...c,notes:(c.notes||[]).filter(n=>n.id!==noteId)});
+  await save(['candidats']);showToast('✓ Note supprimée');
+  openCandDetail(candId);
+}
+function openEditNote(candId,noteId){
+  const c=DB.candidats.find(x=>x.id===candId);
+  const note=(c?.notes||[]).find(n=>n.id===noteId);if(!note)return;
+  const cOpts=getCONS().map(u=>`<option value="${u.id}"${note.cons===u.id?' selected':''}>${u.label}</option>`).join('');
+  OM('Modifier la note',`<div class="fld"><label>Consultant</label><select id="nc" data-note-id="${noteId}">${cOpts}</select></div><div class="fld"><label>Note</label><textarea id="nn" style="min-height:100px">${esc(note.content)}</textarea></div><div class="fa"><button class="btn btn-s" onclick="CM()">Annuler</button><button class="btn btn-p" onclick="saveNote('${candId}')">Enregistrer</button></div>`,'n');
+  // Inject noteId into select dataset after OM renders
+  setTimeout(()=>{const el=document.getElementById('nc');if(el)el.dataset.noteId=noteId;},0);
 }
 function delCand(id){if(!confirm('Supprimer ce candidat ?'))return;DB.candidats=DB.candidats.filter(c=>c.id!==id);DB.commandes=DB.commandes.map(cmd=>({...cmd,candidats:(cmd.candidats||[]).filter(cc=>cc.candidat_id!==id)}));save();CM();R(CV);}
 
@@ -2739,13 +2773,16 @@ function openCmdForm(id,preClientId){
     </div>
     <div class="fr">
       <div class="fld"><label>Description du poste</label><textarea id="f-desc">${v('desc')}</textarea></div>
-      <div class="fld"><label>💰 CA potentiel (€)</label><input type="number" id="f-ca_potentiel" value="${v('ca_potentiel')}" placeholder="ex: 15000" min="0" style="width:100%"></div>
+      <div class="fld">
+        <label>💰 CA potentiel (€)</label><input type="number" id="f-ca_potentiel" value="${v('ca_potentiel')}" placeholder="ex: 15000" min="0" style="width:100%;margin-bottom:8px">
+        <label>📊 CA prévisionnel HT (€)</label><input type="number" id="f-ca_previsionnel" value="${v('ca_previsionnel')}" placeholder="ex: 12000" min="0" style="width:100%">
+      </div>
     </div>
     <div class="fa"><button class="btn btn-s" onclick="CM();if(window._cmdFromClientId){const cid=window._cmdFromClientId;window._cmdFromClientId=null;setTimeout(()=>openClientDetail(cid),30);}">Annuler</button><button class="btn btn-p" onclick="saveCmd()">Enregistrer</button></div>`,'w');
 }
 async function saveCmd(){
   const g=id=>document.getElementById('f-'+id)?.value||'';
-  const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY,ca_potentiel:g('ca_potentiel')||''};
+  const form={titre:g('titre'),client_id:ssGet('f-client_id'),contact_id:ssGet('f-contact_id'),cons:ssGet('f-cons'),statut:g('statut'),desc:g('desc'),date_cmd:g('date_cmd')||TODAY,ca_potentiel:g('ca_potentiel')||'',ca_previsionnel:g('ca_previsionnel')||''};
   const savedId=EID;const fromClient=window._cmdFromClientId||null;window._cmdFromClientId=null;
   let newCmdId=null;
   if(EID){DB.commandes=DB.commandes.map(c=>c.id===EID?{...c,...form}:c);}
@@ -2829,6 +2866,7 @@ function rObjectifs(){
     // CA potentiel des commandes actives du consultant
     const myCmds=DB.commandes.filter(c=>c.cons===u.id&&c.statut==='Active');
     const caTot=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_potentiel)||0),0);
+  const caPrev=myCmds.reduce((acc,c)=>acc+(parseFloat(c.ca_previsionnel)||0),0);
     return `<div class="card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
         ${renderCons(u.id,32)}
@@ -3151,7 +3189,7 @@ function openCmdDetail(id){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:14px;margin-bottom:0;border-bottom:1px solid var(--br)">
       <div>
         <div style="font-size:16px;font-weight:700;margin-bottom:5px">${esc(cmd.titre)}</div>
-        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · ${renderCons(cmd.cons,18)} · 📅 ${cmd.date_cmd||cmd.date||'—'}${cmd.ca_potentiel?` · <span style="color:var(--acc2);font-weight:600">💰 ${parseFloat(cmd.ca_potentiel).toLocaleString('fr-FR')} €</span>`:''}</div>
+        <div style="font-size:13px;color:var(--ts)">🏢 ${esc(cl?.nom||'—')} ${ct?`· 👤 ${esc(ct.prenom)} ${esc(ct.nom)}`:''} · ${renderCons(cmd.cons,18)} · 📅 ${cmd.date_cmd||cmd.date||'—'}${cmd.ca_potentiel?` · <span style="color:var(--acc2);font-weight:600">💰 ${parseFloat(cmd.ca_potentiel).toLocaleString('fr-FR')} €</span>`:''}${cmd.ca_previsionnel?` · <span style="color:#7c3aed;font-weight:600">📊 ${parseFloat(cmd.ca_previsionnel).toLocaleString('fr-FR')} € HT</span>`:''}</div>
         <div style="margin-top:8px">${buildPriorityBadge(cmd)}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
@@ -3606,7 +3644,7 @@ async function saveAction(){
   const client_id=document.getElementById('acl')?.value;
   const contact_id=document.getElementById('act')?.value;
   const commentaire=(document.getElementById('ac')?.value||'').trim();
-  if(!cons||!client_id||!contact_id||!date){alert('Consultant, entreprise, contact et date sont obligatoires.');return;}
+  if(!cons||!client_id||!date){alert('Consultant, entreprise et date sont obligatoires.');return;}
   const cl=getClient(client_id);const ct=getContact(contact_id);
   const action={id:genId(),type,date,cons,client_id,contact_id,client_nom:cl?.nom||'',contact_nom:ct?`${ct.prenom} ${ct.nom}`:'',commentaire,created_at:TODAY};
   DB.actions.push(action);await save(['actions']);CM();
